@@ -191,21 +191,43 @@ const SETUP_SESSION_SETTINGS = [
   "set local idle_in_transaction_session_timeout = '60s'",
 ];
 
+/**
+ * Connection pool size from DATABASE_POOL_MAX. Missing, empty, zero or non-numeric values fall back
+ * to 3 — a pool of 0 would make every query wait forever without an error.
+ */
+export function poolMax(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.DATABASE_POOL_MAX?.trim() ?? "";
+  const n = /^\d+$/.test(raw) ? Number(raw) : 0;
+  return n >= 1 ? Math.min(n, 20) : 3;
+}
+
+/** Non-null when DATABASE_POOL_MAX is set but unusable (so /api/health can say so). */
+export function poolMaxWarning(env: Record<string, string | undefined> = process.env): string | null {
+  const raw = env.DATABASE_POOL_MAX;
+  if (raw === undefined) return null;
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed) && Number(trimmed) >= 1) return null;
+  return `DATABASE_POOL_MAX is ${trimmed ? "invalid" : "empty"}, so ${poolMax(env)} is used (you can delete it)`;
+}
+
 async function connectPostgres(rawUrl: string, schema: string | null, autoMigrate: boolean): Promise<Database> {
   const postgres = (await import("postgres")).default;
   const { url, ssl } = normalizePostgresUrl(rawUrl);
   const started = Date.now();
   const trace: string[] = [];
-  const note = (step: string) => void (trace.length < 30 && trace.push(`${step} ${Date.now() - started}ms`));
+  const note = (step: string) => void (trace.length < 10 && trace.push(`${step} ${Date.now() - started}ms`));
+  let startedUp = false;
   const sql = postgres(url, {
-    // Milestone hooks only (no values recorded): server parameters mean startup/auth finished.
-    onparameter: (key: string) => note(`param:${key}`),
+    // Milestones only (no values): the first server parameter means startup and sign-in finished.
+    onparameter: () => {
+      if (!startedUp) note("startup");
+      startedUp = true;
+    },
     onclose: () => note("closed"),
-    debug: () => note("query-sent"),
     ssl,
     // Required for transaction-mode poolers (Supabase :6543, Neon -pooler, PgBouncer); harmless elsewhere.
     prepare: false,
-    max: Number(process.env.DATABASE_POOL_MAX ?? 3),
+    max: poolMax(),
     idle_timeout: 20,
     connect_timeout: 10,
     // Skip the startup array-type lookup: it hangs through the Neon pooler, and no column or

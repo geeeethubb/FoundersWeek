@@ -136,3 +136,22 @@ describe("database env detection (Vercel integrations)", () => {
     expect(databaseEnvNames({ STORAGE_DATABASE_URL: "postgres://secret@host/db", OTHER: "x" })).toEqual(["STORAGE_DATABASE_URL"]);
   });
 });
+
+describe("DATABASE_POOL_MAX", () => {
+  it("falls back to 3 when missing, empty, zero or not a number — a pool of 0 would hang every query", async () => {
+    const { poolMax, poolMaxWarning } = await import("@/lib/db/client");
+    expect(poolMax({})).toBe(3);
+    expect(poolMax({ DATABASE_POOL_MAX: "" })).toBe(3);
+    expect(poolMax({ DATABASE_POOL_MAX: "  " })).toBe(3);
+    expect(poolMax({ DATABASE_POOL_MAX: "0" })).toBe(3);
+    expect(poolMax({ DATABASE_POOL_MAX: "abc" })).toBe(3);
+    expect(poolMax({ DATABASE_POOL_MAX: "-2" })).toBe(3);
+    expect(poolMax({ DATABASE_POOL_MAX: "5" })).toBe(5);
+    expect(poolMax({ DATABASE_POOL_MAX: " 2 " })).toBe(2);
+    expect(poolMax({ DATABASE_POOL_MAX: "500" })).toBe(20);
+    expect(poolMaxWarning({})).toBeNull();
+    expect(poolMaxWarning({ DATABASE_POOL_MAX: "4" })).toBeNull();
+    expect(poolMaxWarning({ DATABASE_POOL_MAX: "" })).toMatch(/empty, so 3 is used/);
+    expect(poolMaxWarning({ DATABASE_POOL_MAX: "0" })).toMatch(/invalid, so 3 is used/);
+  });
+});

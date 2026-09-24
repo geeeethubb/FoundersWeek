@@ -14,6 +14,7 @@ import {
   getDatabaseConfig,
   getPersistenceStatus,
   lastDatabaseFailure,
+  poolMaxWarning,
 } from "@/lib/db/client";
 
 export type SetupKey = "app-secret" | "database" | "organizer-password" | "applications-switch";
@@ -85,7 +86,7 @@ async function probeDatabase(rawUrl: string): Promise<string> {
 
 /**
  * Walks the Postgres wire handshake by hand (SSLRequest → TLS → StartupMessage) and reports how far
- * it gets, then tries the driver without its type lookup. Only step results are returned.
+ * it gets. Only step results are returned.
  */
 async function probeHandshake(rawUrl: string, host: string, port: number): Promise<string> {
   const tls = await import("node:tls");
@@ -144,55 +145,7 @@ async function probeHandshake(rawUrl: string, host: string, port: number): Promi
       });
     });
   });
-  // The real driver in several shapes, to isolate what differs from the app's own connection:
-  // A = the app's exact options + simple-protocol query; B = app options + extended protocol;
-  // C = single connection + simple protocol; D = single connection + extended protocol.
-  try {
-    const postgres = (await import("postgres")).default;
-    const { normalizePostgresUrl } = await import("@/db/migrate-core.mjs");
-    const { url, ssl } = normalizePostgresUrl(rawUrl);
-    const appOptions = { ssl, prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10, fetch_types: false, onnotice: () => {} };
-    const singleOptions = { ssl, prepare: false, max: 1, connect_timeout: 8, fetch_types: false, onnotice: () => {} };
-    const variants: [string, typeof appOptions | typeof singleOptions, boolean][] = [
-      ["A", appOptions, true],
-      ["B", appOptions, false],
-      ["C", singleOptions, true],
-      ["D", singleOptions, false],
-    ];
-    for (const [name, options, simple] of variants) {
-      const sql = postgres(url, options);
-      const started = Date.now();
-      const query = simple ? sql.unsafe("select 1") : sql.unsafe("select $1::int as ok", [1]);
-      const result = await Promise.race([
-        query.then(() => `${name} ok ${Date.now() - started}ms`),
-        new Promise<string>((r) => setTimeout(() => r(`${name} timed out`), 6000)),
-      ]).catch((e: Error & { code?: string }) => `${name} error ${e.code ?? ""} ${sanitizeForProbe(e.message)}`);
-      sql.end({ timeout: 1 }).catch(() => {});
-      steps.push(result);
-    }
-  } catch (e) {
-    steps.push(`driver probe failed: ${sanitizeForProbe((e as Error).message)}`);
-  }
   return steps.join("; ");
-}
-
-/** One fresh driver connection with the app's options, before the app connects (ordering test). */
-async function preProbe(rawUrl: string): Promise<string> {
-  try {
-    const postgres = (await import("postgres")).default;
-    const { normalizePostgresUrl } = await import("@/db/migrate-core.mjs");
-    const { url, ssl } = normalizePostgresUrl(rawUrl);
-    const sql = postgres(url, { ssl, prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10, fetch_types: false, onnotice: () => {} });
-    const started = Date.now();
-    const result = await Promise.race([
-      sql.unsafe("select 1").then(() => `pre ok ${Date.now() - started}ms`),
-      new Promise<string>((r) => setTimeout(() => r("pre timed out"), 6000)),
-    ]).catch((e: Error & { code?: string }) => `pre error ${e.code ?? ""} ${sanitizeForProbe(e.message)}`);
-    sql.end({ timeout: 1 }).catch(() => {});
-    return result;
-  } catch (e) {
-    return `pre failed: ${sanitizeForProbe((e as Error).message)}`;
-  }
 }
 
 function sanitizeForProbe(message: string): string {
@@ -238,15 +191,14 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     });
   } else {
     const found = findDatabaseUrl(env);
-    // Only while the database has been failing: a fresh connection first, to test ordering effects.
-    const pre = found && config.kind === "postgres" && lastDatabaseFailure() ? await preProbe(found.url) : null;
-    const mainStarted = Date.now();
+    const started = Date.now();
     const persistence = await getPersistenceStatus();
-    const mainMs = Date.now() - mainStarted;
+    const elapsed = Date.now() - started;
+    const poolNote = poolMaxWarning(env);
     const failure = lastDatabaseFailure();
     const probe = !persistence.ready && found && config.kind === "postgres" ? await probeDatabase(found.url) : null;
     const failureNote = failure
-      ? ` — using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}; app attempt ${mainMs}ms, trace [${failure.trace?.join(", ") ?? ""}]${pre ? `; ${pre}` : ""}${probe ? `; probe: ${probe}` : ""}`
+      ? ` — using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}; waited ${elapsed}ms, trace [${failure.trace?.join(", ") ?? ""}]${poolNote ? `; ${poolNote}` : ""}${probe ? `; probe: ${probe}` : ""}`
       : probe
         ? ` — using ${found?.name ?? "?"}; probe: ${probe}`
         : "";
@@ -254,7 +206,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     const schema = config.schema ? `, schema "${config.schema}"` : "";
     checks.push(
       persistence.ready
-        ? { key: "database", ok: true, status: `ok (${via}${schema})`, fix: null }
+        ? { key: "database", ok: true, status: `ok (${via}${schema})${poolNote ? `; note: ${poolNote}` : ""}`, fix: null }
         : {
             key: "database",
             ok: false,
