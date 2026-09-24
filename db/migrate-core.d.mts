@@ -12,7 +12,7 @@ export function applyMigrations(
   adapter: MigrationAdapter,
   dir: string,
   log?: (message: string) => void,
-  options?: { schema?: string | null },
+  options?: { schema?: string | null; sessionSettings?: string[] },
 ): Promise<string[]>;
 export function pgliteAdapter(db: unknown): MigrationAdapter;
 export function postgresAdapter(sql: unknown): MigrationAdapter;

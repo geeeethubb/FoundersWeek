@@ -4,6 +4,9 @@
  */
 import { getSetupStatus } from "@/lib/setup-status";
 
+// First request after deploy may create the tables; allow time for that.
+export const maxDuration = 60;
+
 export const dynamic = "force-dynamic";
 
 export async function GET() {

@@ -6,7 +6,13 @@
 import "server-only";
 import { getSite } from "@/content";
 import { getAppSecret, getOrganizerPassword } from "@/lib/config";
-import { databaseEnvNames, findDatabaseUrl, getDatabaseConfig, getPersistenceStatus } from "@/lib/db/client";
+import {
+  databaseEnvNames,
+  findDatabaseUrl,
+  getDatabaseConfig,
+  getPersistenceStatus,
+  lastDatabaseFailure,
+} from "@/lib/db/client";
 
 export type SetupKey = "app-secret" | "database" | "organizer-password" | "applications-switch";
 
@@ -60,6 +66,10 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     });
   } else {
     const persistence = await getPersistenceStatus();
+    const failure = lastDatabaseFailure();
+    const failureNote = failure
+      ? ` — ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}`
+      : "";
     const via = config.kind === "pglite" ? "local PGlite" : `Postgres via ${source ?? "DATABASE_URL"}`;
     const schema = config.schema ? `, schema "${config.schema}"` : "";
     checks.push(
@@ -69,11 +79,11 @@ export async function getSetupStatus(): Promise<SetupStatus> {
             key: "database",
             ok: false,
             status:
-              persistence.reason === "not-migrated"
+              (persistence.reason === "not-migrated"
                 ? "reachable, but tables could not be created"
                 : persistence.reason === "unreachable"
                   ? "could not connect"
-                  : persistence.reason,
+                  : persistence.reason) + failureNote,
             fix:
               persistence.reason === "unreachable"
                 ? "Check the connection string (for Supabase use the Transaction pooler URI on port 6543) and the database password, then redeploy. Server logs show the exact error."

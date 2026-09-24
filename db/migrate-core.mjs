@@ -48,6 +48,8 @@ export async function applyMigrations(adapter, dir, log = () => {}, options = {}
   const schema = normalizeSchemaName(options.schema);
   const migrations = await listMigrations(dir);
   return adapter.transaction(async (tx) => {
+    // e.g. ["set local lock_timeout = '10s'"] so a stuck concurrent setup can't block forever.
+    for (const statement of options.sessionSettings ?? []) await tx.exec(statement);
     await tx.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
       `founders-week:migrations:${schema ?? "public"}`,
     ]);

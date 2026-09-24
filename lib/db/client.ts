@@ -149,6 +149,46 @@ async function connectPglite(dataDir: string, schema: string | null): Promise<Da
 
 type PgConn = { unsafe: (t: string, p?: never[]) => Promise<unknown[]> };
 
+/** Where the last connection attempt failed (sanitized: no URLs, hosts or credentials). */
+export interface DatabaseFailure {
+  stage: "connect" | "check" | "setup";
+  code: string | null;
+  message: string;
+  at: string;
+}
+const globalForFailure = globalThis as unknown as { __foundersDbFailure?: DatabaseFailure | null };
+export function lastDatabaseFailure(): DatabaseFailure | null {
+  return globalForFailure.__foundersDbFailure ?? null;
+}
+
+/** Strip connection strings, host names and IP addresses from driver error messages. */
+export function sanitizeDbMessage(message: string): string {
+  return message
+    .replace(/postgres(?:ql)?:\/\/\S+/gi, "[connection string]")
+    .replace(/\b(?:[a-z0-9-]+\.)+(?:tech|co|com|net|org|io|dev|app|cloud)\b/gi, "[host]")
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, "[ip]")
+    .slice(0, 300);
+}
+
+class StageTimeout extends Error {
+  code = "TIMEOUT";
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new StageTimeout(`${what} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** Postgres settings for the one-time setup transaction: never wait forever on locks/statements. */
+const SETUP_SESSION_SETTINGS = [
+  "set local lock_timeout = '10s'",
+  "set local statement_timeout = '40s'",
+  "set local idle_in_transaction_session_timeout = '60s'",
+];
+
 async function connectPostgres(rawUrl: string, schema: string | null, autoMigrate: boolean): Promise<Database> {
   const postgres = (await import("postgres")).default;
   const { url, ssl } = normalizePostgresUrl(rawUrl);
@@ -192,17 +232,42 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
     }
   };
 
-  const fail = async (error: DatabaseUnavailableError): Promise<never> => {
-    await sql.end({ timeout: 1 }).catch(() => {});
+  const fail = async (
+    error: DatabaseUnavailableError,
+    stage: DatabaseFailure["stage"],
+    cause?: unknown,
+  ): Promise<never> => {
+    const code = (cause as { code?: string } | undefined)?.code ?? null;
+    const message = sanitizeDbMessage(cause instanceof Error ? cause.message : error.message);
+    globalForFailure.__foundersDbFailure = { stage, code, message, at: new Date().toISOString() };
+    console.error(`[db] ${stage} failed${code ? ` (${code})` : ""}: ${message}`);
+    sql.end({ timeout: 1 }).catch(() => {});
     throw error;
   };
 
-  let state: "ready" | "missing";
+  // 1. Connect (bounded).
   try {
-    state = await readVersion();
+    await withTimeout(sql.unsafe("select 1"), 12_000, "Connecting to the database");
   } catch (error) {
     return fail(
-      new DatabaseUnavailableError("unreachable", `Could not connect to the database: ${(error as Error).message}`),
+      new DatabaseUnavailableError(
+        "unreachable",
+        `Could not connect to the database: ${sanitizeDbMessage((error as Error).message)}`,
+      ),
+      "connect",
+      error,
+    );
+  }
+
+  // 2. Is the schema there? (bounded)
+  let state: "ready" | "missing";
+  try {
+    state = await withTimeout(readVersion(), 12_000, "Checking the database schema");
+  } catch (error) {
+    return fail(
+      new DatabaseUnavailableError("unreachable", `Could not read the database: ${sanitizeDbMessage((error as Error).message)}`),
+      "check",
+      error,
     );
   }
   if (state === "missing") {
@@ -210,25 +275,40 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
       return fail(
         new DatabaseUnavailableError(
           "not-migrated",
-          `Database is missing migration ${LATEST_MIGRATION}. Run \`npm run db:migrate\` (or unset DATABASE_AUTO_MIGRATE=false).`,
+          `Database is missing migration ${LATEST_MIGRATION}. Run npm run db:migrate (or remove DATABASE_AUTO_MIGRATE=false).`,
         ),
+        "check",
       );
     }
+    // 3. One-time automatic setup (bounded; lock and statement waits are also capped inside Postgres).
     try {
-      await applyMigrations(postgresAdapter(sql), MIGRATIONS_DIR, (m) => console.info(`[db] ${m}`), { schema });
-      state = await readVersion();
+      await withTimeout(
+        applyMigrations(postgresAdapter(sql), MIGRATIONS_DIR, (m) => console.info(`[db] ${m}`), {
+          schema,
+          sessionSettings: SETUP_SESSION_SETTINGS,
+        }),
+        50_000,
+        "Automatic database setup",
+      );
+      state = await withTimeout(readVersion(), 12_000, "Re-checking the database schema");
     } catch (error) {
       return fail(
         new DatabaseUnavailableError(
           "not-migrated",
-          `Automatic database setup failed: ${(error as Error).message}. Run \`npm run db:migrate\` and check the database user's permissions.`,
+          `Automatic database setup failed: ${sanitizeDbMessage((error as Error).message)}. Run npm run db:migrate and check the database user's permissions.`,
         ),
+        "setup",
+        error,
       );
     }
     if (state !== "ready") {
-      return fail(new DatabaseUnavailableError("not-migrated", `Database is missing migration ${LATEST_MIGRATION}.`));
+      return fail(
+        new DatabaseUnavailableError("not-migrated", `Database is missing migration ${LATEST_MIGRATION}.`),
+        "setup",
+      );
     }
   }
+  globalForFailure.__foundersDbFailure = null;
   return db;
 }
 

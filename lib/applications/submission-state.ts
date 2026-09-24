@@ -75,7 +75,17 @@ export async function getSubmissionState(now: Date = new Date()): Promise<Submis
       "APP_SECRET is missing or shorter than 32 characters. Add it in Vercel → Production, then redeploy. /api/health shows every setting.",
     );
   }
-  const persistence = await getPersistenceStatus();
+  // Never let a slow database hold up the page: after 8s treat it as temporarily unavailable
+  // (the connection attempt keeps going in the background for the next request).
+  const persistence = await Promise.race([
+    getPersistenceStatus(),
+    new Promise<Awaited<ReturnType<typeof getPersistenceStatus>>>((resolve) =>
+      setTimeout(
+        () => resolve({ ready: false, reason: "unreachable", detail: "The database is taking too long to respond." }),
+        8_000,
+      ),
+    ),
+  ]);
   if (!persistence.ready) {
     const notConfigured = persistence.reason === "not-configured";
     return closed(
