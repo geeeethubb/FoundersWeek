@@ -3,7 +3,7 @@ import { demoEvents, demoMentors } from "@/content/demo";
 import { events } from "@/content/events";
 import { mentors } from "@/content/mentors";
 import { site } from "@/content/site";
-import type { ScheduleEvent } from "@/content/types";
+import type { Mentor, ScheduleEvent } from "@/content/types";
 import { buildScheduleEntries, eventToEntry, featuredEntries, scheduleDays } from "@/lib/schedule/entries";
 import {
   agendaBlocks,
@@ -68,6 +68,40 @@ const f = (patch: Partial<ScheduleFilters> = {}): ScheduleFilters => ({ ...DEFAU
 const ids = (list: { id: string }[]) => list.map((e) => e.id);
 const byId = (id: string, list = production) => list.find((e) => e.id === id)!;
 
+/**
+ * A synthetic mentor whose only window is date-only (time still to be confirmed). No real mentor
+ * has one now that Rishab's Thursday window is set, but the code path stays for future mentors.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-date-only",
+  name: "Fixture Mentor",
+  firstName: "Fixture",
+  role: "Founder",
+  company: "Fixture Labs",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: {
+    format: null,
+    durationMinutes: null,
+    location: null,
+    sessionCount: null,
+    confirmed: false,
+    note: "Fixture has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+  },
+  availability: [
+    { id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [{ label: "Test fixture" }],
+};
+const FIXTURE_OH = "office-hours-fixture-date-only-2026-10-01";
+const withDateOnly = buildScheduleEntries({ events, mentors: [...publicMentors, DATE_ONLY_MENTOR], site });
+
 const DAN = "dan-caruso-fireside-chat";
 const PANEL = "how-to-make-10k-a-month-in-college";
 const SHOWCASE = "founders-showcase-day-sessions";
@@ -101,10 +135,10 @@ describe("production calendar", () => {
       FAILURE_LAB,
       PATRICK_OH,
       "science-and-practice-of-pitching",
+      // Rishab's Thursday window (noon–5 PM) sorts by its start, after the 11:45 AM workshop.
+      RISHAB_OH,
       "entrepreneurial-impact-launching-from-illinois",
       "techrise-pitch-competition",
-      // Rishab's Thursday office hours have no time yet, so they sort after Thursday's timed entries.
-      RISHAB_OH,
       ARNAV_OH,
       SHOWCASE,
       "founders-evening-showcase-and-reception",
@@ -166,7 +200,7 @@ describe("production calendar", () => {
     }
   });
 
-  it("lists Rishab's office hours once, on Thu Oct 1, with the time to be announced", () => {
+  it("lists Rishab's office hours once, on Thu Oct 1, anytime from noon to 5 PM", () => {
     const mine = production.filter((e) => e.mentor?.id === "rishab-veldur");
     expect(ids(mine)).toEqual([RISHAB_OH]);
     // He only has time for office hours on Oct 1: nothing on Friday.
@@ -178,18 +212,24 @@ describe("production calendar", () => {
       kind: "office-hours",
       title: "Office hours with Rishab Veldur",
       date: "2026-10-01",
-      time: { kind: "tba" },
-      timeLabel: "Exact time to be confirmed",
+      time: { kind: "exact", start: "12:00", end: "17:00" },
+      // An exact window needs no label: its time is shown as "12:00–5:00 PM CT".
+      timeLabel: null,
+      // A window, not a confirmed session: length and location are still being set.
       status: "planned",
       statusNote:
-        "Rishab has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+        "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.",
       types: ["office-hours"],
       involvement: "hosted",
       foundersPick: true,
       organizer: "Founders – Illinois Entrepreneurs",
       location: { kind: "tba", note: "Location is shared with selected students once confirmed." },
       summary: "By application. Meet Rishab of Auvi Labs during Founders Week. Appointments are limited.",
-      description: expect.any(String),
+      // His note already says it isn't a booked appointment, so that line isn't repeated.
+      description:
+        "Rishab Veldur (Co-Founder & CEO, Auvi Labs) is available for office hours: Thursday, October 1, 12:00–5:00 PM CT.\n\n" +
+        "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.\n\n" +
+        "Appointments are limited. Founders will match applicants by interests and availability, then email selected students to confirm.",
       // No approved topic list: nothing is inferred from his background tags.
       speakers: [],
       topics: [],
@@ -213,9 +253,11 @@ describe("production calendar", () => {
         windowId: "rishab-veldur-2026-10-01",
       },
       demo: false,
-      sortMinutes: 24 * 60,
-      startsAt: null,
-      endsAt: null,
+      sortMinutes: 12 * 60,
+      // Noon and 5 PM CDT (UTC−5).
+      startsAt: "2026-10-01T17:00:00.000Z",
+      endsAt: "2026-10-01T22:00:00.000Z",
+      // Office hours are never exported to calendars, even with an exact window.
       calendar: {
         available: false,
         reason: "Office hours are by application. Selected students get their confirmed time by email.",
@@ -225,6 +267,50 @@ describe("production calendar", () => {
     const text = JSON.stringify({ ...byId(RISHAB_OH), sources: [] });
     expect(text).not.toMatch(/October 2|Oct 2\b|Friday|student teams|phone/i);
     expect(text).not.toMatch(/FDA|\bcleared\b|commercially available|clinically proven|one-on-one/i);
+    // The old date-only wording is gone.
+    expect(text).not.toMatch(/to be confirmed|to be announced|Time TBA/i);
+  });
+
+  it("still sorts a date-only window (a future mentor's) after the day's timed entries, time to be announced", () => {
+    const thursday = withDateOnly.filter((e) => e.date === "2026-10-01");
+    expect(ids(thursday)).toEqual([
+      PATRICK_OH,
+      "science-and-practice-of-pitching",
+      RISHAB_OH,
+      "entrepreneurial-impact-launching-from-illinois",
+      TECHRISE,
+      FIXTURE_OH,
+    ]);
+    expect(withDateOnly).toHaveLength(16);
+    expect(byId(FIXTURE_OH, withDateOnly)).toMatchObject({
+      kind: "office-hours",
+      title: "Office hours with Fixture Mentor",
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      timeLabel: "Exact time to be confirmed",
+      status: "planned",
+      statusNote:
+        "Fixture has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+      location: { kind: "tba", note: "Location is shared with selected students once confirmed." },
+      registration: {
+        url: "/office-hours?mentor=fixture-date-only&window=fixture-date-only-2026-10-01#apply",
+        label: "Apply to meet Fixture",
+        internal: true,
+      },
+      featuredRank: 1,
+      mentor: { id: "fixture-date-only", windowId: "fixture-date-only-2026-10-01" },
+      sortMinutes: 24 * 60,
+      startsAt: null,
+      endsAt: null,
+      calendar: {
+        available: false,
+        reason: "Office hours are by application. Selected students get their confirmed time by email.",
+      },
+    });
+    // No time is invented anywhere in its copy.
+    expect(byId(FIXTURE_OH, withDateOnly).description).not.toMatch(/\d:\d\d|\b(AM|PM)\b/);
+    // Without an exact interval it can't clash with anything.
+    expect(overlapsFor(byId(FIXTURE_OH, withDateOnly), withDateOnly)).toEqual([]);
   });
 
   it("links Rishab on the Friday Showcase's Health Innovation session, not as office hours", () => {
@@ -357,9 +443,9 @@ describe("filters and facets", () => {
     expect(ids(filterEntries(production, f({ day: "2026-10-01" })))).toEqual([
       PATRICK_OH,
       "science-and-practice-of-pitching",
+      RISHAB_OH,
       "entrepreneurial-impact-launching-from-illinois",
       TECHRISE,
-      RISHAB_OH,
     ]);
     expect(ids(filterEntries(production, f({ day: "2026-09-30" })))).toEqual([
       "founders-week-kickoff-reception",
@@ -477,13 +563,13 @@ describe("filters and facets", () => {
 });
 
 describe("overlaps", () => {
-  it("the production calendar's only clash is Wednesday evening: Arnav's happy hour and Failure Lab", () => {
+  it("the production calendar's clashes: Wednesday evening, and Rishab's Thursday window over two program blocks", () => {
     for (const group of groupByDay(production)) {
       const blocks = agendaBlocks(group.entries);
-      if (group.date === "2026-09-30") {
-        expect(blocks.filter((b) => b.kind !== "single")).toHaveLength(1);
+      if (group.date === "2026-09-30" || group.date === "2026-10-01") {
+        expect(blocks.filter((b) => b.kind !== "single"), group.date).toHaveLength(1);
       } else {
-        expect(blocks.every((b) => b.kind === "single")).toBe(true);
+        expect(blocks.every((b) => b.kind === "single"), group.date).toBe(true);
       }
     }
     expect(entriesOverlap(byId(HAPPY_HOUR), byId(FAILURE_LAB))).toBe(true);
@@ -492,20 +578,42 @@ describe("overlaps", () => {
     // Nor are Wednesday's kickoff reception (3:30–5 PM) and Arnav's happy hour (5–7 PM).
     expect(entriesOverlap(byId("founders-week-kickoff-reception"), byId(HAPPY_HOUR))).toBe(false);
     expect(ids(overlapsFor(byId(HAPPY_HOUR), production))).toEqual([FAILURE_LAB]);
-    // Rishab's Thursday window has no time yet, so it can't clash with anything (and adds no overlap).
-    expect(overlapsFor(byId(RISHAB_OH), production)).toEqual([]);
+    // Rishab's Thursday window (noon–5 PM) runs through the pitching workshop (11:45 AM–2:15 PM)
+    // and Entrepreneurial Impact (3–5 PM). Patrick's window ends at 11:30 AM, and TechRise starts
+    // as Rishab's window ends (5 PM): neither is an overlap.
+    const IMPACT = "entrepreneurial-impact-launching-from-illinois";
+    const PITCHING = "science-and-practice-of-pitching";
+    expect(ids(overlapsFor(byId(RISHAB_OH), production))).toEqual([PITCHING, IMPACT]);
     expect(entriesOverlap(byId(RISHAB_OH), byId(PATRICK_OH))).toBe(false);
+    expect(entriesOverlap(byId(RISHAB_OH), byId(TECHRISE))).toBe(false);
+    // The two program blocks don't overlap each other: they're linked only through his window.
+    expect(entriesOverlap(byId(PITCHING), byId(IMPACT))).toBe(false);
     const thursday = groupByDay(production).find((g) => g.date === "2026-10-01")!;
-    expect(agendaBlocks(thursday.entries).map((b) => (b.kind === "single" ? b.entry.id : "overlap"))).toEqual([
-      PATRICK_OH,
-      "science-and-practice-of-pitching",
-      "entrepreneurial-impact-launching-from-illinois",
-      TECHRISE,
-      RISHAB_OH,
-    ]);
-    // Every clash in the calendar, as pairs: still only the Wednesday evening one.
+    const blocks = agendaBlocks(thursday.entries);
+    expect(blocks.map((b) => (b.kind === "single" ? b.entry.id : "overlap"))).toEqual([PATRICK_OH, "overlap", TECHRISE]);
+    const cluster = blocks[1];
+    expect(cluster.kind).toBe("overlap");
+    if (cluster.kind !== "overlap") return;
+    expect(ids(cluster.entries)).toEqual([PITCHING, RISHAB_OH, IMPACT]);
+    // Never more than two at once: his window plus one program block.
+    expect(cluster.maxConcurrent).toBe(2);
+    expect(cluster.start).toBe("11:45");
+    expect(cluster.end).toBe("17:00");
+    expect(cluster.overlapsWith).toEqual({
+      [PITCHING]: [{ id: RISHAB_OH, title: "Office hours with Rishab Veldur" }],
+      [RISHAB_OH]: [
+        { id: PITCHING, title: "The Science and Practice of Pitching" },
+        { id: IMPACT, title: "Entrepreneurial Impact: Launching From Illinois" },
+      ],
+      [IMPACT]: [{ id: RISHAB_OH, title: "Office hours with Rishab Veldur" }],
+    });
+    // Every clash in the calendar, as pairs: Wednesday evening, then Rishab's window twice.
     const pairs = production.flatMap((a) => overlapsFor(a, production).filter((b) => a.id < b.id).map((b) => [a.id, b.id]));
-    expect(pairs).toEqual([[FAILURE_LAB, HAPPY_HOUR]]);
+    expect(pairs).toEqual([
+      [FAILURE_LAB, HAPPY_HOUR],
+      [RISHAB_OH, PITCHING],
+      [IMPACT, RISHAB_OH],
+    ]);
   });
 
   it("clusters entries whose exact intervals intersect, in chronological order", () => {
@@ -726,11 +834,18 @@ describe("display helpers", () => {
     expect(entryTimeText(byId(DAN))).toBe("4:00 PM CT");
     expect(entryTimeText(byId(PANEL))).toBe("6:00–8:00 PM CT");
     expect(entryTimeText(byId("tailgate-and-enterpriseworks-tour"))).toBe("Time to be announced");
-    // Rishab's date-only window: the time is still to be announced (nothing is invented).
-    expect(agendaTime(byId(RISHAB_OH))).toEqual({ main: "Time to be announced", sub: null, start: null, end: null });
-    expect(entryStartText(byId(RISHAB_OH))).toEqual({ text: "Time to be announced", dateTime: null });
-    expect(entryTimeText(byId(RISHAB_OH))).toBe("Time to be announced");
+    // Rishab's window reads like Patrick's.
+    expect(agendaTime(byId(RISHAB_OH))).toEqual({ main: "12:00 PM", sub: "to 5:00 PM", start: "12:00", end: "17:00" });
+    expect(entryStartText(byId(RISHAB_OH))).toEqual({ text: "12:00 PM", dateTime: "12:00" });
+    expect(entryTimeText(byId(RISHAB_OH))).toBe("12:00–5:00 PM CT");
+    expect(entryTimeText(byId(PATRICK_OH))).toBe("10:00–11:30 AM CT");
     expect(locationSummary(byId(RISHAB_OH).location)).toBe("Location to be announced");
+    // A date-only window (a future mentor's): the time is still to be announced (nothing is invented).
+    const dateOnly = byId(FIXTURE_OH, withDateOnly);
+    expect(agendaTime(dateOnly)).toEqual({ main: "Time to be announced", sub: null, start: null, end: null });
+    expect(entryStartText(dateOnly)).toEqual({ text: "Time to be announced", dateTime: null });
+    expect(entryTimeText(dateOnly)).toBe("Time to be announced");
+    expect(locationSummary(dateOnly.location)).toBe("Location to be announced");
   });
 
   it("summarizes locations honestly", () => {
@@ -763,7 +878,7 @@ describe("display helpers", () => {
 describe("pending mentors", () => {
   it("lists scheduling-in-progress mentors with public fields and an application link", () => {
     const list = pendingMentors(publicMentors);
-    // Rishab has a published (date-only) window, so he isn't "Scheduling in progress".
+    // Rishab has a published window (Thu Oct 1, noon to 5 PM), so he isn't "Scheduling in progress".
     expect(list.map((m) => m.id)).toEqual(["vikram-lakhwara", "elliott-notrica", "ron-lewis"]);
     const [vik, elliott, ron] = list;
     expect(ron).toMatchObject({

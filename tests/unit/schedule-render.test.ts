@@ -4,14 +4,15 @@
  * chronological agenda with accurate labels, mentor photos on office-hours rows, program-block
  * disclosure wiring, that Dan Caruso's fireside chat never offers any application or booking, that
  * Arnav hosts (not speaks at) his Wednesday happy hour with an external RSVP, that Rishab's
- * date-only Thursday office hours never invent a time, and that the canceled Founders Week Afterparty
- * (HERE Apartments) never appears.
+ * Thursday window reads 12:00–5:00 PM CT (and a date-only window never invents a time), and that
+ * the canceled Founders Week Afterparty (HERE Apartments) never appears.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EventPage, { generateMetadata } from "@/app/schedule/[id]/page";
-import { getMentors, getScheduleEntries } from "@/content";
+import { getMentors, getScheduleEntries, getSite } from "@/content";
+import type { Mentor } from "@/content/types";
 import { Agenda } from "@/components/schedule/agenda";
 import { AgendaPreview } from "@/components/schedule/agenda-preview";
 import { AgendaRow } from "@/components/schedule/agenda-row";
@@ -24,6 +25,7 @@ import {
 } from "@/components/schedule/event-detail";
 import { OfficeHoursCard, officeHoursCardLede } from "@/components/schedule/office-hours-card";
 import { PendingMentors } from "@/components/schedule/pending-mentors";
+import { officeHoursToEntries } from "@/lib/schedule/entries";
 import { groupByDay } from "@/lib/schedule/filter";
 import { mentorHeadshots } from "@/lib/schedule/headshots";
 import { pendingMentors } from "@/lib/schedule/pending-mentors";
@@ -37,6 +39,42 @@ const HAPPY_HOUR_TITLE = "Happy Hour with Arnav Mishra at Legends";
 const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
 const RISHAB_APPLY = "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply";
+const PITCHING = "science-and-practice-of-pitching";
+const IMPACT = "entrepreneurial-impact-launching-from-illinois";
+
+/**
+ * A synthetic mentor whose only window is date-only (time still to be confirmed). No real mentor
+ * has one now that Rishab's Thursday window is set, but the code path stays for future mentors.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-date-only",
+  name: "Fixture Mentor",
+  firstName: "Fixture",
+  role: "Founder",
+  company: "Fixture Labs",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: {
+    format: null,
+    durationMinutes: null,
+    location: null,
+    sessionCount: null,
+    confirmed: false,
+    note: "Fixture has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+  },
+  availability: [
+    { id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [{ label: "Test fixture" }],
+};
+const FIXTURE_OH = "office-hours-fixture-date-only-2026-10-01";
+const FIXTURE_APPLY = "/office-hours?mentor=fixture-date-only&window=fixture-date-only-2026-10-01#apply";
 const PARTIFUL = "https://partiful.com/e/bUDJZTuCJyBqSeXAsfrN";
 const DAN_LINKEDIN = "https://www.linkedin.com/in/danielpcaruso";
 const MENTOR_NAMES = [
@@ -175,10 +213,10 @@ describe("calendar components (public data)", () => {
       "Founder Failure Lab",
       "Office hours with Patrick Haddox",
       "The Science and Practice of Pitching",
+      // Rishab's noon–5 PM window sorts by its start, and is listed once (not repeated per overlap).
+      "Office hours with Rishab Veldur",
       "Entrepreneurial Impact: Launching From Illinois",
       "TechRise Pitch Competition and Panel Discussion",
-      // Date-only window: no time yet, so it closes Thursday.
-      "Office hours with Rishab Veldur",
       "Office hours with Arnav Mishra",
       "Founders Showcase Day Sessions",
       "Founders Evening Showcase and Reception",
@@ -192,14 +230,27 @@ describe("calendar components (public data)", () => {
     expect(t.match(/Hosted by Founders(?!\.)/g)).toHaveLength(4);
     expect(t.match(/Related event/g)).toHaveLength(3);
     expect(t).not.toContain("Part of Founders Week");
-    // Office-hours windows: Patrick's is exact; Rishab's (date only) and Arnav's (morning) aren't.
-    expect(t.match(/Availability window/g)).toHaveLength(1);
-    expect(t.match(/Exact times TBA/g)).toHaveLength(2);
+    // Office-hours windows: Patrick's and Rishab's are exact; Arnav's (morning) isn't.
+    expect(t.match(/Availability window/g)).toHaveLength(2);
+    expect(t.match(/Exact times TBA/g)).toHaveLength(1);
+    // Overlaps are named on each row: Wednesday evening (both ways), and Rishab's window with the
+    // two Thursday program blocks it runs through (never with Patrick's window or TechRise).
+    const overlapNotes = [...html.matchAll(/Overlaps with.*?<\/p>/g)].map((m) => text(m[0]).trim());
+    expect(overlapNotes).toEqual([
+      "Overlaps with Founder Failure Lab", // Arnav's happy hour
+      "Overlaps with Happy Hour with Arnav Mishra at Legends", // Founder Failure Lab
+      "Overlaps with Office hours with Rishab Veldur", // The Science and Practice of Pitching
+      "Overlaps with The Science and Practice of Pitching and Entrepreneurial Impact: Launching From Illinois", // Rishab
+      "Overlaps with Office hours with Rishab Veldur", // Entrepreneurial Impact
+    ]);
+    expect(t).toContain(
+      "12:00 PM to 5:00 PM Office hours with Rishab Veldur Location to be announced Rishab Veldur Co-Founder & CEO, Auvi Labs (mentor profile) Hosted by Founders Availability window Overlaps with The Science and Practice of Pitching and Entrepreneurial Impact: Launching From Illinois Apply to meet Rishab",
+    );
     // Office-hours rows carry the mentor's photo; so do mentors on stage in program blocks.
     expect(imageAlts(html)).toEqual([
       "Patrick Haddox", // Thu: office hours
+      "Rishab Veldur", // Thu: office hours (noon–5 PM)
       "Elliott Notrica", // Thu: TechRise, on stage
-      "Rishab Veldur", // Thu: office hours (time to be announced)
       "Arnav Mishra", // Fri: office hours
       "Rishab Veldur", // Fri: Founders Showcase, on stage (Health Innovation)
       "Arnav Mishra",
@@ -402,15 +453,15 @@ describe("calendar components (public data)", () => {
     expect(t).not.toMatch(PRIVATE);
   });
 
-  it("Rishab's office-hours row: Thursday, time to be announced, apply with his window preselected", () => {
+  it("Rishab's office-hours row: Thursday 12:00 to 5:00 PM, an availability window, apply with his window preselected", () => {
     const html = render(createElement(AgendaRow, { entry: entry(RISHAB_OH), headshots: headshots() }));
     const t = text(html);
-    expect(t).toContain("Time to be announced Office hours with Rishab Veldur Location to be announced");
-    // No time is invented: no <time> element, no "to …" line.
-    expect(html).not.toMatch(/<time\b/);
-    expect(t).not.toMatch(/\d:\d\d [AP]M/);
+    // Reads like Patrick's row ("10:00 AM to 11:30 AM").
+    expect(t).toContain("12:00 PM to 5:00 PM Office hours with Rishab Veldur Location to be announced");
+    expect([...html.matchAll(/<time dateTime="([^"]+)"/g)].map((m) => m[1])).toEqual(["2026-10-01T12:00"]);
+    expect(t).not.toMatch(/Time to be announced|Time TBA|Exact times TBA/);
     expect(t).toContain("Rishab Veldur Co-Founder & CEO, Auvi Labs");
-    expect(t).toContain("Hosted by Founders Exact times TBA");
+    expect(t).toContain("Hosted by Founders Availability window");
     expect(t).toContain("Apply to meet Rishab");
     expect(imageAlts(html)).toEqual(["Rishab Veldur"]);
     expect(hrefs(html)).toEqual([`/schedule/${RISHAB_OH}`, "/office-hours/rishab-veldur", RISHAB_APPLY]);
@@ -419,16 +470,45 @@ describe("calendar components (public data)", () => {
     expectCalmStyling(html);
   });
 
-  it("Rishab's office-hours page: Thu Oct 1, time to be announced, apply, honest notes, no calendar file", async () => {
+  it("a date-only office-hours row (a future mentor's): time to be announced, nothing invented", () => {
+    const [dateOnly] = officeHoursToEntries(DATE_ONLY_MENTOR, getSite());
+    expect(dateOnly.id).toBe(FIXTURE_OH);
+    const html = render(createElement(AgendaRow, { entry: dateOnly, headshots: headshots() }));
+    const t = text(html);
+    expect(t).toContain("Time to be announced Office hours with Fixture Mentor Location to be announced");
+    // No time is invented: no <time> element, no "to …" line.
+    expect(html).not.toMatch(/<time\b/);
+    expect(t).not.toMatch(/\d:\d\d [AP]M/);
+    expect(t).toContain("Fixture Mentor Founder, Fixture Labs");
+    expect(t).toContain("Hosted by Founders Exact times TBA");
+    expect(t).not.toContain("Availability window");
+    expect(t).toContain("Apply to meet Fixture");
+    expect(imageAlts(html)).toEqual([]); // no approved photo
+    expect(hrefs(html)).toEqual([`/schedule/${FIXTURE_OH}`, "/office-hours/fixture-date-only", FIXTURE_APPLY]);
+    expectCalmStyling(html);
+
+    // Its facts say the window is still to be confirmed; the primary action is the application.
+    const facts = text(render(createElement(EventFacts, { entry: dateOnly })));
+    expect(facts).toContain("When Thursday, October 1 Time to be announced Exact window to be confirmed.");
+    expect(facts).toContain("Where Location to be announced Location is shared with selected students once confirmed.");
+    expect(facts).not.toMatch(/\d:\d\d|Availability window, not a booked appointment/);
+    const action = render(createElement(EventPrimaryAction, { entry: dateOnly }));
+    expect(text(action)).toContain("Apply to meet Fixture");
+    expect(hrefs(action)).toEqual([FIXTURE_APPLY]);
+  });
+
+  it("Rishab's office-hours page: Thu Oct 1, 12:00–5:00 PM CT, apply, honest notes, overlaps, no calendar file", async () => {
     const html = render(await EventPage({ params: Promise.resolve({ id: RISHAB_OH }) }));
     const t = text(html);
     expect(html).toMatch(/<h1[^>]*>Office hours with Rishab Veldur<\/h1>/);
-    expect(t).toContain("When Thursday, October 1 Time to be announced Exact window to be confirmed.");
+    expect(t).toContain("Hosted by Founders Availability window Office hours with Rishab Veldur");
+    expect(t).toContain("When Thursday, October 1 12:00–5:00 PM CT Availability window, not a booked appointment.");
+    expect(t).not.toMatch(/Time to be announced|Exact window to be confirmed|Exact times TBA/);
     expect(t).toContain("Where Location to be announced Location is shared with selected students once confirmed.");
     expect(t).toContain("Hosted by Founders – Illinois Entrepreneurs");
     expect(t).toContain("Rishab Veldur Co-Founder & CEO, Auvi Labs More about Rishab");
     expect(t).toContain(
-      "Rishab has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+      "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.",
     );
     expect(t).toContain("Submitting an application doesn’t reserve a time slot.");
     expect(t).toContain("Appointments are limited.");
@@ -439,10 +519,18 @@ describe("calendar components (public data)", () => {
     expect(links.filter((h) => h.includes("#apply"))).toEqual([RISHAB_APPLY]);
     expect(links).toContain("/office-hours/rishab-veldur");
     expect(imageAlts(html)).toEqual(["Rishab Veldur"]);
-    // The rest of Thursday; his Friday Showcase panel is a different day.
+    // His window runs through two Thursday program blocks, and the page says so.
+    expect(t).toContain(
+      "Overlaps with This time overlaps with other listings. 11:45 AM The Science and Practice of Pitching Gies Business Instructional Facility · 3 sessions 3:00 PM Entrepreneurial Impact: Launching From Illinois Beckman Institute",
+    );
+    // The rest of Thursday (overlaps aren't repeated there); his Friday Showcase panel is a different day.
     expect(t).toContain("Also on Thursday, October 1");
-    for (const id of [PATRICK_OH, "science-and-practice-of-pitching", "entrepreneurial-impact-launching-from-illinois", TECHRISE]) {
-      expect(links).toContain(`/schedule/${id}`);
+    const sameDay = t.slice(t.indexOf("Also on Thursday, October 1"));
+    expect(sameDay).toContain("10:00 AM Office hours with Patrick Haddox");
+    expect(sameDay).toContain("5:00 PM TechRise Pitch Competition and Panel Discussion");
+    expect(sameDay).not.toMatch(/Science and Practice of Pitching|Entrepreneurial Impact/);
+    for (const id of [PATRICK_OH, PITCHING, IMPACT, TECHRISE]) {
+      expect(links.filter((h) => h === `/schedule/${id}`), id).toHaveLength(1);
     }
     expect(links).not.toContain(`/schedule/${SHOWCASE}`);
     expect(t).not.toMatch(/October 2|Oct 2\b|Friday/i);
@@ -453,7 +541,7 @@ describe("calendar components (public data)", () => {
     const meta = await generateMetadata({ params: Promise.resolve({ id: RISHAB_OH }) });
     expect(meta.title).toBe("Office hours with Rishab Veldur");
     expect(meta.description).toBe(
-      "Thursday, October 1 · Time to be announced. By application. Meet Rishab of Auvi Labs during Founders Week. Appointments are limited.",
+      "Thursday, October 1 · 12:00–5:00 PM CT. By application. Meet Rishab of Auvi Labs during Founders Week. Appointments are limited.",
     );
   });
 
@@ -574,7 +662,7 @@ describe("calendar components (public data)", () => {
       "/office-hours/ron-lewis",
       "/office-hours?mentor=ron-lewis#apply",
     ]);
-    // Rishab has a published (date-only) window, so he isn't listed as still scheduling.
+    // Rishab has a published window (Thu Oct 1, noon to 5 PM), so he isn't listed as still scheduling.
     expect(imageAlts(pending)).toEqual(["Vikram “Vik” Lakhwara", "Elliott Notrica", "Ron Lewis"]);
     expect(text(pending)).toContain("Elliott Notrica Founder & CEO, Symbio Bioculinary Express interest");
     expect(text(pending)).not.toMatch(PRIVATE);

@@ -2,7 +2,8 @@
  * Checklist 2 — Home (desktop 1440×900 and phone 390×844).
  *   - H1 "Meet the people building what’s next." and the primary "Apply for Office Hours" on the
  *     first screen.
- *   - All five mentors previewed (photo, name, role and company, one availability line).
+ *   - All six mentors previewed (photo, name, role and company, one availability line); Rishab's
+ *     reads "Thu, Oct 1 · 12:00–5:00 PM CT", like Patrick's "Thu, Oct 1 · 10:00–11:30 AM CT".
  *   - Featured events (a 2×2 grid): Dan Caruso's fireside chat, the Sept 29 panel, Arnav's happy
  *     hour, then Founder Failure Lab (Hosted by Founders) — each with its Founders label.
  *   - A link to the full calendar.
@@ -20,12 +21,14 @@ import {
   PATRICK,
   ARNAV,
   PENDING_MENTORS,
+  RISHAB,
 } from "./support/helpers";
 import {
   DAN_TITLE,
   FAILURE_LAB_ADDRESS,
   FAILURE_LAB_PATH,
   FAILURE_LAB_ROOM,
+  FAILURE_LAB_TIME,
   FAILURE_LAB_TITLE,
   FAILURE_LAB_VENUE,
   HAPPY_HOUR_PATH,
@@ -56,12 +59,12 @@ test.describe("Home", () => {
     await expect(page.getByRole("form", { name: "Apply for Office Hours" })).toBeVisible();
   });
 
-  test("all five mentors are previewed with photo, role and company, and one availability line", async ({ page }) => {
+  test("all six mentors are previewed with photo, role and company, and one availability line", async ({ page }) => {
     await page.goto("/");
     const mentors = page.getByRole("region", { name: "Who you can meet" });
     await expect(mentors).toBeVisible();
 
-    // The five real mentors, first and in order (the demo server may list demo mentors after them).
+    // The six real mentors, first and in order (the demo server may list demo mentors after them).
     const names = (await mentors.getByRole("heading", { level: 3 }).allInnerTexts()).map((t) => t.trim());
     expect(names.slice(0, MENTORS.length)).toEqual(MENTORS.map((m) => m.name));
 
@@ -83,6 +86,12 @@ test.describe("Home", () => {
     await expect(card(PATRICK.name)).toContainText("Thu, Oct 1");
     await expect(card(PATRICK.name)).toContainText("10:00–11:30 AM CT");
     await expect(card(ARNAV.name)).toContainText("Fri, Oct 2");
+    // Rishab: his confirmed window, Thu, Oct 1 from noon to 5 PM (never Oct 2).
+    await expect(card(RISHAB.name).locator("time")).toHaveText("Thu, Oct 1");
+    await expect(card(RISHAB.name).locator("time")).toHaveAttribute("datetime", "2026-10-01");
+    await expect(card(RISHAB.name)).toContainText("12:00–5:00 PM CT");
+    await expect(card(RISHAB.name)).not.toContainText(/to be confirmed|to be announced|TBA/i);
+    await expect(card(RISHAB.name)).not.toContainText("Oct 2");
     for (const mentor of PENDING_MENTORS) await expect(card(mentor.name)).toContainText("Scheduling in progress");
   });
 
@@ -120,7 +129,7 @@ test.describe("Home", () => {
     const lab = featured.getByRole("article", { name: FAILURE_LAB_TITLE });
     await expect(lab).toContainText("Hosted by Founders");
     await expect(lab).toContainText("Sept 30");
-    await expect(lab).toContainText("6:30–8:00 PM CT");
+    await expect(lab).toContainText(FAILURE_LAB_TIME);
     await expect(lab).toContainText(`${FAILURE_LAB_VENUE}, ${FAILURE_LAB_ROOM}`);
     await expect(lab).toContainText(FAILURE_LAB_ADDRESS);
     await expect(lab.getByRole("link", { name: FAILURE_LAB_TITLE })).toHaveAttribute("href", FAILURE_LAB_PATH);

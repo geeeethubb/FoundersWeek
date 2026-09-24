@@ -59,10 +59,10 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
   stakeholders) are **draft, not published**. Set `askMeAbout.status` to `"approved"` once he confirms.
 
 **Rishab Veldur** (Co-Founder & CEO, Auvi Labs). Added 2026-09-24.
-- Office hours: Thursday, Oct 1 only (from his email to the organizers). Public line: "Thursday, October 1 ·
-  Exact time to be confirmed". The window is date-only (`time: tba`), so applicants who pick him must also
-  give broad availability. Time, length, location and capacity are pending. He's at Founders Week on Oct 1
-  and 2, but Oct 2 is **not** office-hours availability.
+- Office hours: Thursday, Oct 1, anytime 12:00–5:00 PM CT (window locked by the organizers on Sept 24;
+  earlier his email only gave the date). It's an availability window, not booked appointments: session
+  length, location and capacity are still pending. Applicants can tick the window like Patrick's. He's at
+  Founders Week on Oct 1 and 2, but Oct 2 is **not** office-hours availability.
 - He'd like to meet student teams. That's an organizer-only preference, not an eligibility rule.
 - Bio, background tags (Medtech, Hardware and software, University spinouts) and suggested fit were supplied
   by the organizers and checked against the Carle Illinois article (Aug 17, 2026), Auvi Labs' About page

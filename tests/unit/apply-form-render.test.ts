@@ -19,16 +19,50 @@ import { ErrorSummary } from "@/components/apply/error-summary";
 import { emptyFormState, type FormState } from "@/components/apply/form-model";
 import { AvailabilityFields, type ApplyMentorProfiles } from "@/components/apply/mentor-section";
 import { mentors } from "@/content/mentors";
+import type { Mentor } from "@/content/types";
 import { buildApplicationCatalog } from "@/lib/applications/catalog";
 import { STAGE_OPTIONS } from "@/lib/applications/constants";
 import { presentOptions } from "@/lib/applications/option-presentation";
 import { EMPTY_PREFILL, resolvePrefill } from "@/lib/applications/prefill";
 
-const catalog = buildApplicationCatalog(mentors);
-const presentations = presentOptions(catalog, mentors);
-const profiles: ApplyMentorProfiles = Object.fromEntries(
-  mentors.map((m) => [m.id, { role: m.role, company: m.company, headshot: m.headshot }]),
-);
+function setup(list: Mentor[]) {
+  const catalog = buildApplicationCatalog(list);
+  const presentations = presentOptions(catalog, list);
+  const profiles: ApplyMentorProfiles = Object.fromEntries(
+    list.map((m) => [m.id, { role: m.role, company: m.company, headshot: m.headshot }]),
+  );
+  return { catalog, presentations, profiles };
+}
+
+const real = setup(mentors);
+const { catalog } = real;
+
+/**
+ * Synthetic mentor (not real content) with a date-only window: the date is set, the time isn't.
+ * No real mentor has one now that Rishab's Thu, Oct 1 window has a time, but the path stays for
+ * future mentors, so it keeps its coverage here.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-casey",
+  name: "Casey Fixture",
+  firstName: "Casey",
+  role: null,
+  company: null,
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [
+    { id: "fixture-casey-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
+};
+const fixture = setup([...mentors, DATE_ONLY_MENTOR]);
 
 /** Text content with the few entities React emits decoded. */
 function text(html: string): string {
@@ -52,7 +86,7 @@ function attr(tag: string, name: string): string | null {
   return new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1] ?? null;
 }
 
-function renderForm(prefill = EMPTY_PREFILL) {
+function renderForm(prefill = EMPTY_PREFILL, { catalog, presentations, profiles } = real) {
   return renderToStaticMarkup(
     createElement(ApplicationForm, {
       catalog,
@@ -66,7 +100,7 @@ function renderForm(prefill = EMPTY_PREFILL) {
   );
 }
 
-function renderAvailability(overrides: Partial<FormState>) {
+function renderAvailability(overrides: Partial<FormState>, { catalog, presentations } = real) {
   return renderToStaticMarkup(
     createElement(AvailabilityFields, {
       catalog,
@@ -124,21 +158,44 @@ describe("the application form", () => {
     expect(html).not.toContain("apply-option-window-rishab-veldur-2026-10-01");
   });
 
-  it("opens from Rishab's link with him selected, his Thu, Oct 1 window ticked, and the note required", () => {
+  it("opens from Rishab's link with him selected, his Thu, Oct 1 window (12:00–5:00 PM CT) ticked, and the note optional", () => {
     const html = renderForm(resolvePrefill(catalog, { mentor: "rishab-veldur", window: "rishab-veldur-2026-10-01" }));
     const t = text(html);
     expect(t).toContain(
-      "Rishab Veldur is selected below, with “I can make Thu, Oct 1 (exact time to be confirmed)” ticked. Add anyone else you’d like to meet.",
+      "Rishab Veldur is selected below, with “I can make Thu, Oct 1, 12:00–5:00 PM CT” ticked. Add anyone else you’d like to meet.",
     );
     expect(attr(tagWithId(html, "apply-mentor-rishab-veldur"), "checked")).toBe("");
     expect(attr(tagWithId(html, "apply-mentor-patrick-haddox"), "checked")).toBeNull();
     expect(attr(tagWithId(html, "apply-option-window-rishab-veldur-2026-10-01"), "checked")).toBe("");
-    expect(t).toContain("I can make Thu, Oct 1 (exact time to be confirmed) Rishab’s office-hours window");
+    expect(t).toContain("I can make Thu, Oct 1, 12:00–5:00 PM CT Rishab’s office-hours window");
+    // His time is set, so his ticked window is enough: the note is optional, like with Patrick.
     expect(t).toContain(
-      "Needed because Rishab’s times aren’t set yet. Rishab has office hours on Thu, Oct 1, so include when you’re free that day.",
+      "Broad availability (optional) When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.",
+    );
+    expect(t).not.toContain("Rishab’s times aren’t set yet");
+    expect(t).not.toContain("exact time to be confirmed");
+    expect(attr(tagWithId(html, "apply-availabilityNotes"), "aria-required")).toBeNull();
+    // Only his Thu, Oct 1 time is offered: never Fri, Oct 2.
+    expect(t).not.toContain("Oct 2");
+  });
+
+  it("opens from a date-only mentor's link (fixture) with the window ticked and the note required", () => {
+    const html = renderForm(
+      resolvePrefill(fixture.catalog, { mentor: "fixture-casey", window: "fixture-casey-2026-10-01" }),
+      fixture,
+    );
+    const t = text(html);
+    expect(t).toContain(
+      "Casey Fixture is selected below, with “I can make Thu, Oct 1 (exact time to be confirmed)” ticked. Add anyone else you’d like to meet.",
+    );
+    expect(attr(tagWithId(html, "apply-mentor-fixture-casey"), "checked")).toBe("");
+    expect(attr(tagWithId(html, "apply-mentor-rishab-veldur"), "checked")).toBeNull();
+    expect(attr(tagWithId(html, "apply-option-window-fixture-casey-2026-10-01"), "checked")).toBe("");
+    expect(t).toContain("I can make Thu, Oct 1 (exact time to be confirmed) Casey’s office-hours window");
+    expect(t).toContain(
+      "Needed because Casey’s times aren’t set yet. Casey has office hours on Thu, Oct 1, so include when you’re free that day.",
     );
     expect(attr(tagWithId(html, "apply-availabilityNotes"), "aria-required")).toBe("true");
-    // Only his Thu, Oct 1 time is offered: never Fri, Oct 2.
     expect(t).not.toContain("Oct 2");
   });
 });
@@ -172,30 +229,73 @@ describe("broad availability", () => {
     expect(attr(tagWithId(nothingTicked, "apply-availabilityNotes"), "aria-required")).toBe("true");
   });
 
-  it("with Rishab, offers “I can make Thu, Oct 1 (exact time to be confirmed)” and still requires the note, pointing to that day", () => {
-    const hint =
-      "Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Needed because Rishab’s times aren’t set yet. Rishab has office hours on Thu, Oct 1, so include when you’re free that day.";
+  it("with Rishab, offers “I can make Thu, Oct 1, 12:00–5:00 PM CT” and, once it's ticked, makes the note optional", () => {
+    const optional =
+      "Broad availability (optional) When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.";
     const html = renderAvailability({ mentorIds: ["rishab-veldur"], availability: ["window:rishab-veldur-2026-10-01"] });
     const t = text(html);
-    expect(t).toBe(`Can you make these times? (optional) I can make Thu, Oct 1 (exact time to be confirmed) Rishab’s office-hours window ${hint}`);
+    expect(t).toBe(`Can you make these times? (optional) I can make Thu, Oct 1, 12:00–5:00 PM CT Rishab’s office-hours window ${optional}`);
     expect(attr(tagWithId(html, "apply-option-window-rishab-veldur-2026-10-01"), "checked")).toBe("");
     const textarea = tagWithId(html, "apply-availabilityNotes");
-    expect(attr(textarea, "aria-required")).toBe("true");
+    expect(attr(textarea, "aria-required")).toBeNull();
     expect(attr(textarea, "aria-describedby")).toBe("apply-availabilityNotes-hint");
-    expect(t).not.toContain("Not needed");
 
-    // With Patrick's window ticked too: both times listed, the note still required because of Rishab.
+    // Nothing ticked yet: the note is required until a time is ticked, and the hint says so.
+    const nothingTicked = renderAvailability({ mentorIds: ["rishab-veldur"] });
+    expect(text(nothingTicked)).toBe(
+      "Can you make these times? (optional) I can make Thu, Oct 1, 12:00–5:00 PM CT Rishab’s office-hours window Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.",
+    );
+    expect(attr(tagWithId(nothingTicked, "apply-availabilityNotes"), "aria-required")).toBe("true");
+    expect(attr(tagWithId(nothingTicked, "apply-option-window-rishab-veldur-2026-10-01"), "checked")).toBeNull();
+
+    // With Patrick's window ticked: both times listed, and Patrick's time is enough.
     const withPatrick = renderAvailability({
       mentorIds: ["rishab-veldur", "patrick-haddox"],
       availability: ["window:patrick-haddox-2026-10-01-am"],
     });
     const tp = text(withPatrick);
+    expect(tp).toBe(
+      `Can you make these times? (optional) I can make Thu, Oct 1, 10:00–11:30 AM CT Patrick’s office-hours window I can make Thu, Oct 1, 12:00–5:00 PM CT Rishab’s office-hours window ${optional}`,
+    );
+    expect(attr(tagWithId(withPatrick, "apply-availabilityNotes"), "aria-required")).toBeNull();
+    expect(attr(tagWithId(withPatrick, "apply-option-window-rishab-veldur-2026-10-01"), "checked")).toBeNull();
+    expect(attr(tagWithId(withPatrick, "apply-option-window-patrick-haddox-2026-10-01-am"), "checked")).toBe("");
+
+    // Next to Vik (still scheduling), the note is required again, naming only Vik.
+    const withVik = text(
+      renderAvailability({ mentorIds: ["rishab-veldur", "vikram-lakhwara"], availability: ["window:rishab-veldur-2026-10-01"] }),
+    );
+    expect(withVik).toContain(
+      "Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Needed because Vik’s times aren’t set yet.",
+    );
+    expect(withVik).not.toContain("Rishab’s times");
+    expect(withVik).not.toContain("office hours on");
+  });
+
+  it("with a date-only mentor (fixture), offers “I can make Thu, Oct 1 (exact time to be confirmed)” and still requires the note, pointing to that day", () => {
+    const hint =
+      "Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Needed because Casey’s times aren’t set yet. Casey has office hours on Thu, Oct 1, so include when you’re free that day.";
+    const html = renderAvailability({ mentorIds: ["fixture-casey"], availability: ["window:fixture-casey-2026-10-01"] }, fixture);
+    const t = text(html);
+    expect(t).toBe(`Can you make these times? (optional) I can make Thu, Oct 1 (exact time to be confirmed) Casey’s office-hours window ${hint}`);
+    expect(attr(tagWithId(html, "apply-option-window-fixture-casey-2026-10-01"), "checked")).toBe("");
+    const textarea = tagWithId(html, "apply-availabilityNotes");
+    expect(attr(textarea, "aria-required")).toBe("true");
+    expect(attr(textarea, "aria-describedby")).toBe("apply-availabilityNotes-hint");
+    expect(t).not.toContain("Not needed");
+
+    // With Patrick's window ticked too: both times listed, the note still required because of the date-only mentor.
+    const withPatrick = renderAvailability(
+      { mentorIds: ["fixture-casey", "patrick-haddox"], availability: ["window:patrick-haddox-2026-10-01-am"] },
+      fixture,
+    );
+    const tp = text(withPatrick);
     expect(tp).toContain(
-      "I can make Thu, Oct 1, 10:00–11:30 AM CT Patrick’s office-hours window I can make Thu, Oct 1 (exact time to be confirmed) Rishab’s office-hours window",
+      "I can make Thu, Oct 1, 10:00–11:30 AM CT Patrick’s office-hours window I can make Thu, Oct 1 (exact time to be confirmed) Casey’s office-hours window",
     );
     expect(tp).toContain(hint);
     expect(attr(tagWithId(withPatrick, "apply-availabilityNotes"), "aria-required")).toBe("true");
-    expect(attr(tagWithId(withPatrick, "apply-option-window-rishab-veldur-2026-10-01"), "checked")).toBeNull();
+    expect(attr(tagWithId(withPatrick, "apply-option-window-fixture-casey-2026-10-01"), "checked")).toBeNull();
   });
 });
 

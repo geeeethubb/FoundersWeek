@@ -1,12 +1,12 @@
 /**
  * Home page data helpers against the public (default-env) content: date wording, the office-hours
  * sentence (no one-on-one claim), the six mentor previews (content order, approved headshots, one
- * availability line each, nothing private), the four featured events in priority order, and that
- * the canceled afterparty is gone.
+ * availability line each, nothing private), the date-only window wording (on a synthetic fixture
+ * mentor), the four featured events in priority order, and that the canceled afterparty is gone.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMentors, getScheduleEntries, getSite } from "@/content";
-import type { EventLocation, SiteSettings } from "@/content/types";
+import type { EventLocation, Mentor, SiteSettings } from "@/content/types";
 import {
   calendarNote,
   dateRange,
@@ -43,13 +43,45 @@ const MENTOR_NAMES = [
   "Rishab Veldur",
 ];
 
-/** Rishab's one office-hours window: Thu, Oct 1, date set, exact time not yet. */
+/** Rishab's one office-hours window: Thu, Oct 1, anytime from noon to 5 PM (locked Sept 24). */
 const RISHAB_AVAILABILITY = {
+  known: true,
+  date: "Thu, Oct 1",
+  time: "12:00–5:00 PM CT",
+  dateTime: "2026-10-01",
+  more: 0,
+};
+
+/** A date-only window (the date is set, the time isn't): how it previews. */
+const DATE_ONLY_AVAILABILITY = {
   known: true,
   date: "Thu, Oct 1",
   time: "Exact time to be confirmed",
   dateTime: "2026-10-01",
   more: 0,
+};
+
+/**
+ * A synthetic mentor, not in /content, with one date-only window. No real mentor has one right
+ * now, but the path stays for future mentors whose date is set before their time.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-date-only",
+  name: "Fixture Mentor",
+  firstName: "Fixture",
+  role: "Founder",
+  company: "Fixture Co",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [{ id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" } }],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
 };
 
 /** The Founders Week Afterparty (Sat Oct 3, HERE Apartments) was canceled and must never appear. */
@@ -129,7 +161,7 @@ describe("home model (public data)", () => {
     ]);
   });
 
-  it("previews Rishab last: Thu, Oct 1 with the exact time to be confirmed, never Oct 2", () => {
+  it("previews Rishab last: Thu, Oct 1 · 12:00–5:00 PM CT, never Oct 2", () => {
     const rishab = mentorPreviews(getMentors()).at(-1)!;
     expect(rishab).toEqual({
       id: "rishab-veldur",
@@ -140,13 +172,14 @@ describe("home model (public data)", () => {
       href: "/office-hours/rishab-veldur",
       availability: RISHAB_AVAILABILITY,
     });
-    // His line reads "Thu, Oct 1 · Exact time to be confirmed": a date-only window, not a booking.
+    // His line reads like Patrick's: "Thu, Oct 1 · 12:00–5:00 PM CT", a window, not a booking.
     const a = rishab.availability;
-    expect(a.known && `${a.date} · ${a.time}`).toBe("Thu, Oct 1 · Exact time to be confirmed");
+    expect(a.known && `${a.date} · ${a.time}`).toBe("Thu, Oct 1 · 12:00–5:00 PM CT");
     // He is at Founders Week on Oct 2 but has no office hours then; that must never show.
     const json = JSON.stringify(rishab);
     expect(json).not.toMatch(/Oct 2|2026-10-02|Fri/);
-    expect(json).not.toMatch(/Time to be announced|Scheduling in progress/);
+    // His time is locked now: no "to be confirmed/announced" wording left.
+    expect(json).not.toMatch(/Time to be announced|Exact time to be confirmed|Scheduling in progress/);
   });
 
   it("previews carry nothing private: no organizer notes, drafts, bios or expertise bases", () => {
@@ -177,11 +210,34 @@ describe("home model (public data)", () => {
   });
 
   it("words a date-only window (time to be confirmed) as 'Exact time to be confirmed'", () => {
-    const tba = { id: "t", date: "2026-10-01", time: { kind: "tba" } } as const;
-    expect(previewAvailability({ availability: [tba], slots: [] })).toEqual(RISHAB_AVAILABILITY);
+    // A mentor with only a date-only window previews as "Thu, Oct 1 · Exact time to be confirmed".
+    const [preview] = mentorPreviews([DATE_ONLY_MENTOR]);
+    expect(preview).toEqual({
+      id: "fixture-date-only",
+      name: "Fixture Mentor",
+      role: "Founder",
+      company: "Fixture Co",
+      headshot: null,
+      href: "/office-hours/fixture-date-only",
+      availability: DATE_ONLY_AVAILABILITY,
+    });
+    const a = preview.availability;
+    expect(a.known && `${a.date} · ${a.time}`).toBe("Thu, Oct 1 · Exact time to be confirmed");
+    expect(JSON.stringify(preview)).not.toMatch(/Time to be announced|Scheduling in progress/);
+
+    // With or without a display label, the wording is the same.
+    const [tba] = DATE_ONLY_MENTOR.availability;
+    expect(previewAvailability({ availability: [tba], slots: [] })).toEqual(DATE_ONLY_AVAILABILITY);
     expect(
       previewAvailability({ availability: [{ ...tba, label: "Exact time to be confirmed" }], slots: [] }),
-    ).toEqual(RISHAB_AVAILABILITY);
+    ).toEqual(DATE_ONLY_AVAILABILITY);
+    // A timed window on the same day comes first; the date-only one is counted.
+    expect(
+      previewAvailability({
+        availability: [tba, { id: "x", date: "2026-10-01", time: { kind: "exact", start: "12:00", end: "17:00" } }],
+        slots: [],
+      }),
+    ).toEqual({ ...RISHAB_AVAILABILITY, more: 1 });
   });
 
   it("features Dan Caruso's fireside chat, the Sept 29 panel, Arnav's happy hour and Failure Lab — no office hours", () => {

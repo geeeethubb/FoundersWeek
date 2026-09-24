@@ -1,12 +1,41 @@
 import { describe, expect, it } from "vitest";
 import { demoMentors } from "@/content/demo";
 import { mentors } from "@/content/mentors";
+import type { Mentor } from "@/content/types";
 import { buildApplicationCatalog, mentorNeedsBroadAvailability } from "@/lib/applications/catalog";
 import { LIMITS } from "@/lib/applications/constants";
 import { createApplicationSchema, emptyApplicationValues, toFieldErrors } from "@/lib/applications/schema";
 
 const catalog = buildApplicationCatalog([...mentors, ...demoMentors]);
 const schema = createApplicationSchema({ catalog, emailDomains: ["illinois.edu"] });
+
+/**
+ * Synthetic mentor (not real content) with a date-only window: the date is set, the time isn't.
+ * No real mentor has one now that Rishab's Thu, Oct 1 window has a time, but the path stays for
+ * future mentors, so it keeps its coverage here.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-casey",
+  name: "Casey Fixture",
+  firstName: "Casey",
+  role: null,
+  company: null,
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [
+    { id: "fixture-casey-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
+};
+const fixtureCatalog = buildApplicationCatalog([...mentors, DATE_ONLY_MENTOR]);
+const fixtureSchema = createApplicationSchema({ catalog: fixtureCatalog, emailDomains: ["illinois.edu"] });
 
 function valid(overrides: Partial<ReturnType<typeof emptyApplicationValues>> = {}) {
   return {
@@ -43,7 +72,7 @@ describe("application catalog", () => {
     expect(byId["demo-jordan-placeholder"].options[0].certainty).toBe("proposed");
   });
 
-  it("lists the six real mentors, Rishab last, with his one Thu, Oct 1 window marked as time not known", () => {
+  it("lists the six real mentors, Rishab last, with his one Thu, Oct 1 window at 12:00–5:00 PM CT (time known)", () => {
     expect(catalog.mentors.filter((m) => !m.demo).map((m) => m.id)).toEqual([
       "patrick-haddox",
       "arnav-mishra",
@@ -60,52 +89,76 @@ describe("application catalog", () => {
       kind: "window",
       certainty: "window",
       date: "2026-10-01",
+      label: "Thu, Oct 1 · 12:00–5:00 PM CT",
+      timeKnown: true,
+    });
+    // Every option (real windows, demo windows and slots) has a known time.
+    const all = catalog.mentors.flatMap((m) => m.options);
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.filter((o) => !o.timeKnown).map((o) => o.key)).toEqual([]);
+  });
+
+  it("marks a date-only window (the fixture mentor's Thu, Oct 1) as time not known", () => {
+    const casey = fixtureCatalog.mentors.find((m) => m.id === "fixture-casey")!;
+    expect(casey.scheduling).toBe("available");
+    expect(casey.options).toHaveLength(1);
+    expect(casey.options[0]).toMatchObject({
+      key: "window:fixture-casey-2026-10-01",
+      kind: "window",
+      certainty: "window",
+      date: "2026-10-01",
       label: "Thu, Oct 1 · Exact time to be confirmed",
       timeKnown: false,
     });
-    // Every other option (real windows, demo windows and slots) has a known time.
-    const others = catalog.mentors.filter((m) => m.id !== "rishab-veldur").flatMap((m) => m.options);
+    // Every other option has a known time.
+    const others = fixtureCatalog.mentors.filter((m) => m.id !== "fixture-casey").flatMap((m) => m.options);
     expect(others.length).toBeGreaterThan(0);
     expect(others.filter((o) => !o.timeKnown).map((o) => o.key)).toEqual([]);
   });
 
-  it("needs broad availability exactly for mentors without a known time (Vik, Elliott, Ron, Rishab)", () => {
+  it("needs broad availability exactly for mentors without a known time (Vik, Elliott, Ron; not Rishab)", () => {
     expect(catalog.mentors.filter((m) => mentorNeedsBroadAvailability(m)).map((m) => m.id)).toEqual([
       "vikram-lakhwara",
       "elliott-notrica",
       "ron-lewis",
-      "rishab-veldur",
+    ]);
+    // A mentor with only a date-only window needs it too.
+    expect(fixtureCatalog.mentors.filter((m) => mentorNeedsBroadAvailability(m)).map((m) => m.id)).toEqual([
+      "vikram-lakhwara",
+      "elliott-notrica",
+      "ron-lewis",
+      "fixture-casey",
     ]);
     // No options at all counts as "no known time".
     expect(mentorNeedsBroadAvailability({ options: [] })).toBe(true);
+    const dateOnlyWindow = fixtureCatalog.mentors.find((m) => m.id === "fixture-casey")!.options[0];
     const rishabWindow = catalog.mentors.find((m) => m.id === "rishab-veldur")!.options[0];
     const patrickWindow = catalog.mentors.find((m) => m.id === "patrick-haddox")!.options[0];
+    expect(mentorNeedsBroadAvailability({ options: [dateOnlyWindow] })).toBe(true);
     // One timed option is enough to not need it.
-    expect(mentorNeedsBroadAvailability({ options: [rishabWindow, { ...rishabWindow, key: "window:x", timeKnown: true }] })).toBe(
-      false,
-    );
+    expect(
+      mentorNeedsBroadAvailability({ options: [dateOnlyWindow, { ...dateOnlyWindow, key: "window:x", timeKnown: true }] }),
+    ).toBe(false);
+    expect(mentorNeedsBroadAvailability({ options: [rishabWindow] })).toBe(false);
     expect(mentorNeedsBroadAvailability({ options: [patrickWindow] })).toBe(false);
   });
 });
 
-describe("Rishab (Thu, Oct 1, exact time to be confirmed)", () => {
+describe("Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
   const RISHAB_WINDOW = "window:rishab-veldur-2026-10-01";
   const PATRICK_WINDOW = "window:patrick-haddox-2026-10-01-am";
   const rishab = { mentorIds: ["rishab-veldur"], firstChoiceMentorId: "rishab-veldur" };
 
-  it("needs the broad-availability note even with his window ticked, and the error names him", () => {
-    const r = schema.safeParse(valid({ ...rishab, availability: [RISHAB_WINDOW], availabilityNotes: "" }));
-    expect(r.success).toBe(false);
-    if (!r.success) {
-      expect(toFieldErrors(r.error)).toEqual({
-        availabilityNotes: "Tell us when you’re generally free during Founders Week. Rishab’s times aren’t set yet.",
-      });
+  it("accepts his window ticked alone (no broad-availability note needed), with a note, and the note alone", () => {
+    const alone = schema.safeParse(valid({ ...rishab, availability: [RISHAB_WINDOW], availabilityNotes: "" }));
+    expect(alone.success).toBe(true);
+    if (alone.success) {
+      expect(alone.data.mentorIds).toEqual(["rishab-veldur"]);
+      expect(alone.data.availability).toEqual([RISHAB_WINDOW]);
+      expect(alone.data.availabilityNotes).toBe("");
     }
-    // Whitespace isn't an answer.
-    expect(schema.safeParse(valid({ ...rishab, availability: [RISHAB_WINDOW], availabilityNotes: "  \n " })).success).toBe(false);
-  });
-
-  it("accepts his window with a note, and the note alone", () => {
+    // Whitespace trims to nothing, and the ticked window is still enough.
+    expect(schema.safeParse(valid({ ...rishab, availability: [RISHAB_WINDOW], availabilityNotes: "  \n " })).success).toBe(true);
     const r = schema.safeParse(valid({ ...rishab, availability: [RISHAB_WINDOW], availabilityNotes: "Free after 3 PM on Thursday" }));
     expect(r.success).toBe(true);
     if (r.success) {
@@ -116,22 +169,27 @@ describe("Rishab (Thu, Oct 1, exact time to be confirmed)", () => {
     expect(schema.safeParse(valid({ ...rishab, availability: [], availabilityNotes: "Thursday afternoon" })).success).toBe(true);
   });
 
-  it("with Patrick's window ticked and no note, still errors naming Rishab (not Patrick)", () => {
-    const r = schema.safeParse(
-      valid({
-        mentorIds: ["rishab-veldur", "patrick-haddox"],
-        firstChoiceMentorId: "rishab-veldur",
-        availability: [PATRICK_WINDOW],
-        availabilityNotes: "",
-      }),
-    );
+  it("with nothing ticked and no note, gives the general rule (he isn't named as “not set”)", () => {
+    const r = schema.safeParse(valid({ ...rishab, availability: [], availabilityNotes: "" }));
     expect(r.success).toBe(false);
     if (!r.success) {
       expect(toFieldErrors(r.error)).toEqual({
-        availabilityNotes: "Tell us when you’re generally free during Founders Week. Rishab’s times aren’t set yet.",
+        availabilityNotes: "Tell us when you’re generally free during Founders Week (or pick one of the listed times).",
       });
     }
-    // Both windows ticked: same answer.
+  });
+
+  it("with Patrick's window ticked and no note, passes (both have set times); so do both windows", () => {
+    expect(
+      schema.safeParse(
+        valid({
+          mentorIds: ["rishab-veldur", "patrick-haddox"],
+          firstChoiceMentorId: "rishab-veldur",
+          availability: [PATRICK_WINDOW],
+          availabilityNotes: "",
+        }),
+      ).success,
+    ).toBe(true);
     const both = schema.safeParse(
       valid({
         mentorIds: ["patrick-haddox", "rishab-veldur"],
@@ -140,25 +198,11 @@ describe("Rishab (Thu, Oct 1, exact time to be confirmed)", () => {
         availabilityNotes: "",
       }),
     );
-    expect(both.success).toBe(false);
-    if (!both.success) {
-      expect(toFieldErrors(both.error).availabilityNotes).toBe(
-        "Tell us when you’re generally free during Founders Week. Rishab’s times aren’t set yet.",
-      );
-    }
-    expect(
-      schema.safeParse(
-        valid({
-          mentorIds: ["rishab-veldur", "patrick-haddox"],
-          firstChoiceMentorId: "rishab-veldur",
-          availability: [PATRICK_WINDOW],
-          availabilityNotes: "Anytime Thursday afternoon",
-        }),
-      ).success,
-    ).toBe(true);
+    expect(both.success).toBe(true);
+    if (both.success) expect(both.data.availability).toEqual([PATRICK_WINDOW, RISHAB_WINDOW]);
   });
 
-  it("names him with the mentors still scheduling, in the order chosen", () => {
+  it("with mentors still scheduling, names only them (Vik, Elliott, Ron), in the order chosen", () => {
     const r = schema.safeParse(
       valid({
         mentorIds: ["vikram-lakhwara", "rishab-veldur", "ron-lewis"],
@@ -170,7 +214,21 @@ describe("Rishab (Thu, Oct 1, exact time to be confirmed)", () => {
     expect(r.success).toBe(false);
     if (!r.success) {
       expect(toFieldErrors(r.error)).toEqual({
-        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik, Rishab and Ron’s times aren’t set yet.",
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik and Ron’s times aren’t set yet.",
+      });
+    }
+    const all = schema.safeParse(
+      valid({
+        mentorIds: ["vikram-lakhwara", "elliott-notrica", "rishab-veldur", "ron-lewis"],
+        firstChoiceMentorId: "rishab-veldur",
+        availability: [RISHAB_WINDOW],
+        availabilityNotes: "",
+      }),
+    );
+    expect(all.success).toBe(false);
+    if (!all.success) {
+      expect(toFieldErrors(all.error)).toEqual({
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik, Elliott and Ron’s times aren’t set yet.",
       });
     }
   });
@@ -184,6 +242,110 @@ describe("Rishab (Thu, Oct 1, exact time to be confirmed)", () => {
     const stray = schema.safeParse(valid({ availability: [PATRICK_WINDOW, RISHAB_WINDOW] }));
     expect(stray.success).toBe(false);
     if (!stray.success) expect(Object.keys(toFieldErrors(stray.error))).toEqual(["availability"]);
+  });
+});
+
+describe("a mentor with a date-only window (fixture: Thu, Oct 1, exact time to be confirmed)", () => {
+  const DATE_ONLY_WINDOW = "window:fixture-casey-2026-10-01";
+  const PATRICK_WINDOW = "window:patrick-haddox-2026-10-01-am";
+  const casey = { mentorIds: ["fixture-casey"], firstChoiceMentorId: "fixture-casey" };
+
+  it("needs the broad-availability note even with the window ticked, and the error names the mentor", () => {
+    const r = fixtureSchema.safeParse(valid({ ...casey, availability: [DATE_ONLY_WINDOW], availabilityNotes: "" }));
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(toFieldErrors(r.error)).toEqual({
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Casey’s times aren’t set yet.",
+      });
+    }
+    // Whitespace isn't an answer.
+    expect(
+      fixtureSchema.safeParse(valid({ ...casey, availability: [DATE_ONLY_WINDOW], availabilityNotes: "  \n " })).success,
+    ).toBe(false);
+  });
+
+  it("accepts the window with a note, and the note alone", () => {
+    const r = fixtureSchema.safeParse(
+      valid({ ...casey, availability: [DATE_ONLY_WINDOW], availabilityNotes: "Free after 3 PM on Thursday" }),
+    );
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.mentorIds).toEqual(["fixture-casey"]);
+      expect(r.data.availability).toEqual([DATE_ONLY_WINDOW]);
+      expect(r.data.availabilityNotes).toBe("Free after 3 PM on Thursday");
+    }
+    expect(fixtureSchema.safeParse(valid({ ...casey, availability: [], availabilityNotes: "Thursday afternoon" })).success).toBe(
+      true,
+    );
+  });
+
+  it("with Patrick's window ticked and no note, still errors naming that mentor (not Patrick)", () => {
+    const r = fixtureSchema.safeParse(
+      valid({
+        mentorIds: ["fixture-casey", "patrick-haddox"],
+        firstChoiceMentorId: "fixture-casey",
+        availability: [PATRICK_WINDOW],
+        availabilityNotes: "",
+      }),
+    );
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(toFieldErrors(r.error)).toEqual({
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Casey’s times aren’t set yet.",
+      });
+    }
+    // Both windows ticked: same answer.
+    const both = fixtureSchema.safeParse(
+      valid({
+        mentorIds: ["patrick-haddox", "fixture-casey"],
+        firstChoiceMentorId: "patrick-haddox",
+        availability: [PATRICK_WINDOW, DATE_ONLY_WINDOW],
+        availabilityNotes: "",
+      }),
+    );
+    expect(both.success).toBe(false);
+    if (!both.success) {
+      expect(toFieldErrors(both.error).availabilityNotes).toBe(
+        "Tell us when you’re generally free during Founders Week. Casey’s times aren’t set yet.",
+      );
+    }
+    expect(
+      fixtureSchema.safeParse(
+        valid({
+          mentorIds: ["fixture-casey", "patrick-haddox"],
+          firstChoiceMentorId: "fixture-casey",
+          availability: [PATRICK_WINDOW],
+          availabilityNotes: "Anytime Thursday afternoon",
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("names the mentor with the mentors still scheduling, in the order chosen (Rishab never)", () => {
+    const r = fixtureSchema.safeParse(
+      valid({
+        mentorIds: ["vikram-lakhwara", "fixture-casey", "rishab-veldur", "ron-lewis"],
+        firstChoiceMentorId: "fixture-casey",
+        availability: [DATE_ONLY_WINDOW, "window:rishab-veldur-2026-10-01"],
+        availabilityNotes: "",
+      }),
+    );
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(toFieldErrors(r.error)).toEqual({
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik, Casey and Ron’s times aren’t set yet.",
+      });
+    }
+  });
+
+  it("rejects the window without choosing its mentor", () => {
+    const stray = fixtureSchema.safeParse(valid({ availability: [PATRICK_WINDOW, DATE_ONLY_WINDOW] }));
+    expect(stray.success).toBe(false);
+    if (!stray.success) expect(Object.keys(toFieldErrors(stray.error))).toEqual(["availability"]);
+    // And it only exists in the fixture catalog, never in the real one.
+    const real = schema.safeParse(valid({ ...casey, availability: [DATE_ONLY_WINDOW], availabilityNotes: "Thursday" }));
+    expect(real.success).toBe(false);
+    if (!real.success) expect(Object.keys(toFieldErrors(real.error))).toEqual(["mentorIds"]);
   });
 });
 

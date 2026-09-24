@@ -236,7 +236,7 @@ describe("CSV export sanitization (through the route)", () => {
 });
 
 describe("CSV export filtered to Rishab (through the route)", () => {
-  it("exports only applications listing Rishab, with his Oct 1 window and the student's availability notes", async () => {
+  it("exports only applications listing Rishab, with his Oct 1 12:00–5:00 PM window and the student's availability notes", async () => {
     vi.stubEnv("SHOW_DEMO_CONTENT", "");
     const first = await insertApplication(db, {
       fullName: "Rishab Export First",
@@ -270,7 +270,7 @@ describe("CSV export filtered to Rishab (through the route)", () => {
       status: "Submitted",
       first_choice: "Rishab Veldur",
       preferred_mentors: "1. Rishab Veldur; 2. Patrick Haddox",
-      availability: "Rishab Veldur: Thu, Oct 1 · Exact time to be confirmed (window)",
+      availability: "Rishab Veldur: Thu, Oct 1 · 12:00–5:00 PM CT (window)",
       availability_notes: "Thu Oct 1 after 2 PM",
       appointments: "",
     });

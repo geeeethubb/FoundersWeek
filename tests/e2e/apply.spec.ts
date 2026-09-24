@@ -3,7 +3,9 @@
  *   - Pending mentors (Vik, Elliott, Ron) can be applied to with broad availability only.
  *   - The availability rule: neither a listed window nor broad availability → an error; either one
  *     is enough — unless a chosen mentor's times aren't set yet (Vik, Elliott, Ron): then broad
- *     availability is required, naming them.
+ *     availability is required, naming only them (never Rishab, whose window is set).
+ *   - Rishab: "I can make Thu, Oct 1, 12:00–5:00 PM CT"; like Patrick's window, ticking it is enough
+ *     on its own.
  *   - A retried (replayed) submission confirms "already received" without repeating the answers.
  *   - Unticking what a link preselected clears ?mentor/window from the URL; #apply only scrolls.
  *   - Validation: empty submit → focused error summary; non-Illinois email; answers over 100 words.
@@ -27,6 +29,7 @@ import {
   AVAILABILITY_RULE_MESSAGE,
   pendingAvailabilityMessage,
   BROAD_AVAILABILITY,
+  BROAD_AVAILABILITY_ASK,
   broadAvailabilityField,
   confirmation,
   ELLIOTT,
@@ -38,6 +41,7 @@ import {
   fillProject,
   firstChoiceRadio,
   fullNameField,
+  INTEREST_ONLY_LABEL,
   MENTORS,
   mentorCheckbox,
   mentorWindows,
@@ -47,6 +51,7 @@ import {
   preselectionNotice,
   QUESTION,
   questionField,
+  RISHAB,
   RON,
   storedApplicationsFor,
   submitButton,
@@ -179,6 +184,48 @@ test.describe("Validation", () => {
     await expect(broadAvailabilityField(page)).not.toHaveAttribute("aria-invalid", "true");
   });
 
+  test("all six mentors: only Vik, Elliott and Ron need broad availability; Rishab’s window counts like Patrick’s", async ({
+    page,
+  }) => {
+    await openApplication(page);
+    const posts = countApplicationPosts(page);
+    await fillAboutYou(page, { fullName: "Dana Everyone", email: uniqueEmail("apply-six") });
+    await fillProject(page);
+    await fillConsents(page);
+    for (const mentor of MENTORS) await tick(mentorCheckbox(page, mentor));
+    await tick(firstChoiceRadio(page, RISHAB));
+    // Patrick, Arnav and Rishab each offer one window; Vik, Elliott and Ron have none yet.
+    for (const mentor of MENTORS) {
+      await expect(mentorWindows(page, mentor), `${mentor.name}: listed times`).toHaveCount(mentor.windowId ? 1 : 0);
+    }
+    await tick(mentorWindows(page, RISHAB));
+
+    // The hint names only the mentors whose times aren't set yet, in the order they were chosen.
+    const pendingNames = "Vik, Elliott and Ron";
+    expect(PENDING_MENTORS.map((m) => m.firstName)).toEqual(["Vik", "Elliott", "Ron"]);
+    const broad = broadAvailabilityField(page);
+    await expect(broad).toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Needed because ${pendingNames}’s times aren’t set yet.`);
+
+    await passMinimumFillTime(page);
+    await submitButton(page).click();
+    const summary = errorSummary(page);
+    await expect(summary).toBeVisible();
+    await expect(summary.getByRole("link")).toHaveText([pendingAvailabilityMessage(pendingNames)]);
+    await expect(broad).toHaveAttribute("aria-invalid", "true");
+    await expect(mentorWindows(page, RISHAB)).toBeChecked();
+    expect(posts.count, "nothing is sent while broad availability is missing").toBe(0);
+
+    // Without Vik, Elliott and Ron, Rishab's ticked window is enough on its own: the error clears.
+    for (const mentor of PENDING_MENTORS) await untick(mentorCheckbox(page, mentor));
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
+    await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
+    await expect(broad).not.toHaveAttribute("aria-invalid", "true");
+    await expect(broad).not.toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+    await expect(firstChoiceRadio(page, RISHAB)).toBeChecked();
+  });
+
   test("a non-Illinois email is rejected", async ({ page }) => {
     await openApplication(page);
     const email = emailField(page);
@@ -246,8 +293,62 @@ test.describe("Submitting", () => {
     expect(stored[0].first_choice).toBe(ELLIOTT.name);
     expect(stored[0].preferred_mentors.startsWith(`1. ${ELLIOTT.name}`)).toBe(true);
     for (const mentor of PENDING_MENTORS) expect(stored[0].preferred_mentors).toContain(mentor.name);
-    expect(stored[0].availability).toBe("Interest only — no time selected");
+    expect(stored[0].availability).toBe(INTEREST_ONLY_LABEL);
     expect(stored[0].availability_notes).toBe(BROAD_AVAILABILITY);
+  });
+
+  test("Rishab: his Thu, Oct 1 window (12:00–5:00 PM CT) is enough on its own → stored without broad availability", async ({
+    page,
+  }) => {
+    const email = uniqueEmail("apply-rishab");
+    await openApplication(page, `/office-hours?mentor=${RISHAB.id}&window=${RISHAB.windowId}#apply`);
+    await expect(mentorCheckbox(page, RISHAB)).toBeChecked();
+    // One option, worded like Patrick's: his confirmed window, ticked by the link.
+    const rishabWindow = mentorWindows(page, RISHAB);
+    await expect(rishabWindow).toHaveCount(1);
+    await expect(rishabWindow).toBeChecked();
+    await expect(rishabWindow).toHaveAccessibleName("I can make Thu, Oct 1, 12:00–5:00 PM CT Rishab’s office-hours window");
+    await expect(applySection(page)).toContainText(
+      "Rishab Veldur is selected below, with “I can make Thu, Oct 1, 12:00–5:00 PM CT” ticked. Add anyone else you’d like to meet.",
+    );
+    await expect(applicationForm(page)).not.toContainText(/Oct 2|to be confirmed/);
+    // Broad availability is optional: the ticked window is enough, and the hint doesn't single him out.
+    const broad = broadAvailabilityField(page);
+    await expect(broad).not.toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+
+    await fillAboutYou(page, { fullName: "Robin Wearable", email });
+    await fillProject(page);
+    await fillConsents(page);
+    await passMinimumFillTime(page);
+
+    // With the window unticked there's no time at all: the general rule applies, never a
+    // "times aren't set yet" message about Rishab.
+    const posts = countApplicationPosts(page);
+    await untick(rishabWindow);
+    await submitButton(page).click();
+    const summary = errorSummary(page);
+    await expect(summary).toBeVisible();
+    await expect(summary.getByRole("link")).toHaveText([AVAILABILITY_RULE_MESSAGE]);
+    await expect(broad).toHaveAttribute("aria-invalid", "true");
+    expect(posts.count, "nothing is sent without a time or broad availability").toBe(0);
+
+    // Ticking his window again is enough on its own; broad availability stays empty.
+    await tick(rishabWindow);
+    await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
+    await expect(broad).not.toHaveAttribute("aria-invalid", "true");
+    await expect(broad).toHaveValue("");
+    await submitAndExpect201(page);
+    await expect(confirmation(page)).toContainText("This is an application, not a confirmed appointment.");
+    expect(posts.count, "one request").toBe(1);
+
+    // Stored once: Rishab first, his Thu, Oct 1 window (never Oct 2), no broad availability.
+    const stored = await storedApplicationsFor(organizer, email);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].first_choice).toBe(RISHAB.name);
+    expect(stored[0].preferred_mentors).toBe(`1. ${RISHAB.name}`);
+    expect(stored[0].availability).toBe(`${RISHAB.name}: Thu, Oct 1 · 12:00–5:00 PM CT (window)`);
+    expect(stored[0].availability_notes).toBe("");
   });
 
   test("a failed submission keeps every answer; the retry stores ONE application", async ({ page }) => {

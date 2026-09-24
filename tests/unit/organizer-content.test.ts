@@ -1,9 +1,10 @@
 /**
  * The organizer view against the current content: the six mentors (names, verified roles,
  * headshots), organizer-only notes and drafts (including Rishab's), the lineup balanced three
- * across, Rishab's date-only Oct 1 window in filters, no events (Dan Caruso, Arnav's happy hour,
- * Rishab's Showcase panel, the canceled afterparty) posing as mentors, and the "Data store"
- * indicator never exposing connection details.
+ * across, Rishab's confirmed Thu, Oct 1 12:00–5:00 PM window in filters, the date-only (time not
+ * set) path on a test-only fixture mentor, no events (Dan Caruso, Arnav's happy hour, Rishab's
+ * Showcase panel, the canceled afterparty) posing as mentors, and the "Data store" indicator never
+ * exposing connection details.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMentors, getMentorsForOrganizers } from "@/content";
 import { events } from "@/content/events";
 import { mentors as productionMentors } from "@/content/mentors";
+import type { Mentor } from "@/content/types";
 import { ApplicationFiltersForm } from "@/components/organizer/application-filters";
 import { lineupColumns, MentorLineup } from "@/components/organizer/mentor-lineup";
 import { MentorNotes, mentorDrafts, mentorMissing } from "@/components/organizer/mentor-notes";
@@ -25,6 +27,41 @@ import { directory as fixtureDirectory } from "./organizer-fixtures";
 
 const MENTOR_IDS = ["patrick-haddox", "arnav-mishra", "vikram-lakhwara", "elliott-notrica", "ron-lewis", "rishab-veldur"];
 const RISHAB_WINDOW = "rishab-veldur-2026-10-01";
+const RISHAB_LABEL = "Thu, Oct 1 · 12:00–5:00 PM CT";
+
+/**
+ * Test-only mentor whose date is set but whose time isn't: the shape Rishab had before his
+ * 12–5 PM window was locked. No production mentor uses it now, but the date-only path (label,
+ * "Exact times TBA" badge, timeKnown=false, broad-availability rule) stays for future mentors.
+ */
+const DATE_ONLY_WINDOW = "fixture-date-only-2026-10-01";
+const DATE_ONLY_LABEL = "Thu, Oct 1 · Exact time to be confirmed";
+const dateOnlyMentor: Mentor = {
+  id: "fixture-date-only",
+  name: "Dana Fixture",
+  firstName: "Dana",
+  role: "Founder",
+  company: "Fixture Labs",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: {
+    format: null,
+    durationMinutes: null,
+    location: null,
+    sessionCount: null,
+    confirmed: false,
+    note: "Dana has time for office hours on Thursday, October 1. We’re still confirming the exact time.",
+  },
+  availability: [{ id: DATE_ONLY_WINDOW, date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" }],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  organizerNotes: "Fixture: date set, time not.",
+  sources: [],
+};
 
 /** Every <img> alt text in the markup. */
 function imageAlts(html: string): string[] {
@@ -100,17 +137,17 @@ describe("organizer directory from production content", () => {
     // Elliott has no windows or slots yet.
     expect(directory.windows.filter((w) => w.mentorId === "elliott-notrica")).toEqual([]);
     expect(directory.slots.filter((s) => s.mentorId === "elliott-notrica")).toEqual([]);
-    // Rishab: ONE date-only window on Thu, Oct 1 (never Oct 2), and no appointment slots.
+    // Rishab: ONE confirmed window, Thu, Oct 1 12:00–5:00 PM (never Oct 2), and no appointment slots.
     expect(directory.windows.filter((w) => w.mentorId === "rishab-veldur")).toEqual([
       {
         id: RISHAB_WINDOW,
         mentorId: "rishab-veldur",
         mentorName: "Rishab Veldur",
         date: "2026-10-01",
-        time: { kind: "tba" },
-        kind: "window-approx",
+        time: { kind: "exact", start: "12:00", end: "17:00" },
+        kind: "window",
         demo: false,
-        label: "Thu, Oct 1 · Exact time to be confirmed",
+        label: RISHAB_LABEL,
       },
     ]);
     expect(directory.slots.filter((s) => s.mentorId === "rishab-veldur")).toEqual([]);
@@ -165,11 +202,29 @@ describe("organizer directory from production content", () => {
     expect(directory.windowsById.get("arnav-mishra-2026-10-02-am")?.label).toBe(
       "Oct 2 · Friday morning, before noon · Exact window pending",
     );
-    // Date set, time not: the label says so plainly (never "Time TBA" or "Time to be announced").
-    expect(directory.windowsById.get(RISHAB_WINDOW)?.label).toBe("Thu, Oct 1 · Exact time to be confirmed");
+    // Rishab's window is exact now, in the same style as Patrick's.
+    expect(directory.windowsById.get(RISHAB_WINDOW)?.label).toBe(RISHAB_LABEL);
+    // Date set, time not (fixture mentor): the content label says so plainly, and the window is approximate.
+    const withDateOnly = buildOrganizerDirectory([...getMentorsForOrganizers(), dateOnlyMentor]);
+    expect(withDateOnly.windowsById.get(DATE_ONLY_WINDOW)).toEqual({
+      id: DATE_ONLY_WINDOW,
+      mentorId: "fixture-date-only",
+      mentorName: "Dana Fixture",
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      kind: "window-approx",
+      demo: false,
+      label: DATE_ONLY_LABEL,
+    });
+    expect(withDateOnly.windowsById.get(DATE_ONLY_WINDOW)?.label).not.toMatch(/Time TBA|Time to be announced/);
+    // Without a content label, the organizer label falls back to the compact "Time TBA".
+    const unlabeled = buildOrganizerDirectory([
+      { ...dateOnlyMentor, availability: [{ id: DATE_ONLY_WINDOW, date: "2026-10-01", time: { kind: "tba" } }] },
+    ]);
+    expect(unlabeled.windowsById.get(DATE_ONLY_WINDOW)?.label).toBe("Thu, Oct 1 · Time TBA");
   });
 
-  it("offers Rishab's Oct 1 window as a date-only option that needs broad availability", () => {
+  it("offers Rishab's Oct 1 12:00–5:00 PM window as a timed option (no broad-availability note needed)", () => {
     const catalog = buildApplicationCatalog(getMentorsForOrganizers());
     expect(catalog.mentors.map((m) => m.id)).toEqual(MENTOR_IDS);
     const rishab = catalog.mentors.find((m) => m.id === "rishab-veldur")!;
@@ -182,18 +237,46 @@ describe("organizer directory from production content", () => {
         mentorId: "rishab-veldur",
         certainty: "window",
         date: "2026-10-01",
-        label: "Thu, Oct 1 · Exact time to be confirmed",
+        label: RISHAB_LABEL,
         // Fallback wording only: the form shows lib/applications/option-presentation.ts copy.
-        detail: expect.any(String),
-        timeKnown: false,
+        detail: "Availability window. Exact appointment times aren’t set yet.",
+        timeKnown: true,
       },
     ]);
-    // Vik, Elliott, Ron (no times) and Rishab (date only) need the broad-availability note.
+    expect(mentorNeedsBroadAvailability(rishab)).toBe(false);
+    // Only Vik, Elliott and Ron (no times yet) need the broad-availability note.
     expect(catalog.mentors.filter(mentorNeedsBroadAvailability).map((m) => m.id)).toEqual([
       "vikram-lakhwara",
       "elliott-notrica",
       "ron-lewis",
-      "rishab-veldur",
+    ]);
+  });
+
+  it("offers a date-only window (fixture mentor) as an option that needs broad availability", () => {
+    const catalog = buildApplicationCatalog([...getMentorsForOrganizers(), dateOnlyMentor]);
+    expect(catalog.mentors.map((m) => m.id)).toEqual([...MENTOR_IDS, "fixture-date-only"]);
+    const dana = catalog.mentors.find((m) => m.id === "fixture-date-only")!;
+    expect(dana).toMatchObject({ name: "Dana Fixture", firstName: "Dana", affiliation: "Founder, Fixture Labs", scheduling: "available", demo: false });
+    expect(dana.options).toEqual([
+      {
+        key: `window:${DATE_ONLY_WINDOW}`,
+        kind: "window",
+        id: DATE_ONLY_WINDOW,
+        mentorId: "fixture-date-only",
+        certainty: "window",
+        date: "2026-10-01",
+        label: DATE_ONLY_LABEL,
+        detail: "Availability window. Exact times to be announced.",
+        timeKnown: false,
+      },
+    ]);
+    expect(mentorNeedsBroadAvailability(dana)).toBe(true);
+    // Vik, Elliott, Ron (no times) and the date-only mentor need the broad-availability note.
+    expect(catalog.mentors.filter(mentorNeedsBroadAvailability).map((m) => m.id)).toEqual([
+      "vikram-lakhwara",
+      "elliott-notrica",
+      "ron-lewis",
+      "fixture-date-only",
     ]);
   });
 
@@ -207,12 +290,14 @@ describe("organizer directory from production content", () => {
     ]);
     expect(joinNames(prefs.map((p) => p.firstName))).toBe("Vik, Elliott, Ron and Patrick");
     expect(joinNames(["Vik", "Ron"])).toBe("Vik and Ron");
-    // Rishab has a date but no slots yet: his applications can be reviewed, not confirmed.
+    // Rishab has a confirmed window but no slots yet: his applications can be reviewed, not confirmed.
     const [rishab] = mentorBookability(directory, ["rishab-veldur"]);
     expect(rishab).toMatchObject({ mentorId: "rishab-veldur", mentorName: "Rishab Veldur", firstName: "Rishab", scheduling: "available", slots: [] });
-    expect(rishab.windows.map((w) => [w.id, w.label, w.kind])).toEqual([
-      [RISHAB_WINDOW, "Thu, Oct 1 · Exact time to be confirmed", "window-approx"],
-    ]);
+    expect(rishab.windows.map((w) => [w.id, w.label, w.kind])).toEqual([[RISHAB_WINDOW, RISHAB_LABEL, "window"]]);
+    // A date-only mentor (fixture) likewise has a window but nothing bookable.
+    const [dana] = mentorBookability(buildOrganizerDirectory([dateOnlyMentor]), ["fixture-date-only"]);
+    expect(dana).toMatchObject({ mentorId: "fixture-date-only", firstName: "Dana", scheduling: "available", slots: [] });
+    expect(dana.windows.map((w) => [w.id, w.label, w.kind])).toEqual([[DATE_ONLY_WINDOW, DATE_ONLY_LABEL, "window-approx"]]);
     // With demo content, slots exist for demo mentors only.
     expect(mentorBookability(fixtureDirectory, ["demo-avery-sample"])[0].slots).toHaveLength(2);
     expect(mentorBookability(fixtureDirectory, ["rishab-veldur"])[0].slots).toEqual([]);
@@ -248,10 +333,19 @@ describe("organizer directory from production content", () => {
       "Rishab Veldur",
     ]);
     expect(availabilitySelect).toContain(
-      `<optgroup label="Rishab Veldur"><option value="window:${RISHAB_WINDOW}" selected="">Thu, Oct 1 · Exact time to be confirmed (window)</option></optgroup>`,
+      `<optgroup label="Rishab Veldur"><option value="window:${RISHAB_WINDOW}" selected="">${RISHAB_LABEL} (window)</option></optgroup>`,
     );
     expect(availabilitySelect).not.toContain("rishab-veldur-2026-10-02");
     expect(html).toContain('href="/organizers"'); // "Clear filters"
+
+    // A date-only window (fixture mentor) is offered the same way, with its date-only label.
+    const withDateOnly = buildOrganizerDirectory([...getMentorsForOrganizers(), dateOnlyMentor]);
+    const dateOnlyFilters = restrictToDirectory(parseApplicationFilters({ availability: `window:${DATE_ONLY_WINDOW}` }), withDateOnly);
+    expect(dateOnlyFilters).toEqual({ ...DEFAULT_APPLICATION_FILTERS, availability: `window:${DATE_ONLY_WINDOW}` });
+    const fixtureHtml = renderToStaticMarkup(createElement(ApplicationFiltersForm, { filters: dateOnlyFilters, directory: withDateOnly }));
+    expect(fixtureHtml).toContain(
+      `<optgroup label="Dana Fixture"><option value="window:${DATE_ONLY_WINDOW}" selected="">${DATE_ONLY_LABEL} (window)</option></optgroup>`,
+    );
   });
 });
 
@@ -279,14 +373,20 @@ describe("mentor notes (organizer-only)", () => {
       "he’d like to meet student teams (a preference, not an eligibility rule; individuals can apply)",
     );
     expect(rishab.organizerNotes).toContain("only has time for office hours on Thu Oct 1");
+    expect(rishab.organizerNotes).toContain("Window locked for Thu Oct 1, anytime 12–5 PM (organizer update, Sept 24).");
     expect(rishab.organizerNotes).toContain("Keep the phone number from his email signature off the site.");
     const publicMentor = getMentors().find((m) => m.id === "rishab-veldur")!;
     expect(publicMentor).not.toHaveProperty("organizerNotes");
     const publicRishab = JSON.stringify(publicMentor);
-    expect(publicRishab).not.toMatch(/student teams|eligibility|phone number|signature|Oct 1 and 2|capacity/i);
-    // Students see one date (Thu, Oct 1) with its time still to be confirmed, never Oct 2.
+    expect(publicRishab).not.toMatch(/student teams|eligibility|phone number|signature|Oct 1 and 2|capacity|locked/i);
+    // Students see one window, Thu, Oct 1 from noon to 5 PM (no label override), never Oct 2.
     expect(publicMentor.availability).toEqual([
-      expect.objectContaining({ id: RISHAB_WINDOW, date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" }),
+      {
+        id: RISHAB_WINDOW,
+        date: "2026-10-01",
+        time: { kind: "exact", start: "12:00", end: "17:00" },
+        note: "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.",
+      },
     ]);
     expect(publicMentor.slots).toEqual([]);
     // The copy students read makes no regulatory, commercial, clinical or one-on-one claims.
@@ -300,19 +400,19 @@ describe("mentor notes (organizer-only)", () => {
     expect(studentFacing).not.toMatch(/FDA|approved|cleared|commercially available|clinically proven|one-on-one|1:1/i);
   });
 
-  it("shows Rishab's organizer notes, his Oct 1 window (time to be confirmed) and what's still missing", () => {
+  it("shows Rishab's organizer notes, his Oct 1 12:00–5:00 PM window and what's still missing", () => {
     const rishab = getMentorsForOrganizers().find((m) => m.id === "rishab-veldur")!;
     const html = renderToStaticMarkup(createElement(MentorNotes, { mentors: [rishab] }));
     const t = text(html);
     expect(t).toContain("Rishab Veldur Co-Founder & CEO · Auvi Labs");
     expect(imageAlts(html)).toEqual(["Rishab Veldur"]);
-    // Scheduling: one date-only window with the "Exact times TBA" badge; no slots, never Oct 2.
-    expect(t).toContain(
-      `Scheduling Thu, Oct 1 · Exact time to be confirmed Exact times TBA No appointment slots yet. ${rishab.session.note}`,
-    );
+    // Scheduling: one exact window with the "Availability window" badge; no slots, never Oct 2.
+    expect(t).toContain(`Scheduling ${RISHAB_LABEL} Availability window No appointment slots yet. ${rishab.session.note}`);
     expect(rishab.session.note).toBe(
-      "Rishab has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+      "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.",
     );
+    expect(t).not.toContain("Exact times TBA");
+    expect(t).not.toContain("Exact time to be confirmed");
     expect(t).not.toContain("Scheduling in progress");
     expect(t).not.toMatch(/Fri, Oct 2 ·|Oct 2 · /);
     // Organizer-only notes, shown in full with the lock.
@@ -332,6 +432,16 @@ describe("mentor notes (organizer-only)", () => {
     expect(html).toContain('href="/office-hours?mentor=rishab-veldur#apply"');
     expect(t).toContain("Application with Rishab preselected");
     expect(html).not.toMatch(/href="\/apply/);
+  });
+
+  it("shows a date-only window (fixture mentor) with the \"Exact times TBA\" badge", () => {
+    const html = renderToStaticMarkup(createElement(MentorNotes, { mentors: [dateOnlyMentor] }));
+    const t = text(html);
+    expect(t).toContain("Dana Fixture Founder · Fixture Labs");
+    expect(t).toContain(`Scheduling ${DATE_ONLY_LABEL} Exact times TBA No appointment slots yet. ${dateOnlyMentor.session.note}`);
+    expect(t).not.toContain("Availability window");
+    expect(t).not.toContain("Scheduling in progress");
+    expect(t).toContain(`Organizer notes ${dateOnlyMentor.organizerNotes}`);
   });
 
   it("shows every mentor's organizer notes, Ron's draft topics and what's still missing", () => {
@@ -410,8 +520,9 @@ describe("mentor notes (organizer-only)", () => {
     // Vik, Elliott and Ron are still scheduling.
     expect(t.match(/Scheduling in progress/g)).toHaveLength(3);
     expect(t).toContain("Thu, Oct 1 · 10:00–11:30 AM");
-    // Rishab: his date is set, his time isn't (compact organizer wording).
-    expect(t).toContain("Rishab Veldur 0 interested · 0 first choice Thu, Oct 1 · Time TBA (show applications that list this mentor)");
+    // Rishab: his confirmed window, in the same compact form as Patrick's.
+    expect(t).toContain("Rishab Veldur 0 interested · 0 first choice Thu, Oct 1 · 12:00–5:00 PM (show applications that list this mentor)");
+    expect(t).not.toContain("Time TBA");
     expect(html).toContain('href="/organizers?mentor=elliott-notrica"');
     expect(html).toContain('href="/organizers?mentor=rishab-veldur"');
     // The active mentor links back to all mentors; the others filter.
@@ -444,13 +555,31 @@ describe("mentor notes (organizer-only)", () => {
     // Selecting the active card again clears the mentor (and first-choice) filter, keeping status.
     expect(html).toMatch(/<a aria-current="true" class="[^"]*border-accent bg-accent-soft[^"]*" href="\/organizers\?status=submitted">/);
     expect(t).toContain(
-      "Rishab Veldur 2 interested · 1 first choice Thu, Oct 1 · Time TBA (filtering by this mentor; select to show all mentors)",
+      "Rishab Veldur 2 interested · 1 first choice Thu, Oct 1 · 12:00–5:00 PM (filtering by this mentor; select to show all mentors)",
     );
     expect(t).toContain("Patrick Haddox 1 interested · 0 first choice");
     // The other five cards filter by their mentor (any preference), keeping status.
     expect([...html.matchAll(/href="(\/organizers\?mentor=[^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, "&"))).toEqual(
       MENTOR_IDS.filter((id) => id !== "rishab-veldur").map((id) => `/organizers?mentor=${id}&status=submitted`),
     );
+  });
+
+  it("the mentor lineup shows a date-only mentor (fixture) with the compact \"Time TBA\" wording", () => {
+    const directory = buildOrganizerDirectory([...getMentorsForOrganizers(), dateOnlyMentor]);
+    const html = renderToStaticMarkup(
+      createElement(MentorLineup, {
+        directory,
+        interest: new Map([["fixture-date-only", { any: 1, first: 1 }]]),
+        usage: new Map(),
+        filters: DEFAULT_APPLICATION_FILTERS,
+      }),
+    );
+    const t = text(html);
+    expect(html.match(/<li>/g)).toHaveLength(7);
+    expect(t).toContain("Dana Fixture 1 interested · 1 first choice Thu, Oct 1 · Time TBA (show applications that list this mentor)");
+    expect(t.match(/Time TBA/g)).toHaveLength(1);
+    expect(t).toContain("Rishab Veldur 0 interested · 0 first choice Thu, Oct 1 · 12:00–5:00 PM (show applications that list this mentor)");
+    expect(html).toContain('href="/organizers?mentor=fixture-date-only"');
   });
 
   it("chooses a desktop column count that keeps the lineup's rows full", () => {

@@ -5,8 +5,9 @@
  * actions that land on the application (#apply) with the mentor preselected — and that nothing
  * private (organizer notes, drafts, the internal "basis" of expertise items) or retired (decorative
  * numbering, "To be confirmed" tables, the availability glossary, "one-on-one" claims) renders.
- * Rishab Veldur (Auvi Labs) has a date-only window, background chips and a good-fit paragraph
- * instead of a topic list, and his profile never makes medical-device claims.
+ * Rishab Veldur (Auvi Labs) has one exact window (Thu, Oct 1, noon to 5 PM CT), background chips and
+ * a good-fit paragraph instead of a topic list, and his profile never makes medical-device claims.
+ * The date-only path ("Exact time to be confirmed") is rendered with a synthetic fixture mentor.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -27,11 +28,13 @@ import MentorProfilePage, { generateMetadata as profileMetadata } from "@/app/of
 import MentorNotFound from "@/app/office-hours/[id]/not-found";
 import { getMentors, getScheduleEntries } from "@/content";
 import { mentors as productionMentors } from "@/content/mentors";
+import type { Mentor } from "@/content/types";
 import { MentorCard, MentorGrid } from "@/components/mentors/mentor-card";
+import { OfficeHoursLines } from "@/components/mentors/mentor-profile";
 import { buildApplicationCatalog } from "@/lib/applications/catalog";
 import { resolvePrefill } from "@/lib/applications/prefill";
 import { INTEREST_COPY } from "@/lib/mentors";
-import { availabilityLines, mentorAppearanceViews, mentorCardView } from "@/lib/mentors-view";
+import { availabilityLines, availabilityNote, mentorAppearanceViews, mentorCardView } from "@/lib/mentors-view";
 
 const MENTOR_IDS = [
   "patrick-haddox",
@@ -80,7 +83,42 @@ const RISHAB_BIO_SECOND =
 const RISHAB_GOOD_FIT =
   "Interested in turning a technical project into a healthcare startup? Rishab’s experience spans engineering, medical-device development, and building a company through Illinois’ entrepreneurship ecosystem.";
 const RISHAB_WINDOW_NOTE =
-  "Rishab has time on Thursday, October 1. We’ll share the exact time once it’s set, and you can apply now.";
+  "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.";
+/** Rishab's window reads like Patrick's ("Thu, Oct 1 · 10:00–11:30 AM CT"). */
+const RISHAB_LINE = "Thu, Oct 1 · 12:00–5:00 PM CT";
+
+/**
+ * A synthetic mentor with one date-only window (the date is set, the time isn't), so the
+ * "Exact time to be confirmed" rendering stays covered now that every real mentor with a date has a time.
+ */
+const TBA_WINDOW_NOTE = "Sam has time on Thursday, October 1. We’ll share the exact time once it’s set, and you can apply now.";
+const TBA_APPLY_HREF = "/office-hours?mentor=fixture-tba-mentor&window=fixture-tba-2026-10-01#apply";
+const tbaMentor: Mentor = {
+  id: "fixture-tba-mentor",
+  name: "Sam Fixture",
+  firstName: "Sam",
+  role: "Founder",
+  company: "Fixture Co",
+  headshot: null,
+  bio: { status: "approved", value: "Sam is a fictional founder used only in tests. Nothing here is real." },
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [
+    {
+      id: "fixture-tba-2026-10-01",
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      label: "Exact time to be confirmed",
+      note: TBA_WINDOW_NOTE,
+    },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
+};
 
 const MATCHING_SENTENCE =
   "Founders will match students by interests and availability and email selected applicants to confirm.";
@@ -448,7 +486,9 @@ describe("mentor cards", () => {
     expect(patrick).toContain("Office hours: Thu, Oct 1 · 10:00–11:30 AM CT");
     expect(arnav).toContain("Office hours: Fri, Oct 2 · Morning, exact window pending");
     for (const t of [vik, elliott, ron]) expect(t).toContain("Office hours: Scheduling in progress");
-    expect(rishab).toContain("Office hours: Thu, Oct 1 · Exact time to be confirmed");
+    expect(rishab).toContain(`Office hours: ${RISHAB_LINE}`);
+    // No real mentor has a date-only window any more.
+    expect(all.join(" ")).not.toContain("Exact time to be confirmed");
 
     // Longer copy stays on the profile.
     for (const m of getMentors()) expect(all.join(" ")).not.toContain(m.bio!.value);
@@ -476,15 +516,18 @@ describe("mentor cards", () => {
     expectNoEmDash(html);
   });
 
-  it("Rishab's card: bio's first sentence as the intro, his Thursday date, and 'Select mentor' with his window", () => {
+  it("Rishab's card: bio's first sentence as the intro, his Thursday noon–5 PM window, and 'Select mentor' with his window", () => {
     const card = cards(renderGrid())[5];
     expect(card).toContain('id="mentor-rishab-veldur"');
     expect(text(card).trim()).toBe(
-      `Rishab Veldur Co-Founder & CEO, Auvi Labs ${RISHAB_BIO_FIRST} Office hours: Thu, Oct 1 · Exact time to be confirmed Select mentor: Rishab Veldur Profile: Rishab Veldur`,
+      `Rishab Veldur Co-Founder & CEO, Auvi Labs ${RISHAB_BIO_FIRST} Office hours: ${RISHAB_LINE} Select mentor: Rishab Veldur Profile: Rishab Veldur`,
     );
-    // The date is machine-readable; there is no time to mark up.
+    // Like Patrick's window, only the date is marked up: a window isn't an appointment start time.
     expect(card).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
     expect(card.match(/<time\b/g)).toHaveLength(1);
+    const patrickCard = cards(renderGrid())[0];
+    expect(patrickCard).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
+    expect(patrickCard.match(/<time\b/g)).toHaveLength(1);
     // Exactly two links: Select mentor (mentor + window preselected) and the profile.
     expect(hrefs(card)).toEqual([SELECT_HREFS["rishab-veldur"], "/office-hours/rishab-veldur"]);
     expect(images(card)).toEqual([
@@ -497,6 +540,23 @@ describe("mentor cards", () => {
     expect(t).not.toContain("Health Innovation");
     expect(t).not.toMatch(/Oct 2|Friday/);
     expectNoMedicalClaims(card);
+  });
+
+  it("a date-only mentor's card (fixture) reads 'Thu, Oct 1 · Exact time to be confirmed' and preselects the window", () => {
+    const card = renderToStaticMarkup(
+      createElement(MentorCard, { card: mentorCardView(tbaMentor, { applicationsOpen: true }) }),
+    );
+    expect(card).toContain('id="mentor-fixture-tba-mentor"');
+    // No headshot, so the card falls back to the "SF" monogram.
+    expect(text(card).trim()).toBe(
+      "SF Sam Fixture Founder, Fixture Co Sam is a fictional founder used only in tests. Office hours: Thu, Oct 1 · Exact time to be confirmed Select mentor: Sam Fixture Profile: Sam Fixture",
+    );
+    expect(images(card)).toEqual([]);
+    // The date is machine-readable; there is no time to mark up.
+    expect(card).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
+    expect(card.match(/<time\b/g)).toHaveLength(1);
+    expect(hrefs(card)).toEqual([TBA_APPLY_HREF, "/office-hours/fixture-tba-mentor"]);
+    expect(text(card)).not.toMatch(/Time TBA|Time to be announced/);
   });
 
   it("lays six cards out as three balanced rows of two, with no odd last card to center", () => {
@@ -640,6 +700,17 @@ describe("mentor profile page", () => {
     expect(t).toContain("Apply to meet Ron");
   });
 
+  it("a date-only window (fixture mentor) reads 'Exact time to be confirmed' in the profile's office-hours lines", () => {
+    const html = renderToStaticMarkup(
+      createElement(OfficeHoursLines, { lines: availabilityLines(tbaMentor), note: availabilityNote(tbaMentor) }),
+    );
+    expect(text(html).trim()).toBe(`Thu, Oct 1 · Exact time to be confirmed ${TBA_WINDOW_NOTE}`);
+    expect(html).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
+    expect(html.match(/<time\b/g)).toHaveLength(1);
+    expect(html.match(/<li\b/g)).toHaveLength(1);
+    expect(text(html)).not.toMatch(/Time TBA|Time to be announced|Scheduling in progress/);
+  });
+
   describe("Rishab's profile", () => {
     it("reads header → About → Background → Good fit for → Rishab at Founders Week, with no 'Can help with'", async () => {
       const html = await renderProfile("rishab-veldur");
@@ -690,20 +761,23 @@ describe("mentor profile page", () => {
       expect(fit).not.toMatch(/<ul\b|<li\b/);
     });
 
-    it("shows Thu, Oct 1 office hours with the exact time to be confirmed, and never Oct 2 office hours", async () => {
+    it("shows Thu, Oct 1 office hours, noon to 5 PM CT, as a window (not a booking), and never Oct 2 office hours", async () => {
       const html = await renderProfile("rishab-veldur");
       const block = officeHoursBlock(html);
-      expect(text(block).trim()).toBe(`Thu, Oct 1 · Exact time to be confirmed ${RISHAB_WINDOW_NOTE} Apply to meet Rishab`);
+      expect(text(block).trim()).toBe(`${RISHAB_LINE} ${RISHAB_WINDOW_NOTE} Apply to meet Rishab`);
       expect(block).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
+      expect(block.match(/<time\b/g)).toHaveLength(1);
       expect(block.match(/<li\b/g)).toHaveLength(1);
       expect(text(block)).not.toMatch(/Oct(ober)? 2|Fri(day)?/);
-      // The only Friday on the page is his Showcase panel, never a second office-hours line.
+      // The time is set now: no date-only wording anywhere on his profile.
       const t = text(html);
+      expect(t).not.toContain("Exact time to be confirmed");
+      // The only Friday on the page is his Showcase panel, never a second office-hours line.
       expect(t.match(/Oct 2/g)).toEqual(["Oct 2"]);
       expect(t).toContain("Speaking Fri, Oct 2 · 1:20 PM");
       expect(t).not.toContain("October 2");
       expect(availabilityLines(getMentors().find((m) => m.id === "rishab-veldur")!).map((l) => l.text)).toEqual([
-        "Thu, Oct 1 · Exact time to be confirmed",
+        RISHAB_LINE,
       ]);
     });
 
@@ -749,8 +823,9 @@ describe("mentor profile page", () => {
     it("describes his profile in metadata from verified facts, with no medical claims", async () => {
       const meta = await profileMetadata({ params: Promise.resolve({ id: "rishab-veldur" }) });
       expect(meta.title).toBe("Rishab Veldur · Office Hours");
-      expect(meta.description).toContain("Founders Office Hours with Rishab Veldur (Co-Founder & CEO, Auvi Labs)");
-      expect(meta.description).toContain("Thu, Oct 1");
+      expect(meta.description).toBe(
+        "Founders Office Hours with Rishab Veldur (Co-Founder & CEO, Auvi Labs) during Founders Week at UIUC. Availability: Thu, Oct 1 · 12:00–5:00 PM CT. Apply to request a time.",
+      );
       const json = JSON.stringify(meta);
       expect(json).not.toMatch(/Oct 2|Friday/);
       for (const claim of MEDICAL_CLAIMS) expect(json, String(claim)).not.toMatch(claim);

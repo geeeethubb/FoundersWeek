@@ -22,13 +22,24 @@ export interface MentorFixture {
   company: string;
   /** The single availability window the mentor's Select/Apply action preselects, or null while scheduling. */
   windowId: string | null;
+  /**
+   * True when the mentor's times aren't set yet (no window: Vik, Elliott, Ron), so the application
+   * requires broad availability. A published window (Patrick, Arnav, Rishab) is enough on its own.
+   */
+  timesPending: boolean;
   /** The one availability line on the Office Hours card. */
   cardLine: string;
   linkedin: string;
   /** A distinctive phrase from the approved bio (profile page). */
   bioFragment: string;
-  /** Approved "Can help with" labels (public). */
+  /** Approved "Can help with" labels (public). Empty when there's no approved topic list (Rishab). */
   helpsWith: string[];
+  /** Office Hours card without help labels: the first sentence of the approved bio instead. */
+  cardIntro?: string;
+  /** Profile "Background" chips (Rishab). */
+  background?: string[];
+  /** Profile "Good fit for" paragraph (a sentence-style approved item). */
+  goodFitFor?: string;
 }
 
 export const PATRICK: MentorFixture = {
@@ -38,6 +49,7 @@ export const PATRICK: MentorFixture = {
   role: "CEO & Co-Founder",
   company: "Samara Aerospace",
   windowId: "patrick-haddox-2026-10-01-am",
+  timesPending: false,
   cardLine: "Thu, Oct 1 · 10:00–11:30 AM CT",
   linkedin: "https://www.linkedin.com/in/patrick-haddox/",
   bioFragment: "building the Hummingbird satellite bus",
@@ -50,6 +62,7 @@ export const ARNAV: MentorFixture = {
   role: "Co-Founder & CTO",
   company: "Doss",
   windowId: "arnav-mishra-2026-10-02-am",
+  timesPending: false,
   cardLine: "Fri, Oct 2 · Morning, exact window pending",
   linkedin: "https://www.linkedin.com/in/arnav-mishra/",
   bioFragment: "AI-native alternative to legacy ERP software",
@@ -62,6 +75,7 @@ export const VIK: MentorFixture = {
   role: "Founder & Managing Member",
   company: "Stakehouse",
   windowId: null,
+  timesPending: true,
   cardLine: "Scheduling in progress",
   linkedin: "https://www.linkedin.com/in/viklakhwara/",
   bioFragment: "a St. Louis venture fund that backs early-stage founders",
@@ -74,6 +88,7 @@ export const ELLIOTT: MentorFixture = {
   role: "Founder & CEO",
   company: "Symbio Bioculinary",
   windowId: null,
+  timesPending: true,
   cardLine: "Scheduling in progress",
   linkedin: "https://www.linkedin.com/in/elliottnotrica/",
   bioFragment: "engineers microorganisms to turn companies’ food waste into new ingredients",
@@ -86,21 +101,56 @@ export const RON: MentorFixture = {
   role: "Co-Founder",
   company: "Auctus Advisory",
   windowId: null,
+  timesPending: true,
   cardLine: "Scheduling in progress",
   linkedin: "https://www.linkedin.com/in/ronlewis20/",
   bioFragment: "repeat entrepreneur and co-founder of Auctus Advisory",
   helpsWith: ["Revenue strategy and optimization", "Financial forecasting and planning"],
 };
 
-/** The five real mentors, in the published order. */
-export const MENTORS: MentorFixture[] = [PATRICK, ARNAV, VIK, ELLIOTT, RON];
+/**
+ * The sixth mentor: a confirmed window on Thu, Oct 1, anytime from noon to 5 PM (never Friday), so
+ * his "Apply to meet Rishab" preselects that window and, like Patrick's, it's enough on its own.
+ * No approved topic list: his card shows the first sentence of his bio; his profile shows
+ * "Background" chips and a "Good fit for" paragraph instead of "Can help with".
+ */
+export const RISHAB: MentorFixture = {
+  id: "rishab-veldur",
+  name: "Rishab Veldur",
+  firstName: "Rishab",
+  role: "Co-Founder & CEO",
+  company: "Auvi Labs",
+  windowId: "rishab-veldur-2026-10-01",
+  timesPending: false,
+  cardLine: "Thu, Oct 1 · 12:00–5:00 PM CT",
+  linkedin: "https://www.linkedin.com/in/rishab-veldur",
+  bioFragment: "wearable ultrasound technology to help detect problems with dialysis access earlier",
+  helpsWith: [],
+  cardIntro:
+    "Rishab is the co-founder and CEO of Auvi Labs, a UIUC spinout developing wearable ultrasound technology to help detect problems with dialysis access earlier.",
+  background: ["Medtech", "Hardware and software", "University spinouts"],
+  goodFitFor: "Interested in turning a technical project into a healthcare startup?",
+};
+
+/** Rishab's other public link (besides LinkedIn). */
+export const AUVI_LABS_URL = "https://www.auvilabs.com/";
+/** Rishab's Founders Week appearance (Friday Showcase panel) — shown on his profile, separate from office hours. */
+export const RISHAB_SHOWCASE_SESSION = "Health Innovation: From Therapeutics to Devices";
+/** The public note under Rishab's office-hours window on his profile. */
+export const RISHAB_WINDOW_NOTE =
+  "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.";
+/** Claims never made about Auvi's device (investigational). */
+export const AUVI_CLAIMS = /FDA[\s-]*(approved|cleared)|\bcleared by the FDA\b|commercially available|clinically proven/i;
+
+/** The six real mentors, in the published order. */
+export const MENTORS: MentorFixture[] = [PATRICK, ARNAV, VIK, ELLIOTT, RON, RISHAB];
 
 /** Mentors whose schedule is still pending (no window yet): Vik, Elliott and Ron. */
 export const PENDING_MENTORS: MentorFixture[] = MENTORS.filter((m) => m.windowId === null);
 
 /**
  * Fictional demo mentors (content/demo.ts). The main e2e server runs with demo content on, so they
- * follow the five real mentors in every lineup; production-content.spec.ts runs without them.
+ * follow the six real mentors in every lineup; production-content.spec.ts runs without them.
  */
 export const DEMO_MENTOR_NAMES = ["Avery Sample", "Jordan Placeholder"];
 
@@ -134,11 +184,11 @@ export const DRAFT_TOPICS: RegExp[] = [/Startup financial planning/, /Communicat
 
 /** Organizer-only notes (content/mentors.ts `organizerNotes`) — stripped before anything renders. */
 export const ORGANIZER_ONLY =
-  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)/i;
+  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number/i;
 
 /** Content-maintenance notes on approved fields (`note`) — never public. */
 export const CONTENT_NOTES =
-  /at the organizers' request|Grounded in (public sources|Ron’s supplied bio)|own topics if (he|she|they) suppl|Suggested topics pending|First sentence supplied by/i;
+  /at the organizers' request|Grounded in (public sources|Ron’s supplied bio)|own topics if (he|she|they) suppl|Suggested topics pending|First sentence supplied by|checked against the sources below|organizers’ suggested fit|Not a syllabus|not medical or regulatory advice|never call it FDA/i;
 
 /** The canceled Saturday afterparty (HERE Apartments) must not appear anywhere. */
 export const CANCELED_AFTERPARTY = /HERE Apartments|Founders Week Afterparty|founders-week-afterparty|after[\s-]?party/i;
@@ -556,9 +606,20 @@ export function errorSummary(page: Page): Locator {
 /** The API's rule when a student gives neither a listed time nor broad availability. */
 export const AVAILABILITY_RULE_MESSAGE =
   "Tell us when you’re generally free during Founders Week (or pick one of the listed times).";
-/** Shown when a chosen mentor has no times yet (Vik, Elliott, Ron): only broad availability helps. */
+/**
+ * The first sentences of the "Broad availability" hint. The form adds "Not needed if you tick a time
+ * above." when a chosen mentor has a listed time, or "Needed because <names>’s times aren’t set yet."
+ */
+export const BROAD_AVAILABILITY_ASK = "When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday.";
+/**
+ * Shown when a chosen mentor's times aren't set yet (Vik, Elliott, Ron — never a mentor with a listed
+ * window, like Rishab): only broad availability helps.
+ */
 export const pendingAvailabilityMessage = (names: string) =>
-  `Tell us when you’re generally free during Founders Week — ${names}’s times aren’t set yet.`;
+  `Tell us when you’re generally free during Founders Week. ${names}’s times aren’t set yet.`;
+
+/** How a stored application with no listed time reads (organizer CSV and the availability filter). */
+export const INTEREST_ONLY_LABEL = "Interest only (no time selected)";
 
 // ---------------------------------------------------------------------------
 // Information-only guard (Dan Caruso)

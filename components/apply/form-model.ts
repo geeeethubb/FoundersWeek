@@ -147,7 +147,7 @@ export function broadAvailabilityGuidance(
   const ask = "When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday.";
   const pending = mentorsWithoutTimes(state, catalog);
   if (pending.length) {
-    // Mentors with a set date but no time yet (e.g. Rishab on Thu, Oct 1): ask for that day.
+    // Mentors with a set date but no time yet (a date-only window): ask for that day.
     const dated = pending
       .filter((m) => m.options.length)
       .map((m) => `${m.firstName} has office hours on ${joinNames([...new Set(m.options.map((o) => o.label.split(" · ")[0]))])}, so include when you’re free that day.`);

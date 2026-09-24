@@ -4,7 +4,8 @@
  * (headshot, name, role and company, one availability line, a link to the profile) in a grid sized
  * from the mentor count, the four featured events (Dan Caruso — information only — the Sept 29
  * panel, Arnav’s happy hour, Founder Failure Lab), and the calendar link with the official dates.
- * Also: nothing private, removed or canceled; the metadata; the 404 and error pages.
+ * Also: how a date-only window renders (on a synthetic fixture mentor); nothing private, removed or
+ * canceled; the metadata; the 404 and error pages.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -15,6 +16,7 @@ import HomePage, { generateMetadata } from "@/app/page";
 import { mentorPreviews } from "@/components/home/home-model";
 import { MentorPreviews, previewColumns } from "@/components/home/mentor-previews";
 import { getMentors, getSite } from "@/content";
+import type { Mentor } from "@/content/types";
 
 function text(html: string): string {
   return html
@@ -102,6 +104,29 @@ const MENTOR_NAMES = [
   "Rishab Veldur",
 ];
 
+/**
+ * A synthetic mentor, not in /content, with one date-only window (the date is set, the time
+ * isn't). No real mentor has one right now; the path stays for future mentors.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-date-only",
+  name: "Fixture Mentor",
+  firstName: "Fixture",
+  role: "Founder",
+  company: "Fixture Co",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [{ id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" } }],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
+};
+
 describe("home page (public data)", () => {
   beforeEach(() => {
     vi.stubEnv("SHOW_DEMO_CONTENT", "");
@@ -174,9 +199,11 @@ describe("home page (public data)", () => {
     expect(t).toMatch(/Stakehouse Scheduling in progress/);
     expect(t).toMatch(/Symbio Bioculinary Scheduling in progress/);
     expect(t).toMatch(/Auctus Advisory Scheduling in progress/);
-    expect(t).toMatch(/Auvi Labs Thu, Oct 1\W+Exact time to be confirmed/);
+    expect(t).toMatch(/Auvi Labs Thu, Oct 1\W+12:00–5:00 PM CT/);
     expect(t.match(/Scheduling in progress/g)).toHaveLength(3);
     expect(t).not.toContain("Time to be announced");
+    // Every window shown has a time now: nothing reads "to be confirmed".
+    expect(t).not.toContain("Exact time to be confirmed");
     expect([...mentors.matchAll(/<time dateTime="([^"]+)"/g)].map((m) => m[1])).toEqual([
       "2026-10-01",
       "2026-10-02",
@@ -184,22 +211,40 @@ describe("home page (public data)", () => {
     ]);
   });
 
-  it("shows Rishab last, with his photo and 'Thu, Oct 1 · Exact time to be confirmed', never Oct 2", () => {
+  it("shows Rishab last, with his photo and 'Thu, Oct 1 · 12:00–5:00 PM CT', never Oct 2", () => {
     const items = [...section(page(), "mentors-heading").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
     expect(items).toHaveLength(6);
     const rishab = items[5];
     expect(images(rishab)).toEqual([{ alt: "Rishab Veldur", src: "/mentors/rishab-veldur.jpg" }]);
     expect(hrefs(rishab)).toEqual(["/office-hours/rishab-veldur"]);
-    expect(text(rishab).trim()).toBe("Rishab Veldur Co-Founder & CEO, Auvi Labs Thu, Oct 1 ·, Exact time to be confirmed");
+    expect(text(rishab).trim()).toBe("Rishab Veldur Co-Founder & CEO, Auvi Labs Thu, Oct 1 ·, 12:00–5:00 PM CT");
     // The visible separator is the middle dot; screen readers hear a comma instead.
     expect(rishab).toMatch(
-      /<time dateTime="2026-10-01"[^>]*>Thu, Oct 1<\/time><span aria-hidden="true"[^>]*> · <\/span><span class="sr-only">, <\/span><span[^>]*>Exact time to be confirmed<\/span>/,
+      /<time dateTime="2026-10-01"[^>]*>Thu, Oct 1<\/time><span aria-hidden="true"[^>]*> · <\/span><span class="sr-only">, <\/span><span[^>]*>12:00–5:00 PM CT<\/span>/,
     );
-    // A known date gets the orange dot, like Patrick's and Arnav's windows.
+    // A known window gets the orange dot, like Patrick's and Arnav's.
     expect(rishab).toMatch(/rounded-full bg-accent"/);
-    expect(text(rishab)).not.toMatch(/Oct 2|Fri|Time to be announced|Scheduling in progress/);
+    expect(text(rishab)).not.toMatch(/Oct 2|Fri|Time to be announced|Exact time to be confirmed|Scheduling in progress/);
     // Previews stay concise: no bio, background tags or suggested fit.
     expect(text(rishab)).not.toMatch(/dialysis|Cozad|Medtech|Hardware and software|spinout|Good fit|Background/i);
+  });
+
+  it("renders a date-only window as 'Thu, Oct 1 · Exact time to be confirmed', with the orange dot", () => {
+    const html = renderToStaticMarkup(createElement(MentorPreviews, { mentors: mentorPreviews([DATE_ONLY_MENTOR]) }));
+    const items = [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    expect(items).toHaveLength(1);
+    const [fixture] = items;
+    // No headshot: initials (hidden from screen readers) instead of a photo.
+    expect(images(fixture)).toEqual([]);
+    expect(fixture).toMatch(/<span class="[^"]*" aria-hidden="true"><span class="[^"]*">FM<\/span><\/span>/);
+    expect(hrefs(fixture)).toEqual(["/office-hours/fixture-date-only"]);
+    expect(text(fixture).trim()).toBe("FM Fixture Mentor Founder, Fixture Co Thu, Oct 1 ·, Exact time to be confirmed");
+    expect(fixture).toMatch(
+      /<time dateTime="2026-10-01"[^>]*>Thu, Oct 1<\/time><span aria-hidden="true"[^>]*> · <\/span><span class="sr-only">, <\/span><span[^>]*>Exact time to be confirmed<\/span>/,
+    );
+    // A known date gets the orange dot, like a timed window.
+    expect(fixture).toMatch(/rounded-full bg-accent"/);
+    expect(text(fixture)).not.toMatch(/Time to be announced|Scheduling in progress/);
   });
 
   it("lays six mentors out six across at xl, three per row at lg and two from sm", () => {

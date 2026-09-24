@@ -16,11 +16,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { getMentor, getMentors, getScheduleEntries, getSite } from "@/content";
-import type { SiteSettings } from "@/content/types";
+import type { Mentor, SiteSettings } from "@/content/types";
 import { publicImageDataUrl } from "@/lib/og/assets";
 import { renderEventCard, renderMentorCard, renderSiteCard } from "@/lib/og/cards";
 import { OG_FONT_FILES } from "@/lib/og/fonts";
 import { eventCardModel, mentorCardModel, siteCardModel, titleFontSize } from "@/lib/og/model";
+import { officeHoursToEntries } from "@/lib/schedule/entries";
+
+/**
+ * A synthetic mentor, not in /content, with one date-only window (the date is set, the time
+ * isn't). No real mentor has one right now; the path stays for future mentors.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-date-only",
+  name: "Fixture Mentor",
+  firstName: "Fixture",
+  role: "Founder",
+  company: "Fixture Co",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [{ id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" } }],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
+};
+/** The fixture mentor's generated office-hours calendar entry. */
+const dateOnlyEntry = () => {
+  const entries = officeHoursToEntries(DATE_ONLY_MENTOR, getSite());
+  expect(entries.map((e) => e.id)).toEqual(["office-hours-fixture-date-only-2026-10-01"]);
+  return entries[0];
+};
 
 const entry = (id: string) => getScheduleEntries().find((e) => e.id === id)!;
 const mentorModel = (id: string, site: SiteSettings = getSite()) => mentorCardModel(getMentor(id)!, site);
@@ -116,25 +146,49 @@ describe("social image models (public data)", () => {
     expect(json).not.toMatch(/one-on-one/i);
   });
 
-  it("Rishab's card: Thu, Oct 1 with the exact time to be confirmed, never Oct 2, no device claims", () => {
+  it("Rishab's card: Thu, Oct 1 · 12:00–5:00 PM CT, never Oct 2, no device claims", () => {
     const rishab = mentorModel("rishab-veldur");
-    expect(rishab).toMatchObject({
+    expect(rishab).toEqual({
       label: "Founders Week 2026 · Office Hours",
       person: { id: "rishab-veldur", name: "Rishab Veldur", initials: "RV", headshot: "/mentors/rishab-veldur.jpg" },
       name: "Rishab Veldur",
       role: "Co-Founder & CEO",
       company: "Auvi Labs",
-      availability: { known: true, text: "Thu, Oct 1 · Exact time to be confirmed" },
+      availability: { known: true, text: "Thu, Oct 1 · 12:00–5:00 PM CT" },
       cta: "Apply for Office Hours",
+      alt: "Founders Office Hours with Rishab Veldur, Co-Founder & CEO, Auvi Labs. Available Thu, Oct 1, 12:00–5:00 PM CT.",
     });
-    expect(rishab.alt).toMatch(
-      /^Founders Office Hours with Rishab Veldur, Co-Founder & CEO, Auvi Labs\. Available Thu, Oct 1, exact time to be confirmed\.$/i,
-    );
     const json = JSON.stringify(rishab);
     expect(json).not.toMatch(/Oct 2|Fri|Time to be announced|Scheduling in progress/);
+    expect(json).not.toMatch(/to be confirmed/i);
     expect(json).not.toMatch(/FDA|clinically|commercially available|one-on-one/i);
     expect(json).not.toMatch(PRIVATE);
     expect(mentorModel("rishab-veldur", closed()).cta).toBeNull();
+  });
+
+  it("a date-only window (fixture mentor): 'Thu, Oct 1 · Exact time to be confirmed'", () => {
+    const site = getSite();
+    expect(mentorCardModel(DATE_ONLY_MENTOR, site)).toEqual({
+      label: "Founders Week 2026 · Office Hours",
+      person: { id: "fixture-date-only", name: "Fixture Mentor", initials: "FM", headshot: null },
+      name: "Fixture Mentor",
+      role: "Founder",
+      company: "Fixture Co",
+      availability: { known: true, text: "Thu, Oct 1 · Exact time to be confirmed" },
+      cta: "Apply for Office Hours",
+      alt: "Founders Office Hours with Fixture Mentor, Founder, Fixture Co. Available Thu, Oct 1, Exact time to be confirmed.",
+    });
+    // Same wording when the window carries the display label.
+    const labelled: Mentor = {
+      ...DATE_ONLY_MENTOR,
+      availability: [{ ...DATE_ONLY_MENTOR.availability[0], label: "Exact time to be confirmed" }],
+    };
+    expect(mentorCardModel(labelled, site).availability).toEqual({
+      known: true,
+      text: "Thu, Oct 1 · Exact time to be confirmed",
+    });
+    expect(JSON.stringify(mentorCardModel(DATE_ONLY_MENTOR, site))).not.toMatch(/Time to be announced|Scheduling in progress/);
+    expect(mentorCardModel(DATE_ONLY_MENTOR, closed()).cta).toBeNull();
   });
 
   it("event cards carry no application CTA — only office-hours entries do", () => {
@@ -195,7 +249,7 @@ describe("social image models (public data)", () => {
     }
   });
 
-  it("Rishab's office-hours calendar entry: Thu, Oct 1, time and place to be announced, hosted by Founders", () => {
+  it("Rishab's office-hours calendar entry: Thu, Oct 1, 12:00–5:00 PM CT, place to be announced, hosted by Founders", () => {
     const site = getSite();
     expect(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), site)).toEqual({
       label: "Founders Week 2026 · Calendar",
@@ -207,10 +261,10 @@ describe("social image models (public data)", () => {
       title: "Office hours with Rishab Veldur",
       people: [],
       morePeople: 0,
-      when: "Time to be announced",
+      when: "12:00–5:00 PM CT",
       where: "Location to be announced",
       cta: "Apply for Office Hours",
-      alt: "Office hours with Rishab Veldur: Thursday, Oct 1, Time to be announced, Location to be announced. Founders × Founders Week.",
+      alt: "Office hours with Rishab Veldur: Thursday, Oct 1, 12:00–5:00 PM CT, Location to be announced. Founders × Founders Week.",
     });
     expect(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), closed()).cta).toBeNull();
     // Office-hours cards on the calendar: Patrick and Rishab on Oct 1, Arnav on Oct 2; none for Rishab on Oct 2.
@@ -219,6 +273,38 @@ describe("social image models (public data)", () => {
       "office-hours-rishab-veldur-2026-10-01",
       "office-hours-arnav-mishra-2026-10-02-am",
     ]);
+    // Thursday in start-time order: Rishab's noon window sits between the 11:45 and 3:00 PM program blocks.
+    expect(
+      getScheduleEntries()
+        .filter((e) => e.date === "2026-10-01")
+        .map((e) => [e.id, eventCardModel(e, site).when]),
+    ).toEqual([
+      ["office-hours-patrick-haddox-2026-10-01-am", "10:00–11:30 AM CT"],
+      ["science-and-practice-of-pitching", "11:45 AM–2:15 PM CT"],
+      ["office-hours-rishab-veldur-2026-10-01", "12:00–5:00 PM CT"],
+      ["entrepreneurial-impact-launching-from-illinois", "3:00–5:00 PM CT"],
+      ["techrise-pitch-competition", "5:00–7:00 PM CT"],
+    ]);
+  });
+
+  it("a date-only office-hours entry (fixture mentor): Thursday, Oct 1, time and place to be announced", () => {
+    const site = getSite();
+    expect(eventCardModel(dateOnlyEntry(), site)).toEqual({
+      label: "Founders Week 2026 · Calendar",
+      weekday: "Thursday",
+      day: "1",
+      month: "October",
+      involvement: { label: "Hosted by Founders", tone: "solid" },
+      status: null,
+      title: "Office hours with Fixture Mentor",
+      people: [],
+      morePeople: 0,
+      when: "Time to be announced",
+      where: "Location to be announced",
+      cta: "Apply for Office Hours",
+      alt: "Office hours with Fixture Mentor: Thursday, Oct 1, Time to be announced, Location to be announced. Founders × Founders Week.",
+    });
+    expect(eventCardModel(dateOnlyEntry(), closed()).cta).toBeNull();
   });
 
   it("sizes long titles down", () => {
@@ -284,6 +370,9 @@ describe("social image assets and rendering", () => {
     await isPng(await renderEventCard(eventCardModel(entry("office-hours-patrick-haddox-2026-10-01-am"), site)));
     await isPng(await renderMentorCard(mentorCardModel(getMentor("rishab-veldur")!, site)));
     await isPng(await renderEventCard(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), site)));
+    // A date-only window, and a mentor without a headshot (initials are drawn).
+    await isPng(await renderMentorCard(mentorCardModel(DATE_ONLY_MENTOR, site)));
+    await isPng(await renderEventCard(eventCardModel(dateOnlyEntry(), site)));
   }, 60_000);
 });
 
@@ -401,11 +490,12 @@ describe("social image fonts cover every rendered character", () => {
     const s = siteCardModel(site, getMentors());
     const text: string[] = [s.label, s.kicker, s.headline, s.sub, s.peopleLine, s.cta ?? "", "Founders"];
     text.push(...s.people.map((p) => p.initials));
-    for (const m of getMentors()) {
+    // The fixture mentor keeps the date-only wording ("Exact time to be confirmed") covered.
+    for (const m of [...getMentors(), DATE_ONLY_MENTOR]) {
       const model = mentorCardModel(m, site);
       text.push(model.label, model.name, model.role ?? "", model.company ?? "", model.availability.text, model.cta ?? "");
     }
-    for (const e of getScheduleEntries()) {
+    for (const e of [...getScheduleEntries(), dateOnlyEntry()]) {
       const model = eventCardModel(e, site);
       text.push(model.label, model.weekday, model.day, model.month, model.title, model.when, model.where);
       text.push(model.involvement?.label ?? "", model.status ?? "", `and ${model.morePeople} more`, model.cta ?? "");

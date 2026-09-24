@@ -20,6 +20,7 @@ vi.mock("next/navigation", async (importOriginal) => ({
 import ApplicationDetailPage from "@/app/organizers/applications/[id]/page";
 import { ApplicationResults } from "@/components/organizer/application-results";
 import { getMentorsForOrganizers } from "@/content";
+import type { Mentor } from "@/content/types";
 import { __setDbForTests, createMemoryDbForTests, type Database } from "@/lib/db/client";
 import { buildOrganizerDirectory, mentorBookability, resolveAvailability } from "@/lib/organizer/directory";
 import {
@@ -194,11 +195,11 @@ describe("application queries", () => {
   });
 });
 
-describe("applications listing Rishab (Thu, Oct 1, exact time to be confirmed)", () => {
+describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
   const PASSWORD = "organizer-queries-password";
   const RISHAB_WINDOW = "rishab-veldur-2026-10-01";
   const NOTES = "Thursday Oct 1: free before 11 AM and after 3 PM.";
-  const WINDOW_LABEL = "Thu, Oct 1 · Exact time to be confirmed";
+  const WINDOW_LABEL = "Thu, Oct 1 · 12:00–5:00 PM CT";
   let db: Database;
   const ids: Record<string, string> = {};
   const names = (rows: { fullName: string }[]) => rows.map((r) => r.fullName);
@@ -206,7 +207,7 @@ describe("applications listing Rishab (Thu, Oct 1, exact time to be confirmed)",
 
   beforeAll(async () => {
     db = await createMemoryDbForTests();
-    // First choice Rishab, his Oct 1 window, and the broad-availability note his date-only window needs.
+    // First choice Rishab, his Oct 1 window, and an availability note (optional now that his window is timed).
     ids.nadia = await insertApplication(db, {
       fullName: "Nadia Brooks",
       email: "nbrooks4@illinois.edu",
@@ -304,7 +305,7 @@ describe("applications listing Rishab (Thu, Oct 1, exact time to be confirmed)",
         mentorId: "rishab-veldur",
         mentorName: "Rishab Veldur",
         label: WINDOW_LABEL,
-        certainty: "window-approx",
+        certainty: "window",
       },
     ]);
     // A window isn't a bookable slot: neither preferred mentor can be confirmed yet.
@@ -326,9 +327,11 @@ describe("applications listing Rishab (Thu, Oct 1, exact time to be confirmed)",
     expect(html.match(new RegExp(`href="/organizers/applications/${ids.omar}"`, "g"))).toHaveLength(2);
     expect(t).toContain("1. Rishab Veldur 1st choice 2. Patrick Haddox");
     expect(t).toContain("1. Patrick Haddox 1st choice 2. Rishab Veldur");
-    expect(t).toContain(`Rishab Veldur ${WINDOW_LABEL} Exact times TBA`);
-    expect(t).toContain(`Patrick Haddox Thu, Oct 1 · 10:00–11:30 AM CT Availability window Rishab Veldur ${WINDOW_LABEL} Exact times TBA`);
+    expect(t).toContain(`Rishab Veldur ${WINDOW_LABEL} Availability window`);
+    expect(t).toContain(`Patrick Haddox Thu, Oct 1 · 10:00–11:30 AM CT Availability window Rishab Veldur ${WINDOW_LABEL} Availability window`);
     expect(t.match(new RegExp(WINDOW_LABEL, "g"))).toHaveLength(4);
+    expect(t).not.toContain("Exact times TBA");
+    expect(t).not.toContain("Exact time to be confirmed");
     expect(t).not.toContain("Interest only");
     expect(t).not.toContain("no longer listed");
     expect(t).not.toMatch(/Oct 2/);
@@ -360,13 +363,13 @@ describe("applications listing Rishab (Thu, Oct 1, exact time to be confirmed)",
       const { html, t } = await renderDetail(ids.nadia);
       expect(t).toContain("Nadia Brooks");
       expect(t).toContain(
-        `Mentors & availability 1. Rishab Veldur Co-Founder & CEO, Auvi Labs First choice ${WINDOW_LABEL} Exact times TBA ` +
+        `Mentors & availability 1. Rishab Veldur Co-Founder & CEO, Auvi Labs First choice ${WINDOW_LABEL} Availability window ` +
           "2. Patrick Haddox CEO & Co-Founder, Samara Aerospace Interest only No time selected " +
           `Availability notes ${NOTES}`,
       );
       // Neither preferred mentor has appointment slots: the page says so and names his window.
       expect(t).toContain(
-        `No appointment slots yet for Rishab and Patrick Rishab Veldur ${WINDOW_LABEL} Exact times TBA ` +
+        `No appointment slots yet for Rishab and Patrick Rishab Veldur ${WINDOW_LABEL} Availability window ` +
           "Patrick Haddox Thu, Oct 1 · 10:00–11:30 AM CT Availability window " +
           "You can still review this application: mark it Under review, Selected or Waitlisted. " +
           "Confirmed and Attended need a confirmed appointment. That’s possible once slots for Rishab and Patrick are added to content/mentors.ts and confirmed with each mentor.",
@@ -378,15 +381,87 @@ describe("applications listing Rishab (Thu, Oct 1, exact time to be confirmed)",
       expect(html).toContain('alt="Rishab Veldur"');
       expect(t).not.toMatch(/Oct 2/);
       expect(t).not.toMatch(/one-on-one/i);
+      expect(t).not.toContain("Exact times TBA");
     });
 
     it("shows Rishab as a second choice with his window alongside Patrick's", async () => {
       const { t } = await renderDetail(ids.omar);
       expect(t).toContain(
         "Mentors & availability 1. Patrick Haddox CEO & Co-Founder, Samara Aerospace First choice Thu, Oct 1 · 10:00–11:30 AM CT Availability window " +
-          `2. Rishab Veldur Co-Founder & CEO, Auvi Labs ${WINDOW_LABEL} Exact times TBA Availability notes None.`,
+          `2. Rishab Veldur Co-Founder & CEO, Auvi Labs ${WINDOW_LABEL} Availability window Availability notes None.`,
       );
       expect(t).toContain("No appointment slots yet for Patrick and Rishab");
     });
+  });
+});
+
+describe("applications listing a date-only window (fixture mentor: date set, time not)", () => {
+  // No production mentor has a date-only window now that Rishab's 12–5 PM window is locked; this
+  // keeps the organizer view of that path (approximate certainty, "Exact times TBA") covered.
+  const DATE_ONLY_WINDOW = "fixture-date-only-2026-10-01";
+  const DATE_ONLY_LABEL = "Thu, Oct 1 · Exact time to be confirmed";
+  const dateOnlyMentor: Mentor = {
+    id: "fixture-date-only",
+    name: "Dana Fixture",
+    firstName: "Dana",
+    role: "Founder",
+    company: "Fixture Labs",
+    headshot: null,
+    bio: null,
+    expertise: null,
+    askMeAbout: null,
+    goodFitFor: null,
+    session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+    availability: [{ id: DATE_ONLY_WINDOW, date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" }],
+    slots: [],
+    links: [],
+    acceptingApplications: true,
+    sources: [],
+  };
+  let db: Database;
+  let id: string;
+
+  beforeAll(async () => {
+    db = await createMemoryDbForTests();
+    id = await insertApplication(db, {
+      fullName: "Priya Natarajan",
+      email: "pnatara2@illinois.edu",
+      mentors: ["fixture-date-only", "rishab-veldur"],
+      availability: [`window:${DATE_ONLY_WINDOW}`, "window:rishab-veldur-2026-10-01"],
+      createdAt: "2026-09-24T15:00:00Z",
+    });
+  });
+
+  it("resolves the date-only window as approximate and shows the \"Exact times TBA\" badge next to Rishab's timed window", async () => {
+    const directory = buildOrganizerDirectory([...getMentorsForOrganizers(), dateOnlyMentor]);
+    const rows = await listApplications(db, parseApplicationFilters({ mentor: "fixture-date-only" }));
+    expect(rows.map((r) => r.id)).toEqual([id]);
+    expect(rows[0].availability.map((a) => resolveAvailability(directory, a))).toEqual([
+      {
+        key: `window:${DATE_ONLY_WINDOW}`,
+        kind: "window",
+        optionId: DATE_ONLY_WINDOW,
+        mentorId: "fixture-date-only",
+        mentorName: "Dana Fixture",
+        label: DATE_ONLY_LABEL,
+        certainty: "window-approx",
+      },
+      {
+        key: "window:rishab-veldur-2026-10-01",
+        kind: "window",
+        optionId: "rishab-veldur-2026-10-01",
+        mentorId: "rishab-veldur",
+        mentorName: "Rishab Veldur",
+        label: "Thu, Oct 1 · 12:00–5:00 PM CT",
+        certainty: "window",
+      },
+    ]);
+    const t = text(renderToStaticMarkup(createElement(ApplicationResults, { applications: rows, directory })));
+    expect(t).toContain("1. Dana Fixture 1st choice 2. Rishab Veldur");
+    expect(t).toContain(
+      `Dana Fixture ${DATE_ONLY_LABEL} Exact times TBA Rishab Veldur Thu, Oct 1 · 12:00–5:00 PM CT Availability window`,
+    );
+    // Desktop table + phone card.
+    expect(t.match(/Exact times TBA/g)).toHaveLength(2);
   });
 });

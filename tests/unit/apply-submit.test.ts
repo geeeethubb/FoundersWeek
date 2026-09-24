@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mentors } from "@/content/mentors";
+import type { Mentor } from "@/content/types";
 import { site } from "@/content/site";
 import { isSubmitSuccess } from "@/lib/applications/api-contract";
 import { getApplicationStatusView } from "@/lib/applications/repository";
@@ -59,6 +60,32 @@ function post(body: unknown, init: { headers?: Record<string, string>; raw?: str
     body: init.raw ?? JSON.stringify(body),
   });
 }
+
+/**
+ * Synthetic mentor (not real content) with a date-only window: the date is set, the time isn't.
+ * No real mentor has one now that Rishab's Thu, Oct 1 window has a time, but the path stays for
+ * future mentors, so it keeps its coverage here.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-casey",
+  name: "Casey Fixture",
+  firstName: "Casey",
+  role: null,
+  company: null,
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [
+    { id: "fixture-casey-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
+};
 
 const openState: SubmissionState = { open: true, deadline: null };
 const scheduled: Promise<unknown>[] = [];
@@ -338,7 +365,7 @@ describe("POST /api/applications", () => {
     expect(app.first_choice_mentor_id).toBe("ron-lewis");
   });
 
-  it("stores a Rishab application: his mentor row, his Thu, Oct 1 window row and the broad-availability note", async () => {
+  it("stores a Rishab application: his mentor row, his Thu, Oct 1 window row and the optional broad-availability note", async () => {
     const res = await handleApplicationSubmission(
       post(
         validPayload({
@@ -378,7 +405,7 @@ describe("POST /api/applications", () => {
     expect(await count("applications")).toBe(1);
     expect(await count("application_mentors")).toBe(1);
     expect(await count("application_availability")).toBe(1);
-    // His date is published, so he isn't "scheduling in progress" in the receipt.
+    // His window is published, so he isn't "scheduling in progress" in the receipt.
     await Promise.all(scheduled);
     expect(sendAcknowledgment).toHaveBeenCalledTimes(1);
     expect(sendAcknowledgment.mock.calls[0]).toMatchObject([
@@ -434,22 +461,65 @@ describe("POST /api/applications", () => {
     ]);
   });
 
-  it("rejects Rishab without a broad-availability note (his time isn't set), even with his or Patrick's window ticked", async () => {
-    for (const [mentorIds, availability] of [
+  it("accepts Rishab's window ticked alone, with no note (his time is set, like Patrick's)", async () => {
+    const cases: [string[], string[]][] = [
       [["rishab-veldur"], ["window:rishab-veldur-2026-10-01"]],
       [["rishab-veldur", "patrick-haddox"], ["window:patrick-haddox-2026-10-01-am"]],
-    ]) {
+    ];
+    const ids: string[] = [];
+    for (const [mentorIds, availability] of cases) {
       const res = await handleApplicationSubmission(
         post(validPayload({ mentorIds, firstChoiceMentorId: "rishab-veldur", availability, availabilityNotes: "" })),
         deps(),
       );
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(201);
       const body = await res.json();
-      expect(body).toMatchObject({ ok: false, error: "validation" });
-      expect(body.fieldErrors).toEqual({
-        availabilityNotes: "Tell us when you’re generally free during Founders Week. Rishab’s times aren’t set yet.",
-      });
+      expect(isSubmitSuccess(body)).toBe(true);
+      ids.push(body.id);
     }
+    expect(await count("applications")).toBe(2);
+    const [alone, withPatrick] = ids;
+    expect(
+      await db.query(`select mentor_id, option_kind, option_id from application_availability where application_id = $1`, [alone]),
+    ).toEqual([{ mentor_id: "rishab-veldur", option_kind: "window", option_id: "rishab-veldur-2026-10-01" }]);
+    expect(
+      await db.query(`select mentor_id, option_kind, option_id from application_availability where application_id = $1`, [
+        withPatrick,
+      ]),
+    ).toEqual([{ mentor_id: "patrick-haddox", option_kind: "window", option_id: "patrick-haddox-2026-10-01-am" }]);
+    // No note given: nothing stored for it.
+    expect(
+      await db.query(`select availability_notes from applications where id in ($1, $2)`, ids),
+    ).toEqual([{ availability_notes: null }, { availability_notes: null }]);
+  });
+
+  it("rejects Rishab with nothing ticked and no note, names only mentors still scheduling, and refuses Fri, Oct 2", async () => {
+    const nothing = await handleApplicationSubmission(
+      post(validPayload({ mentorIds: ["rishab-veldur"], firstChoiceMentorId: "rishab-veldur", availability: [], availabilityNotes: "" })),
+      deps(),
+    );
+    expect(nothing.status).toBe(400);
+    const nothingBody = await nothing.json();
+    expect(nothingBody).toMatchObject({ ok: false, error: "validation" });
+    expect(nothingBody.fieldErrors).toEqual({
+      availabilityNotes: "Tell us when you’re generally free during Founders Week (or pick one of the listed times).",
+    });
+    // His ticked window doesn't cover Ron, whose times aren't set: only Ron is named.
+    const withRon = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["rishab-veldur", "ron-lewis"],
+          firstChoiceMentorId: "rishab-veldur",
+          availability: ["window:rishab-veldur-2026-10-01"],
+          availabilityNotes: "",
+        }),
+      ),
+      deps(),
+    );
+    expect(withRon.status).toBe(400);
+    expect((await withRon.json()).fieldErrors).toEqual({
+      availabilityNotes: "Tell us when you’re generally free during Founders Week. Ron’s times aren’t set yet.",
+    });
     // He has no office hours on Fri, Oct 2.
     const oct2 = await handleApplicationSubmission(
       post(
@@ -465,6 +535,63 @@ describe("POST /api/applications", () => {
     expect(Object.keys((await oct2.json()).fieldErrors)).toEqual(["availability"]);
     expect(await count("applications")).toBe(0);
     expect(sendAcknowledgment).not.toHaveBeenCalled();
+  });
+
+  it("rejects a date-only mentor (fixture) without a broad-availability note, even with that window or Patrick's ticked", async () => {
+    const withFixture = () => deps({ getMentors: () => [...mentors, DATE_ONLY_MENTOR] });
+    for (const [mentorIds, availability] of [
+      [["fixture-casey"], ["window:fixture-casey-2026-10-01"]],
+      [["fixture-casey", "patrick-haddox"], ["window:patrick-haddox-2026-10-01-am"]],
+    ]) {
+      const res = await handleApplicationSubmission(
+        post(validPayload({ mentorIds, firstChoiceMentorId: "fixture-casey", availability, availabilityNotes: "" })),
+        withFixture(),
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body).toMatchObject({ ok: false, error: "validation" });
+      expect(body.fieldErrors).toEqual({
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Casey’s times aren’t set yet.",
+      });
+    }
+    expect(await count("applications")).toBe(0);
+    expect(sendAcknowledgment).not.toHaveBeenCalled();
+
+    // With the note it's stored, window row included; the mentor has a date, so isn't "scheduling in progress".
+    const ok = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["fixture-casey"],
+          firstChoiceMentorId: "fixture-casey",
+          availability: ["window:fixture-casey-2026-10-01"],
+          availabilityNotes: "Free after 3 PM on Thursday",
+        }),
+      ),
+      withFixture(),
+    );
+    expect(ok.status).toBe(201);
+    const { id } = await ok.json();
+    expect(
+      await db.query(`select mentor_id, option_kind, option_id from application_availability where application_id = $1`, [id]),
+    ).toEqual([{ mentor_id: "fixture-casey", option_kind: "window", option_id: "fixture-casey-2026-10-01" }]);
+    await Promise.all(scheduled);
+    expect(sendAcknowledgment.mock.calls[0]).toMatchObject([
+      { mentors: [{ name: "Casey Fixture", schedulingInProgress: false }] },
+    ]);
+    // The fixture is never a mentor in the real content.
+    const real = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["fixture-casey"],
+          firstChoiceMentorId: "fixture-casey",
+          availability: [],
+          availabilityNotes: "Thursday",
+        }),
+      ),
+      deps(),
+    );
+    expect(real.status).toBe(400);
+    expect(Object.keys((await real.json()).fieldErrors)).toEqual(["mentorIds"]);
   });
 
   it("rejects times that don't belong to a selected mentor, and anything that isn't a mentor (no Dan Caruso)", async () => {

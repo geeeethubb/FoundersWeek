@@ -1,18 +1,27 @@
 /**
  * Checklist 3 — Office Hours (desktop 1440×900 and phone 390×844).
- *   - An introduction, then ONE mentor grid with all five mentors: Patrick Haddox, Arnav Mishra,
- *     Vikram “Vik” Lakhwara, Elliott Notrica and Ron Lewis — each with a photo (alt = name),
- *     role · company and one availability line. No duplicate lineup anywhere on the page.
+ *   - An introduction, then ONE mentor grid with all six mentors: Patrick Haddox, Arnav Mishra,
+ *     Vikram “Vik” Lakhwara, Elliott Notrica, Ron Lewis and Rishab Veldur — each with a photo
+ *     (alt = name), role · company, "Can help with" labels (or, for Rishab, the first sentence of
+ *     his bio) and one availability line. No duplicate lineup anywhere on the page.
  *   - The matching sentence appears exactly once.
- *   - Every card's "Select mentor" action prefills that mentor in the form (and Patrick's / Arnav's
- *     window where one is offered); every profile's "Apply to meet …" does the same.
+ *   - Every card's "Select mentor" action prefills that mentor in the form (and Patrick's / Arnav's /
+ *     Rishab's window where one is offered); every profile's "Apply to meet …" does the same.
+ *     A preselected window is enough on its own; mentors whose times aren't set yet (Vik, Elliott,
+ *     Ron) need broad availability, and the form says so.
  *   - Profiles: photo, role, LinkedIn, approved bio and "Can help with" labels — never the internal
- *     basis behind them, organizer notes or draft copy.
+ *     basis behind them, organizer notes or draft copy. Rishab: "Background" chips and a "Good fit
+ *     for" paragraph instead of "Can help with", his Showcase panel as a separate appearance, and
+ *     office hours on Thu, Oct 1 only, 12:00–5:00 PM CT.
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
   applicationForm,
   applicationHeading,
+  AUVI_CLAIMS,
+  AUVI_LABS_URL,
+  BROAD_AVAILABILITY_ASK,
+  broadAvailabilityField,
   CONTENT_NOTES,
   countMatches,
   DEMO_MENTOR_NAMES,
@@ -29,6 +38,9 @@ import {
   ONE_ON_ONE,
   ORGANIZER_ONLY,
   preselectionNotice,
+  RISHAB,
+  RISHAB_SHOWCASE_SESSION,
+  RISHAB_WINDOW_NOTE,
   visibleText,
   waitForHydration,
   type MentorFixture,
@@ -59,21 +71,34 @@ async function expectPrefilled(page: Page, mentor: MentorFixture) {
   } else {
     // Schedule pending: nothing to pick; broad availability is the way to say when you're free.
     await expect(mentorWindows(page, mentor)).toHaveCount(0);
-    await expect(applicationForm(page).getByRole("textbox", { name: /^Broad availability/ })).toBeVisible();
+    await expect(broadAvailabilityField(page)).toBeVisible();
+  }
+  const broad = broadAvailabilityField(page);
+  if (mentor.timesPending) {
+    // Times not set yet: broad availability is required, and the hint says why.
+    await expect(broad).toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(
+      `${BROAD_AVAILABILITY_ASK} Needed because ${mentor.firstName}’s times aren’t set yet.`,
+    );
+  } else {
+    // The preselected window (Patrick's, Arnav's or Rishab's) is enough on its own.
+    await expect(broad).not.toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
   }
 }
 
 test.describe("Office Hours page", () => {
-  test("introduction, then one grid with all five mentors — photo, role · company, one availability line", async ({ page }) => {
+  test("introduction, then one grid with all six mentors — photo, role · company, one availability line", async ({ page }) => {
     await page.goto("/office-hours");
     const h1 = page.getByRole("heading", { level: 1 });
     await expect(h1).toHaveText("Founders Office Hours");
+    await expect(page.getByRole("main")).toContainText("Choose who you’d like to meet and apply once.");
     const grid = mentorGrid(page);
     const introBox = (await h1.boundingBox())!;
     const gridBox = (await grid.boundingBox())!;
     expect(introBox.y, "introduction comes before the mentor grid").toBeLessThan(gridBox.y);
 
-    // The five real mentors first, in order; on this (demo) server the demo mentors follow.
+    // The six real mentors first, in order; on this (demo) server the demo mentors follow.
     const names = (await grid.getByRole("article").getByRole("heading").allInnerTexts()).map((t) => t.trim());
     expect(names.slice(0, MENTORS.length)).toEqual(MENTORS.map((m) => m.name));
     for (const extra of names.slice(MENTORS.length)) expect(DEMO_MENTOR_NAMES).toContain(extra);
@@ -89,6 +114,14 @@ test.describe("Office Hours page", () => {
       const text = (await card.textContent()) ?? "";
       expect(countMatches(text, "Office hours:"), `${mentor.name}: one availability line`).toBe(1);
       expect(countMatches(text, mentor.cardLine), `${mentor.name}: "${mentor.cardLine}"`).toBe(1);
+      // What they can help with (labels only) — or, without an approved list, the bio's first sentence.
+      if (mentor.helpsWith.length) {
+        await expect(card).toContainText("Can help with");
+        for (const label of mentor.helpsWith) await expect(card).toContainText(label);
+      } else {
+        await expect(card).not.toContainText("Can help with");
+        await expect(card).toContainText(mentor.cardIntro!);
+      }
       // One action to select the mentor, one quiet link to the profile.
       await expect(card.getByRole("link", { name: new RegExp(`^Select mentor\\W*${escapeRegExp(mentor.name)}$`) })).toBeVisible();
       await expect(card.getByRole("link", { name: new RegExp(`^Profile\\W*${escapeRegExp(mentor.name)}$`) })).toHaveAttribute(
@@ -150,7 +183,8 @@ test.describe("Every mentor card's Select action prefills the application", () =
 
 test.describe("Mentor profiles", () => {
   for (const mentor of MENTORS) {
-    test(`${mentor.name}: photo, role, LinkedIn, bio, “Can help with” — and Apply prefills the form`, async ({ page }) => {
+    const topics = mentor.helpsWith.length ? "“Can help with”" : "“Background”, “Good fit for”";
+    test(`${mentor.name}: photo, role, LinkedIn, bio, ${topics} — and Apply prefills the form`, async ({ page }) => {
       await page.goto(`/office-hours/${mentor.id}`);
       const main = page.getByRole("main");
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(mentor.name);
@@ -165,8 +199,42 @@ test.describe("Mentor profiles", () => {
 
       await expect(main).toContainText(mentor.bioFragment);
       const help = page.getByRole("region", { name: "Can help with", exact: true });
-      for (const label of mentor.helpsWith) await expect(help).toContainText(label);
+      if (mentor.helpsWith.length) {
+        for (const label of mentor.helpsWith) await expect(help).toContainText(label);
+      } else {
+        // No approved topic list, but an approved "Good fit for": the fit says it better.
+        await expect(help).toHaveCount(0);
+      }
+      if (mentor.background) {
+        await expect(page.getByRole("region", { name: "Background", exact: true }).getByRole("listitem")).toHaveText(
+          mentor.background,
+        );
+      }
+      if (mentor.goodFitFor) {
+        // One full-sentence item reads as prose under "Good fit for" (never as a "Useful for" list).
+        const fit = page.getByRole("region", { name: "Good fit for", exact: true });
+        await expect(fit).toContainText(mentor.goodFitFor);
+        await expect(fit.getByRole("listitem")).toHaveCount(0);
+        await expect(page.getByRole("region", { name: "Useful for", exact: true })).toHaveCount(0);
+      }
       await expect(main).toContainText(mentor.cardLine);
+
+      if (mentor === RISHAB) {
+        await expect(main.getByRole("link", { name: /^Auvi Labs\b/ })).toHaveAttribute("href", AUVI_LABS_URL);
+        // Office hours only on Thu, Oct 1, noon to 5 PM, with the window's own note; his Friday
+        // Showcase panel is a separate appearance.
+        const officeHours = main.locator("header");
+        await expect(officeHours).toContainText(mentor.cardLine);
+        await expect(officeHours).toContainText(RISHAB_WINDOW_NOTE);
+        await expect(officeHours).not.toContainText(/Oct 2|Friday|to be confirmed|to be announced/);
+        const appearances = page.getByRole("region", { name: `${mentor.firstName} at Founders Week`, exact: true });
+        await expect(appearances.getByRole("link", { name: new RegExp(escapeRegExp(RISHAB_SHOWCASE_SESSION)) })).toHaveAttribute(
+          "href",
+          "/schedule/founders-showcase-day-sessions",
+        );
+        await expect(appearances).toContainText("Speaking Fri, Oct 2 · 1:20 PM");
+        await expect(page.locator("body")).not.toContainText(AUVI_CLAIMS);
+      }
 
       // Labels only — never the internal basis, drafts or organizer notes.
       const text = await visibleText(main);

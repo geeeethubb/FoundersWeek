@@ -6,6 +6,7 @@ import { demoEvents, demoMentors } from "@/content/demo";
 import { events } from "@/content/events";
 import { mentors } from "@/content/mentors";
 import { site } from "@/content/site";
+import type { Mentor } from "@/content/types";
 import { ContentValidationError, validateContent } from "@/content/validate";
 import { LATEST_MIGRATION } from "@/lib/db/client";
 import { mentorCtaLabel, schedulingStatus } from "@/lib/mentors";
@@ -29,6 +30,39 @@ const RISHAB_GOOD_FIT =
   "Interested in turning a technical project into a healthcare startup? Rishab’s experience spans engineering, medical-device development, and building a company through Illinois’ entrepreneurship ecosystem.";
 /** Claims never made about Auvi's investigational device, and meetings never promised. */
 const UNAPPROVED_CLAIMS = /FDA|\bcleared\b|commercially available|clinically (proven|validated)|one-on-one|1:1/i;
+
+/**
+ * A synthetic mentor whose only window is date-only (time still to be confirmed). No real mentor
+ * has one now that Rishab's Thursday window is set, but the code path stays for future mentors.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-date-only",
+  name: "Fixture Mentor",
+  firstName: "Fixture",
+  role: "Founder",
+  company: "Fixture Labs",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: {
+    format: null,
+    durationMinutes: null,
+    location: null,
+    sessionCount: null,
+    confirmed: false,
+    note: "Fixture has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+  },
+  availability: [
+    { id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [{ label: "Test fixture" }],
+};
+const FIXTURE_OH = "office-hours-fixture-date-only-2026-10-01";
 
 /** The LinkedIn profiles the organizers supplied, in display order. */
 const LINKEDIN: Record<string, string> = {
@@ -192,15 +226,23 @@ describe("content", () => {
     });
   });
 
-  it("gives Rishab one date-only office-hours window on Thu Oct 1 (never Oct 2)", () => {
+  it("gives Rishab one office-hours window on Thu Oct 1, anytime noon to 5 PM (never Oct 2)", () => {
     const rishab = mentors.find((m) => m.id === RISHAB)!;
     expect(rishab.availability).toHaveLength(1);
-    expect(rishab.availability[0]).toMatchObject({
+    // Locked by the organizers on Sept 24. The id is unchanged (applications store it), and with
+    // an exact time there's no "Exact time to be confirmed" label any more.
+    expect(rishab.availability[0]).toEqual({
       id: RISHAB_WINDOW,
       date: "2026-10-01",
-      time: { kind: "tba" },
-      label: "Exact time to be confirmed",
+      time: { kind: "exact", start: "12:00", end: "17:00" },
+      note: "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.",
     });
+    expect(rishab.session.note).toBe(
+      "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.",
+    );
+    // A window, not a confirmed session: length and location are still open.
+    expect(rishab.session.confirmed).toBe(false);
+    expect(rishab.organizerNotes).toMatch(/Window locked for Thu Oct 1, anytime 12–5 PM \(organizer update, Sept 24\)/);
     expect(rishab.availability.some((w) => w.date === "2026-10-02")).toBe(false);
     expect(rishab.slots).toEqual([]);
     // A published window: he's "available", so the CTA applies with his window preselected.
@@ -209,9 +251,10 @@ describe("content", () => {
     expect(applyHref({ mentorId: RISHAB, optionKind: "window", optionId: RISHAB_WINDOW })).toBe(
       "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
     );
-    // Public availability copy never mentions Oct 2 / Friday.
+    // Public availability copy never mentions Oct 2 / Friday, nor the old "time to be confirmed".
     const publicCopy = JSON.stringify([rishab.availability, rishab.session.note]);
     expect(publicCopy).not.toMatch(/October 2|Oct 2\b|Friday/i);
+    expect(publicCopy).not.toMatch(/to be confirmed|to be announced/i);
     expect(publicCopy).toContain("Thursday, October 1");
   });
 
@@ -278,6 +321,13 @@ describe("content", () => {
     const rishab = mentors.find((m) => m.id === RISHAB)!;
     const check = (m: typeof rishab) => () => validateContent({ events: [], mentors: [m], forbidDemo: true });
     expect(check(rishab)).not.toThrow();
+    // A date-only window (time still to be confirmed) is valid for future mentors, alongside real ones.
+    expect(check(DATE_ONLY_MENTOR)).not.toThrow();
+    expect(() => validateContent({ events, mentors: [...mentors, DATE_ONLY_MENTOR], forbidDemo: true })).not.toThrow();
+    // Rishab's window keeps a real range: an end before the start is rejected.
+    const backwards = structuredClone(rishab);
+    backwards.availability[0].time = { kind: "exact", start: "17:00", end: "12:00" };
+    expect(check(backwards)).toThrow(/\(rishab-veldur\)\.availability\.0\.time: End time must be after start time/);
 
     const noTags = structuredClone(rishab);
     delete noTags.backgroundTags;
@@ -531,24 +581,57 @@ describe("content", () => {
     expect(entries).toHaveLength(15);
     const oh = entries.filter((e) => e.kind === "office-hours");
     // Only mentors with published windows get entries (Vik, Elliott and Ron are still scheduling).
-    // Rishab's Oct 1 window has no time yet, so it sorts after Thursday's timed entries.
+    // Rishab's Oct 1 window (noon–5 PM) follows Patrick's morning window.
     expect(oh.map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
       RISHAB_OH,
       "office-hours-arnav-mishra-2026-10-02-am",
     ]);
     expect(oh.every((e) => !e.calendar.available)).toBe(true);
-    expect(oh.map((e) => e.startsAt)).toEqual(["2026-10-01T15:00:00.000Z", null, null]);
-    expect(oh.map((e) => e.endsAt)).toEqual(["2026-10-01T16:30:00.000Z", null, null]);
+    // Arnav's "Friday morning, before noon" has no exact interval.
+    expect(oh.map((e) => e.startsAt)).toEqual(["2026-10-01T15:00:00.000Z", "2026-10-01T17:00:00.000Z", null]);
+    expect(oh.map((e) => e.endsAt)).toEqual(["2026-10-01T16:30:00.000Z", "2026-10-01T22:00:00.000Z", null]);
     expect(oh.every((e) => e.featuredRank === 1 && e.registration?.url.startsWith("/office-hours?"))).toBe(true);
     expect(oh[1]).toMatchObject({
       date: "2026-10-01",
-      time: { kind: "tba" },
-      timeLabel: "Exact time to be confirmed",
+      time: { kind: "exact", start: "12:00", end: "17:00" },
+      timeLabel: null,
+      // A window, not a confirmed session (length and location are still being set).
       status: "planned",
       registration: {
         url: "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
         label: "Apply to meet Rishab",
+        internal: true,
+      },
+    });
+    expect(oh[1].description.split("\n\n")[0]).toBe(
+      "Rishab Veldur (Co-Founder & CEO, Auvi Labs) is available for office hours: Thursday, October 1, 12:00–5:00 PM CT.",
+    );
+
+    // A date-only window (a future mentor's) has no time yet, so it sorts after the day's timed
+    // entries and nothing is invented for it.
+    const withDateOnly = buildScheduleEntries({ events, mentors: [...mentors, DATE_ONLY_MENTOR], site });
+    expect(withDateOnly).toHaveLength(16);
+    expect(withDateOnly.filter((e) => e.date === "2026-10-01").map((e) => e.id)).toEqual([
+      "office-hours-patrick-haddox-2026-10-01-am",
+      "science-and-practice-of-pitching",
+      RISHAB_OH,
+      "entrepreneurial-impact-launching-from-illinois",
+      TECHRISE,
+      FIXTURE_OH,
+    ]);
+    expect(withDateOnly.find((e) => e.id === FIXTURE_OH)).toMatchObject({
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      timeLabel: "Exact time to be confirmed",
+      status: "planned",
+      startsAt: null,
+      endsAt: null,
+      featuredRank: 1,
+      calendar: { available: false },
+      registration: {
+        url: "/office-hours?mentor=fixture-date-only&window=fixture-date-only-2026-10-01#apply",
+        label: "Apply to meet Fixture",
         internal: true,
       },
     });

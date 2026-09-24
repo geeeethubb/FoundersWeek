@@ -22,6 +22,7 @@ import {
   E2E_EMAIL_MARKER,
   ELLIOTT,
   exportApplications,
+  INTEREST_ONLY_LABEL,
   MENTORS,
   organizerLogin,
   ORGANIZER_NAME,
@@ -172,8 +173,15 @@ test("/api/health returns JSON readiness checks with no applicant data or secret
   expect(res.headers()["content-type"]).toContain("application/json");
   expect(res.headers()["cache-control"] ?? "").toContain("no-store");
   const raw = await res.text();
-  const body = JSON.parse(raw) as { applications: string; checks: { key: string; ok: boolean; status: string; fix: string | null }[] };
+  const body = JSON.parse(raw) as {
+    applications: string;
+    build: string | null;
+    checks: { key: string; ok: boolean; status: string; fix: string | null }[];
+  };
 
+  // Exactly these keys: readiness, which deployment answered (a public commit, null locally) and the checks.
+  expect(Object.keys(body).sort()).toEqual(["applications", "build", "checks"]);
+  expect(body.build === null || /^[0-9a-f]{7}$/.test(body.build), `build: ${body.build}`).toBe(true);
   expect(body.applications).toBe("open");
   expect(body.checks.map((c) => c.key).sort()).toEqual(["app-secret", "applications-switch", "database", "organizer-password"]);
   for (const check of body.checks) {
@@ -263,8 +271,8 @@ test("filters: mentor, first choice, status and Interest only", async ({ page })
   await applyFilters(page, { q: MAJOR_TAG, status: "Confirmed" });
   await expect(page.getByText("No applications match these filters")).toBeVisible();
 
-  // Interest only — no time selected → the broad-availability-only application.
-  await applyFilters(page, { q: MAJOR_TAG, availability: "Interest only — no time selected" });
+  // Interest only (no time selected) → the broad-availability-only application.
+  await applyFilters(page, { q: MAJOR_TAG, availability: INTEREST_ONLY_LABEL });
   await expect(page).toHaveURL(/availability=none/);
   await expect(resultRow(page, ronOnly.email)).toHaveCount(1);
   await expect(resultRow(page, ronOnly.email)).toContainText("Interest only");

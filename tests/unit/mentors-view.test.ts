@@ -89,8 +89,49 @@ const RISHAB_GOOD_FIT =
   "Interested in turning a technical project into a healthcare startup? Rishab’s experience spans engineering, medical-device development, and building a company through Illinois’ entrepreneurship ecosystem.";
 const RISHAB_WINDOW_ID = "rishab-veldur-2026-10-01";
 const RISHAB_WINDOW_NOTE =
-  "Rishab has time on Thursday, October 1. We’ll share the exact time once it’s set, and you can apply now.";
+  "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.";
+const RISHAB_SESSION_NOTE =
+  "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.";
+/** Rishab's window reads like Patrick's ("Thu, Oct 1 · 10:00–11:30 AM CT"). */
+const RISHAB_TIME = "12:00–5:00 PM CT";
+const RISHAB_LINE = "Thu, Oct 1 · 12:00–5:00 PM CT";
 const RISHAB_APPLY_HREF = "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply";
+
+/**
+ * A synthetic mentor with one date-only window (the date is set, the time isn't), so the
+ * "Exact time to be confirmed" path stays covered now that every real mentor with a date has a time.
+ * Shaped like a real content entry: the window carries the same label and kind of note content uses.
+ */
+const TBA_WINDOW_ID = "fixture-tba-2026-10-01";
+const TBA_WINDOW_NOTE = "Sam has time on Thursday, October 1. We’ll share the exact time once it’s set, and you can apply now.";
+const TBA_LINE = "Thu, Oct 1 · Exact time to be confirmed";
+const TBA_APPLY_HREF = "/office-hours?mentor=fixture-tba-mentor&window=fixture-tba-2026-10-01#apply";
+const tbaMentor: Mentor = {
+  id: "fixture-tba-mentor",
+  name: "Sam Fixture",
+  firstName: "Sam",
+  role: "Founder",
+  company: "Fixture Co",
+  headshot: null,
+  bio: { status: "approved", value: "Sam is a fictional founder used only in tests. Nothing here is real." },
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+  availability: [
+    {
+      id: TBA_WINDOW_ID,
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      label: "Exact time to be confirmed",
+      note: TBA_WINDOW_NOTE,
+    },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [],
+};
 
 /**
  * Words that only exist in organizer notes / unapproved drafts for the production mentors.
@@ -231,17 +272,26 @@ describe("public mentor data (content loader, default env)", () => {
     expect(publicRishab.bio).toMatchObject({ status: "approved", value: RISHAB_BIO });
     expect(sentences(publicRishab.bio!.value)).toHaveLength(2);
     expect(publicRishab.goodFitFor).toMatchObject({ status: "approved", value: [RISHAB_GOOD_FIT] });
-    // One date-only window on Thu, Oct 1; nothing on Fri, Oct 2.
+    // One exact window on Thu, Oct 1, noon to 5 PM (id kept from the date-only days); nothing on Fri, Oct 2.
     expect(publicRishab.availability).toEqual([
       {
         id: RISHAB_WINDOW_ID,
         date: "2026-10-01",
-        time: { kind: "tba" },
-        label: "Exact time to be confirmed",
+        time: { kind: "exact", start: "12:00", end: "17:00" },
         note: RISHAB_WINDOW_NOTE,
       },
     ]);
+    // No display override: the time itself is the label now.
+    expect(publicRishab.availability[0]).not.toHaveProperty("label");
     expect(publicRishab.availability.map((w) => w.date)).not.toContain("2026-10-02");
+    expect(publicRishab.session).toEqual({
+      format: null,
+      durationMinutes: null,
+      location: null,
+      sessionCount: null,
+      confirmed: false,
+      note: RISHAB_SESSION_NOTE,
+    });
     // Nothing to show under "Can help with".
     expect(visibleExpertise(publicRishab)).toBeNull();
     expect(helpLabels(publicRishab)).toEqual([]);
@@ -477,10 +527,10 @@ describe("Founders Week appearances", () => {
       },
     ]);
     expect(appearanceShortLabel(views[0])).toBe("Speaking Fri, Oct 2 · 1:20 PM");
-    // His office hours are a calendar entry of their own (Thu, Oct 1, time to be announced), never an appearance.
+    // His office hours are a calendar entry of their own (Thu, Oct 1, noon to 5 PM), never an appearance.
     const officeHours = entries.filter((e) => e.kind === "office-hours" && e.title === "Office hours with Rishab Veldur");
-    expect(officeHours.map((e) => [e.id, e.date, e.time.kind])).toEqual([
-      [officeHoursEntryId({ id: RISHAB_WINDOW_ID }), "2026-10-01", "tba"],
+    expect(officeHours.map((e) => [e.id, e.date, e.time])).toEqual([
+      [officeHoursEntryId({ id: RISHAB_WINDOW_ID }), "2026-10-01", { kind: "exact", start: "12:00", end: "17:00" }],
     ]);
     expect(officeHours[0].registration).toEqual({ url: RISHAB_APPLY_HREF, label: "Apply to meet Rishab", internal: true });
     expect(views.map((v) => v.href)).not.toContain(`/schedule/${officeHours[0].id}`);
@@ -517,7 +567,8 @@ describe("availability", () => {
   it("distinguishes exact windows from rough and date-only ones", () => {
     expect(windowKind(patrick.availability[0])).toBe("window");
     expect(windowKind(arnav.availability[0])).toBe("window-approx");
-    expect(windowKind(rishab.availability[0])).toBe("window-approx");
+    expect(windowKind(rishab.availability[0])).toBe("window");
+    expect(windowKind(tbaMentor.availability[0])).toBe("window-approx");
 
     const p = availabilityView(patrick);
     expect(p.status).toBe("available");
@@ -534,18 +585,18 @@ describe("availability", () => {
     });
   });
 
-  it("shows Rishab's one date-only window on Thu, Oct 1 as available, with no slots", () => {
+  it("shows Rishab's one window on Thu, Oct 1, noon to 5 PM CT, as an availability window with no slots", () => {
     expect(availabilityView(rishab)).toEqual({
       status: "available",
       windows: [
         {
           id: RISHAB_WINDOW_ID,
-          kind: "window-approx",
+          kind: "window",
           date: "2026-10-01",
           dateShort: "Thu, Oct 1",
           dateLong: "Thursday, October 1",
-          timeLabel: "Exact time to be confirmed",
-          label: "Exact time to be confirmed",
+          timeLabel: RISHAB_TIME,
+          label: null,
           note: RISHAB_WINDOW_NOTE,
           slots: [],
         },
@@ -555,6 +606,45 @@ describe("availability", () => {
     expect(availabilityItems(availabilityView(rishab))).toEqual([
       {
         key: `window:${RISHAB_WINDOW_ID}`,
+        kind: "window",
+        date: "2026-10-01",
+        dateShort: "Thu, Oct 1",
+        timeLabel: RISHAB_TIME,
+        dateTime: "2026-10-01",
+        capacity: null,
+      },
+    ]);
+    expect(availabilityHeadline(rishab)).toEqual({
+      kind: "window",
+      label: "Availability window",
+      date: "Thu, Oct 1",
+      dateTime: "2026-10-01",
+      time: RISHAB_TIME,
+      more: 0,
+    });
+  });
+
+  it("shows a date-only window (fixture mentor) as available with the exact time to be confirmed, and no slots", () => {
+    expect(availabilityView(tbaMentor)).toEqual({
+      status: "available",
+      windows: [
+        {
+          id: TBA_WINDOW_ID,
+          kind: "window-approx",
+          date: "2026-10-01",
+          dateShort: "Thu, Oct 1",
+          dateLong: "Thursday, October 1",
+          timeLabel: "Exact time to be confirmed",
+          label: "Exact time to be confirmed",
+          note: TBA_WINDOW_NOTE,
+          slots: [],
+        },
+      ],
+      slotCount: 0,
+    });
+    expect(availabilityItems(availabilityView(tbaMentor))).toEqual([
+      {
+        key: `window:${TBA_WINDOW_ID}`,
         kind: "window-approx",
         date: "2026-10-01",
         dateShort: "Thu, Oct 1",
@@ -563,7 +653,7 @@ describe("availability", () => {
         capacity: null,
       },
     ]);
-    expect(availabilityHeadline(rishab)).toEqual({
+    expect(availabilityHeadline(tbaMentor)).toEqual({
       kind: "window-approx",
       label: "Exact times TBA",
       date: "Thu, Oct 1",
@@ -604,7 +694,8 @@ describe("availability", () => {
     expect(strongestAvailabilityKind(availabilityView(jordan))).toBe("proposed");
     expect(strongestAvailabilityKind(availabilityView(patrick))).toBe("window");
     expect(strongestAvailabilityKind(availabilityView(arnav))).toBe("window-approx");
-    expect(strongestAvailabilityKind(availabilityView(rishab))).toBe("window-approx");
+    expect(strongestAvailabilityKind(availabilityView(rishab))).toBe("window");
+    expect(strongestAvailabilityKind(availabilityView(tbaMentor))).toBe("window-approx");
     expect(strongestAvailabilityKind(availabilityView(ron))).toBe("in-progress");
     expect(strongestAvailabilityKind(availabilityView(vik))).toBe("in-progress");
     expect(strongestAvailabilityKind(availabilityView(elliott))).toBe("in-progress");
@@ -613,7 +704,8 @@ describe("availability", () => {
   it("builds plain one-liners and card headlines", () => {
     expect(availabilityOneLiner(availabilityView(patrick))).toBe("Thu, Oct 1 · 10:00–11:30 AM CT");
     expect(availabilityOneLiner(availabilityView(ron))).toBe("Scheduling in progress");
-    expect(availabilityOneLiner(availabilityView(rishab))).toBe("Thu, Oct 1 · Exact time to be confirmed");
+    expect(availabilityOneLiner(availabilityView(rishab))).toBe(RISHAB_LINE);
+    expect(availabilityOneLiner(availabilityView(tbaMentor))).toBe(TBA_LINE);
     expect(availabilityHeadline(patrick)).toEqual({
       kind: "window",
       label: "Availability window",
@@ -631,21 +723,44 @@ describe("availability", () => {
   });
 });
 
+describe("availabilityLines for Rishab's exact window", () => {
+  it("reads Rishab's window like Patrick's: 'Thu, Oct 1 · 12:00–5:00 PM CT'", () => {
+    const line = {
+      pending: false,
+      date: "Thu, Oct 1",
+      dateTime: "2026-10-01",
+      detail: RISHAB_TIME,
+      text: RISHAB_LINE,
+    };
+    expect(availabilityLines(rishab)).toEqual([line]);
+    expect(availabilityLine(rishab)).toEqual({ ...line, more: 0 });
+    // Same shape as Patrick's exact window, just a different time.
+    expect(availabilityLines(patrick)).toEqual([{ ...line, detail: "10:00–11:30 AM CT", text: "Thu, Oct 1 · 10:00–11:30 AM CT" }]);
+    // No date-only or retired wording, and his only office-hours day is Thursday.
+    const all = JSON.stringify([availabilityLines(rishab), availabilityLine(rishab)]);
+    expect(all).not.toMatch(/Exact time to be confirmed|Time to be announced|Time TBA|to be confirmed/i);
+    expect(all).not.toMatch(/Oct 2|Fri/);
+  });
+});
+
 describe("availabilityLines for date-only (tba) windows", () => {
-  it("reads Rishab's window as 'Thu, Oct 1 · Exact time to be confirmed'", () => {
+  it("reads a date-only window (fixture mentor) as 'Thu, Oct 1 · Exact time to be confirmed'", () => {
     const line = {
       pending: false,
       date: "Thu, Oct 1",
       dateTime: "2026-10-01",
       detail: "Exact time to be confirmed",
-      text: "Thu, Oct 1 · Exact time to be confirmed",
+      text: TBA_LINE,
     };
-    expect(availabilityLines(rishab)).toEqual([line]);
-    expect(availabilityLine(rishab)).toEqual({ ...line, more: 0 });
-    // The retired wording is gone, and his only office-hours day is Thursday.
-    const all = JSON.stringify([availabilityLines(rishab), availabilityLine(rishab)]);
+    expect(availabilityLines(tbaMentor)).toEqual([line]);
+    expect(availabilityLine(tbaMentor)).toEqual({ ...line, more: 0 });
+    // The retired wording is gone, and the fixture's only office-hours day is Thursday.
+    const all = JSON.stringify([availabilityLines(tbaMentor), availabilityLine(tbaMentor)]);
     expect(all).not.toMatch(/Time to be announced|Time TBA/);
     expect(all).not.toMatch(/Oct 2|Fri/);
+    // The line doesn't depend on the content label: an unlabeled date-only window reads the same.
+    const unlabeled = { availability: [{ id: "t-unlabeled", date: "2026-10-01", time: { kind: "tba" as const } }], slots: [] };
+    expect(availabilityLines(unlabeled)).toEqual([line]);
   });
 
   it("says 'Exact time to be confirmed' for every date-only window and sorts it after timed windows that day", () => {
@@ -712,7 +827,12 @@ describe("calls to action", () => {
     expect(preselectedOption(rishab)).toEqual({
       kind: "window",
       id: RISHAB_WINDOW_ID,
-      label: "Thu, Oct 1 · Exact time to be confirmed",
+      label: RISHAB_LINE,
+    });
+    expect(preselectedOption(tbaMentor)).toEqual({
+      kind: "window",
+      id: TBA_WINDOW_ID,
+      label: TBA_LINE,
     });
     expect(preselectedOption(jordan)).toMatchObject({ kind: "slot", id: "demo-jordan-slot-1500" });
     expect(preselectedOption(avery)).toBeNull(); // two slots: let the student choose
@@ -740,22 +860,70 @@ describe("calls to action", () => {
     expect(mentorCta(jordan).href).toBe("/office-hours?mentor=demo-jordan-placeholder&slot=demo-jordan-slot-1500#apply");
   });
 
-  it("gives Rishab 'Apply to meet Rishab' with his Thursday window (his date is published)", () => {
+  it("gives Rishab 'Apply to meet Rishab' with his Thursday noon–5 PM window preselected", () => {
     expect(mentorCta(rishab)).toEqual({
       kind: "apply",
       label: "Apply to meet Rishab",
       href: RISHAB_APPLY_HREF,
-      preselects: "Thu, Oct 1 · Exact time to be confirmed",
+      preselects: RISHAB_LINE,
     });
     expect(mentorAction(rishab, { applicationsOpen: true })).toEqual({ open: true, href: RISHAB_APPLY_HREF });
     expect(applyToMeetLabel(rishab)).toBe("Apply to meet Rishab");
-    // In the application his only option is date-only, so students still say when they're free.
+    // In the application his only option is an exact window, like Patrick's: its time is known, so
+    // ticking it is enough and students don't also have to describe when they're free.
     const [catalogRishab] = buildApplicationCatalog([rishab]).mentors;
     expect(catalogRishab).toMatchObject({ id: "rishab-veldur", scheduling: "available" });
-    expect(catalogRishab.options.map((o) => [o.key, o.label, o.timeKnown])).toEqual([
-      [`window:${RISHAB_WINDOW_ID}`, "Thu, Oct 1 · Exact time to be confirmed", false],
+    expect(catalogRishab.options).toEqual([
+      {
+        key: `window:${RISHAB_WINDOW_ID}`,
+        kind: "window",
+        id: RISHAB_WINDOW_ID,
+        mentorId: "rishab-veldur",
+        certainty: "window",
+        date: "2026-10-01",
+        label: RISHAB_LINE,
+        detail: "Availability window. Exact appointment times aren’t set yet.",
+        timeKnown: true,
+      },
     ]);
-    expect(mentorNeedsBroadAvailability(catalogRishab)).toBe(true);
+    expect(mentorNeedsBroadAvailability(catalogRishab)).toBe(false);
+    // Only the mentors with no windows yet still need a student's broad availability.
+    expect(buildApplicationCatalog(productionMentors).mentors.filter(mentorNeedsBroadAvailability).map((m) => m.id)).toEqual([
+      "vikram-lakhwara",
+      "elliott-notrica",
+      "ron-lewis",
+    ]);
+  });
+
+  it("keeps the date-only path for a mentor whose time isn't set (fixture mentor)", () => {
+    expect(mentorCta(tbaMentor)).toEqual({
+      kind: "apply",
+      label: "Apply to meet Sam",
+      href: TBA_APPLY_HREF,
+      preselects: TBA_LINE,
+    });
+    expect(mentorAction(tbaMentor, { applicationsOpen: true })).toEqual({ open: true, href: TBA_APPLY_HREF });
+    // In the application the only option is date-only, so students still say when they're free.
+    const [catalogTba] = buildApplicationCatalog([tbaMentor]).mentors;
+    expect(catalogTba).toMatchObject({ id: "fixture-tba-mentor", scheduling: "available" });
+    expect(catalogTba.options.map((o) => [o.key, o.label, o.timeKnown])).toEqual([
+      [`window:${TBA_WINDOW_ID}`, TBA_LINE, false],
+    ]);
+    expect(mentorNeedsBroadAvailability(catalogTba)).toBe(true);
+    // One exact window among date-only ones is enough to drop the requirement.
+    const mixed: Mentor = {
+      ...tbaMentor,
+      availability: [
+        ...tbaMentor.availability,
+        { id: "fixture-tba-2026-10-02-pm", date: "2026-10-02", time: { kind: "exact", start: "13:00", end: "14:00" } },
+      ],
+    };
+    const [catalogMixed] = buildApplicationCatalog([mixed]).mentors;
+    expect(catalogMixed.options.map((o) => [o.key, o.timeKnown])).toEqual([
+      [`window:${TBA_WINDOW_ID}`, false],
+      ["window:fixture-tba-2026-10-02-pm", true],
+    ]);
+    expect(mentorNeedsBroadAvailability(catalogMixed)).toBe(false);
   });
 
   it("uses 'Express interest' without a time while scheduling is in progress", () => {
@@ -869,7 +1037,11 @@ describe("identity copy and links", () => {
       "Founders Office Hours with Elliott Notrica (Founder & CEO, Symbio Bioculinary) during Founders Week at UIUC. Scheduling is in progress, but you can apply now. Founders will follow up once availability is finalized.",
     );
     expect(mentorMetaDescription(rishab)).toBe(
-      "Founders Office Hours with Rishab Veldur (Co-Founder & CEO, Auvi Labs) during Founders Week at UIUC. Availability: Thu, Oct 1 · Exact time to be confirmed. Apply to request a time.",
+      "Founders Office Hours with Rishab Veldur (Co-Founder & CEO, Auvi Labs) during Founders Week at UIUC. Availability: Thu, Oct 1 · 12:00–5:00 PM CT. Apply to request a time.",
+    );
+    // A date-only window still says the exact time is to be confirmed.
+    expect(mentorMetaDescription(tbaMentor)).toBe(
+      "Founders Office Hours with Sam Fixture (Founder, Fixture Co) during Founders Week at UIUC. Availability: Thu, Oct 1 · Exact time to be confirmed. Apply to request a time.",
     );
   });
 });
@@ -917,10 +1089,18 @@ describe("Office Hours cards and profiles", () => {
       detail: "Morning, exact window pending",
       text: "Fri, Oct 2 · Morning, exact window pending",
     });
-    expect(availabilityLine(rishab)).toMatchObject({
+    expect(availabilityLine(rishab)).toEqual({
+      pending: false,
+      date: "Thu, Oct 1",
+      dateTime: "2026-10-01",
+      detail: RISHAB_TIME,
+      text: RISHAB_LINE,
+      more: 0,
+    });
+    expect(availabilityLine(tbaMentor)).toMatchObject({
       date: "Thu, Oct 1",
       detail: "Exact time to be confirmed",
-      text: "Thu, Oct 1 · Exact time to be confirmed",
+      text: TBA_LINE,
     });
     for (const m of [vik, elliott, ron]) {
       expect(availabilityLine(m)).toEqual({
@@ -946,6 +1126,7 @@ describe("Office Hours cards and profiles", () => {
     expect(availabilityNote(patrick)).toBe(patrick.availability[0].note);
     expect(availabilityNote(arnav)).toBe(arnav.availability[0].note);
     expect(availabilityNote(rishab)).toBe(RISHAB_WINDOW_NOTE);
+    expect(availabilityNote(tbaMentor)).toBe(TBA_WINDOW_NOTE);
     for (const m of [vik, elliott, ron]) expect(availabilityNote(m)).toBe("Founders will follow up once availability is finalized.");
     // Organizer notes never feed it.
     for (const m of productionMentors) expect(availabilityNote(m)).not.toBe(m.organizerNotes);
@@ -1020,12 +1201,36 @@ describe("Office Hours cards and profiles", () => {
         pending: false,
         date: "Thu, Oct 1",
         dateTime: "2026-10-01",
-        detail: "Exact time to be confirmed",
-        text: "Thu, Oct 1 · Exact time to be confirmed",
+        detail: RISHAB_TIME,
+        text: RISHAB_LINE,
         more: 0,
       },
       action: { open: true, href: RISHAB_APPLY_HREF },
       profileHref: "/office-hours/rishab-veldur",
+      demo: false,
+    });
+  });
+
+  it("builds a date-only mentor's card (fixture): the exact time to be confirmed, the window preselected", () => {
+    expect(mentorCardView(tbaMentor, { applicationsOpen: true })).toEqual({
+      id: "fixture-tba-mentor",
+      anchor: "mentor-fixture-tba-mentor",
+      name: "Sam Fixture",
+      role: "Founder",
+      company: "Fixture Co",
+      headshot: null,
+      help: [],
+      intro: "Sam is a fictional founder used only in tests.",
+      availability: {
+        pending: false,
+        date: "Thu, Oct 1",
+        dateTime: "2026-10-01",
+        detail: "Exact time to be confirmed",
+        text: TBA_LINE,
+        more: 0,
+      },
+      action: { open: true, href: TBA_APPLY_HREF },
+      profileHref: "/office-hours/fixture-tba-mentor",
       demo: false,
     });
   });

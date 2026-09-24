@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { demoMentors } from "@/content/demo";
 import { mentors } from "@/content/mentors";
+import type { Mentor } from "@/content/types";
 import {
   APPLICATION_CSV_COLUMNS,
   applicationCsvRow,
@@ -130,7 +131,7 @@ describe("application CSV rows", () => {
     expect(row[APPLICATION_CSV_COLUMNS.indexOf("appointments")]).toBe("");
   });
 
-  it("exports an application listing Rishab with his Oct 1 window (time to be confirmed)", () => {
+  it("exports an application listing Rishab with his Oct 1 window (12:00–5:00 PM)", () => {
     const rishabApp: ApplicationRecord = {
       ...app,
       status: "submitted",
@@ -162,7 +163,7 @@ describe("application CSV rows", () => {
     expect(cell("first_choice")).toBe("Rishab Veldur");
     expect(cell("preferred_mentors")).toBe("1. Rishab Veldur; 2. Patrick Haddox");
     expect(cell("availability")).toBe(
-      "Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window); Rishab Veldur: Thu, Oct 1 · Exact time to be confirmed (window)",
+      "Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window); Rishab Veldur: Thu, Oct 1 · 12:00–5:00 PM CT (window)",
     );
     expect(cell("availability_notes")).toBe("Thursday Oct 1: free before 11 AM and after 3 PM.");
     expect(cell("appointments")).toBe("");
@@ -171,10 +172,59 @@ describe("application CSV rows", () => {
     const csv = applicationsToCsv([rishabApp], directory);
     expect(csv.split("\r\n")).toHaveLength(3); // header, one row, trailing newline
     expect(csv).toContain(
-      '"Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window); Rishab Veldur: Thu, Oct 1 · Exact time to be confirmed (window)"',
+      '"Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window); Rishab Veldur: Thu, Oct 1 · 12:00–5:00 PM CT (window)"',
     );
     expect(csv).toContain(",Rishab Veldur,1. Rishab Veldur; 2. Patrick Haddox,");
-    expect(csv).not.toMatch(/Oct 2|no longer listed|Time TBA/);
+    expect(csv).not.toMatch(/Oct 2|no longer listed|Time TBA|Exact time to be confirmed/);
+  });
+
+  it("exports a date-only window (fixture mentor: date set, time not) with its date-only label", () => {
+    const dateOnlyMentor: Mentor = {
+      id: "fixture-date-only",
+      name: "Dana Fixture",
+      firstName: "Dana",
+      role: null,
+      company: null,
+      headshot: null,
+      bio: null,
+      expertise: null,
+      askMeAbout: null,
+      goodFitFor: null,
+      session: { format: null, durationMinutes: null, location: null, sessionCount: null, confirmed: false },
+      availability: [
+        { id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+      ],
+      slots: [],
+      links: [],
+      acceptingApplications: true,
+      sources: [],
+    };
+    const withDateOnly = buildOrganizerDirectory([...mentors, dateOnlyMentor]);
+    const row = applicationCsvRow(
+      {
+        ...app,
+        availabilityNotes: "Thu Oct 1 after 2 PM",
+        firstChoiceMentorId: "fixture-date-only",
+        mentors: [
+          { mentorId: "fixture-date-only", rank: 1 },
+          { mentorId: "rishab-veldur", rank: 2 },
+        ],
+        availability: [
+          { mentorId: "fixture-date-only", kind: "window", optionId: "fixture-date-only-2026-10-01" },
+          { mentorId: "rishab-veldur", kind: "window", optionId: "rishab-veldur-2026-10-01" },
+        ],
+        appointments: [],
+      },
+      withDateOnly,
+    );
+    const cell = (column: (typeof APPLICATION_CSV_COLUMNS)[number]) => row[APPLICATION_CSV_COLUMNS.indexOf(column)];
+    expect(cell("first_choice")).toBe("Dana Fixture");
+    expect(cell("preferred_mentors")).toBe("1. Dana Fixture; 2. Rishab Veldur");
+    expect(cell("availability")).toBe(
+      "Dana Fixture: Thu, Oct 1 · Exact time to be confirmed (window); Rishab Veldur: Thu, Oct 1 · 12:00–5:00 PM CT (window)",
+    );
+    expect(cell("availability_notes")).toBe("Thu Oct 1 after 2 PM");
+    expect(cell("appointments")).toBe("");
   });
 
   it("still labels a Rishab window that disappeared from content instead of dropping it", () => {

@@ -5,6 +5,7 @@ import { demoEvents, demoMentors } from "@/content/demo";
 import { events } from "@/content/events";
 import { mentors } from "@/content/mentors";
 import { site } from "@/content/site";
+import type { Mentor } from "@/content/types";
 import { googleCalendarUrl } from "@/lib/calendar/google";
 import {
   buildIcsCalendar,
@@ -37,6 +38,39 @@ const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
 const rishabOfficeHours = byId(RISHAB_OH);
 const OFFICE_HOURS_REASON = "Office hours are by application. Selected students get their confirmed time by email.";
+
+/**
+ * A synthetic mentor whose only window is date-only (time still to be confirmed). No real mentor
+ * has one now that Rishab's Thursday window is set, but the code path stays for future mentors.
+ */
+const DATE_ONLY_MENTOR: Mentor = {
+  id: "fixture-date-only",
+  name: "Fixture Mentor",
+  firstName: "Fixture",
+  role: "Founder",
+  company: "Fixture Labs",
+  headshot: null,
+  bio: null,
+  expertise: null,
+  askMeAbout: null,
+  goodFitFor: null,
+  session: {
+    format: null,
+    durationMinutes: null,
+    location: null,
+    sessionCount: null,
+    confirmed: false,
+    note: "Fixture has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+  },
+  availability: [
+    { id: "fixture-date-only-2026-10-01", date: "2026-10-01", time: { kind: "tba" }, label: "Exact time to be confirmed" },
+  ],
+  slots: [],
+  links: [],
+  acceptingApplications: true,
+  sources: [{ label: "Test fixture" }],
+};
+const FIXTURE_OH = "office-hours-fixture-date-only-2026-10-01";
 
 /** Unfold RFC 5545 continuation lines. */
 const unfold = (ics: string) => ics.replace(/\r\n /g, "");
@@ -83,7 +117,7 @@ describe("calendar eligibility", () => {
     expect(byId("demo-canceled-session", withDemo).calendar.available).toBe(false);
   });
 
-  it("never exports office hours, including Rishab's date-only (time to be announced) window", () => {
+  it("never exports office hours: Rishab's exact noon–5 PM window, and a date-only window", () => {
     expect(production).toHaveLength(15);
     const officeHours = production.filter((e) => e.kind === "office-hours");
     expect(officeHours.map((e) => e.id)).toEqual([PATRICK_OH, RISHAB_OH, ARNAV_OH]);
@@ -91,18 +125,40 @@ describe("calendar eligibility", () => {
       expect(e.calendar, e.id).toEqual({ available: false, reason: OFFICE_HOURS_REASON });
       expect(googleCalendarUrl(e, SITE), e.id).toBeNull();
     }
+    // Rishab's window now has an exact interval, but it's an availability window, not a booking.
     expect(rishabOfficeHours).toMatchObject({
+      date: "2026-10-01",
+      time: { kind: "exact", start: "12:00", end: "17:00" },
+      status: "planned",
+      startsAt: "2026-10-01T17:00:00.000Z",
+      endsAt: "2026-10-01T22:00:00.000Z",
+    });
+    // Still no VEVENT for it.
+    const ics = buildIcsCalendar([rishabOfficeHours], { siteUrl: SITE, now: NOW });
+    expect(ics).not.toContain("BEGIN:VEVENT");
+    expect(ics).not.toContain(RISHAB_OH);
+    expect(ics).not.toContain("20261001T120000");
+    expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
+
+    // A date-only window (a future mentor's): no export, and no invented time on Oct 1.
+    const withDateOnly = buildScheduleEntries({ events, mentors: [...mentors, DATE_ONLY_MENTOR], site });
+    const dateOnly = byId(FIXTURE_OH, withDateOnly);
+    expect(dateOnly).toMatchObject({
       date: "2026-10-01",
       time: { kind: "tba" },
       status: "planned",
       startsAt: null,
       endsAt: null,
+      calendar: { available: false, reason: OFFICE_HOURS_REASON },
     });
-    // No VEVENT for it, and no invented time on Oct 1.
-    const ics = buildIcsCalendar([rishabOfficeHours], { siteUrl: SITE, now: NOW });
-    expect(ics).not.toContain("BEGIN:VEVENT");
-    expect(ics).not.toContain(RISHAB_OH);
-    expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
+    expect(googleCalendarUrl(dateOnly, SITE)).toBeNull();
+    const dateOnlyIcs = buildIcsCalendar([dateOnly], { siteUrl: SITE, now: NOW });
+    expect(dateOnlyIcs).not.toContain("BEGIN:VEVENT");
+    expect(dateOnlyIcs).not.toContain(FIXTURE_OH);
+    // Adding it changes nothing in the all-events feed.
+    expect(vevents(buildIcsCalendar(withDateOnly, { siteUrl: SITE, now: NOW }))).toEqual(
+      vevents(buildIcsCalendar(production, { siteUrl: SITE, now: NOW })),
+    );
     // Office hours stay out even once a window is confirmed with exact times: selected students get
     // their time by email.
     expect(calendarAvailability("office-hours", "confirmed", { kind: "exact", start: "10:00", end: "11:00" })).toEqual({
@@ -242,7 +298,7 @@ describe("calendar.ics routes (public data)", () => {
     expect(body).toContain(`UID:${HAPPY_HOUR}@founders-week`);
     expectNoCanceledAfterparty(body);
     expect(body).toContain("SUMMARY:Founders Evening Showcase and Reception");
-    // Office hours (Rishab's date-only window included) never reach the feed.
+    // Office hours (Rishab's noon–5 PM window included) never reach the feed.
     expect(body).not.toContain("office-hours-");
     expect(body).not.toContain("SUMMARY:Office hours");
   });
@@ -303,6 +359,9 @@ describe("all-events feed", () => {
 
   it("leaves out forthcoming events, office hours and the removed afterparty", () => {
     expect(feed).not.toContain(`${RISHAB_OH}@`);
+    // Rishab's window is the only Oct 1 listing that starts at noon, and it stays out.
+    expect(unfold(feed)).not.toContain("DTSTART;TZID=America/Chicago:20261001T120000");
+    expect(unfold(feed)).not.toContain("SUMMARY:Office hours with Rishab Veldur");
     expect(feed).not.toContain("dan-caruso-fireside-chat@");
     expect(feed).not.toContain("tailgate-and-enterpriseworks-tour@");
     expect(feed).not.toContain("illinois-football-vs-purdue@");

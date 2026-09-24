@@ -9,7 +9,8 @@ import type { Mentor, SourceRef } from "./types";
  * - `askMeAbout`, `goodFitFor`: must come from the mentor or the organizers. Use `status: "draft"`
  *   until approved; drafts never render publicly. `goodFitFor` items may be full sentences.
  * - `backgroundTags`: short public tags about the mentor's background (not a list of promised topics).
- * - Windows with `time: { kind: "tba" }` mean the date is set but the time isn't (e.g. Rishab, Oct 1).
+ * - Windows with `time: { kind: "tba" }` mean the date is set but the time isn't: students who pick
+ *   that mentor must give broad availability, and the window reads "Exact time to be confirmed".
  * - `availability` windows are general availability, NOT bookings. Leave empty while scheduling is
  *   being coordinated: the mentor shows "Scheduling in progress" with an "Express interest" CTA.
  * - `organizerNotes` never render publicly (stripped by content/index.ts).
@@ -385,15 +386,15 @@ export const mentors: Mentor[] = [
       location: null,
       sessionCount: null,
       confirmed: false,
-      note: "Rishab has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+      note: "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.",
     },
     availability: [
       {
+        // Id kept from when only the date was known: applications store it.
         id: "rishab-veldur-2026-10-01",
         date: "2026-10-01",
-        time: { kind: "tba" },
-        label: "Exact time to be confirmed",
-        note: "Rishab has time on Thursday, October 1. We’ll share the exact time once it’s set, and you can apply now.",
+        time: { kind: "exact", start: "12:00", end: "17:00" },
+        note: "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.",
       },
     ],
     slots: [],
@@ -403,11 +404,11 @@ export const mentors: Mentor[] = [
     ],
     acceptingApplications: true,
     organizerNotes:
-      "From his email to the organizers: he’s at Founders Week on Oct 1 and 2, but only has time for office hours on Thu Oct 1, and he’d like to meet student teams (a preference, not an eligibility rule; individuals can apply). Exact time, length, location and capacity aren’t confirmed. Also on the Showcase panel “Health Innovation: From Therapeutics to Devices”, Fri Oct 2, 1:20–1:55 PM (not office hours). Keep the phone number from his email signature off the site.",
+      "From his email to the organizers: he’s at Founders Week on Oct 1 and 2, but only has time for office hours on Thu Oct 1, and he’d like to meet student teams (a preference, not an eligibility rule; individuals can apply). Window locked for Thu Oct 1, anytime 12–5 PM (organizer update, Sept 24). Session length, location and capacity aren’t confirmed. Also on the Showcase panel “Health Innovation: From Therapeutics to Devices”, Fri Oct 2, 1:20–1:55 PM (not office hours). Keep the phone number from his email signature off the site.",
     sources: [
       {
         label: "Founders organizer update: Rishab Veldur profile and his email about availability",
-        note: "Role, company, links, bio, background tags and suggested fit supplied by Founders organizers; Oct 1 office-hours availability from his email to them.",
+        note: "Role, company, links, bio, background tags and suggested fit supplied by Founders organizers; Oct 1 office-hours availability from his email to them; the 12–5 PM window confirmed by the organizers on Sept 24.",
         checked: "2026-09-24",
       },
       AGENDA,
