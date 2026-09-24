@@ -70,9 +70,9 @@ export async function getSubmissionState(now: Date = new Date()): Promise<Submis
   if (!getAppSecret()) {
     return closed(
       "not-configured",
-      "Online applications aren’t available yet",
-      "Submissions are turned off until this site’s secure storage is configured. Please check back soon.",
-      "Set APP_SECRET (≥ 32 random characters). See README → Configuration.",
+      "Applications open soon",
+      "The office-hours application is still being set up. Please check back shortly.",
+      "APP_SECRET is missing or shorter than 32 characters. Add it in Vercel → Production, then redeploy. /api/health shows every setting.",
     );
   }
   const persistence = await getPersistenceStatus();
@@ -80,11 +80,11 @@ export async function getSubmissionState(now: Date = new Date()): Promise<Submis
     const notConfigured = persistence.reason === "not-configured";
     return closed(
       notConfigured ? "not-configured" : "database-unavailable",
-      notConfigured ? "Online applications aren’t available yet" : "Applications are temporarily unavailable",
+      notConfigured ? "Applications open soon" : "Applications are temporarily unavailable",
       notConfigured
-        ? "Submissions are turned off until this site’s application database is configured. Please check back soon."
+        ? "The office-hours application is still being set up. Please check back shortly."
         : "We can’t save applications right now. Please try again in a little while.",
-      `${persistence.detail} See README → Database.`,
+      `${persistence.detail} See README → Database setup, or /api/health.`,
     );
   }
   return { open: true, deadline };

@@ -45,12 +45,38 @@ export type DatabaseConfig =
   | { ok: true; kind: "pglite"; dataDir: string; schema: string | null }
   | { ok: false; reason: "not-configured" | "misconfigured"; detail: string };
 
+const TOOLING_PREFIX = /^(TEST|E2E|MIGRATION)_/;
+
 /**
- * Connection string: DATABASE_URL, or POSTGRES_URL (set automatically by Vercel's storage
- * integrations for Neon and Supabase).
+ * Finds the connection string. Checks DATABASE_URL, then POSTGRES_URL, then the same names with
+ * a custom prefix — Vercel's Neon/Supabase integrations let you prefix their variables
+ * (e.g. STORAGE_DATABASE_URL). Pooled URLs are preferred; *_UNPOOLED / *_NON_POOLING never match.
  */
+export function findDatabaseUrl(env: Record<string, string | undefined> = process.env): { name: string; url: string } | null {
+  for (const name of ["DATABASE_URL", "POSTGRES_URL"]) {
+    const value = env[name]?.trim();
+    if (value) return { name, url: value };
+  }
+  const prefixed = Object.keys(env)
+    .filter((k) => /^[A-Z0-9_]+_(DATABASE_URL|POSTGRES_URL)$/.test(k) && !TOOLING_PREFIX.test(k))
+    .sort((a, b) => Number(!a.endsWith("DATABASE_URL")) - Number(!b.endsWith("DATABASE_URL")) || a.localeCompare(b));
+  for (const name of prefixed) {
+    const value = env[name]?.trim();
+    if (value && /^postgres(ql)?:\/\//.test(value)) return { name, url: value };
+  }
+  return null;
+}
+
+/** Names (never values) of variables that look like database settings — for diagnostics. */
+export function databaseEnvNames(env: Record<string, string | undefined> = process.env): string[] {
+  return Object.keys(env)
+    .filter((k) => /(DATABASE|POSTGRES)/.test(k) && /_URL/.test(k) && !TOOLING_PREFIX.test(k) && env[k]?.trim())
+    .sort();
+}
+
 export function getDatabaseConfig(env: Record<string, string | undefined> = process.env): DatabaseConfig {
-  const url = env.DATABASE_URL?.trim() || env.POSTGRES_URL?.trim();
+  const found = findDatabaseUrl(env);
+  const url = found?.url;
   if (!url) return { ok: false, reason: "not-configured", detail: "DATABASE_URL (or POSTGRES_URL) is not set." };
   let schema: string | null;
   try {

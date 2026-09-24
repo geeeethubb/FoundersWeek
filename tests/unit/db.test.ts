@@ -121,3 +121,18 @@ describe("database", () => {
     await expect(appt()).resolves.toBeDefined();
   });
 });
+
+describe("database env detection (Vercel integrations)", () => {
+  it("finds prefixed Neon/Supabase variables and ignores tooling and unpooled ones", async () => {
+    const { findDatabaseUrl, databaseEnvNames } = await import("@/lib/db/client");
+    expect(findDatabaseUrl({ STORAGE_DATABASE_URL: "postgresql://a/b", STORAGE_DATABASE_URL_UNPOOLED: "postgresql://c/d" })).toEqual({
+      name: "STORAGE_DATABASE_URL",
+      url: "postgresql://a/b",
+    });
+    expect(findDatabaseUrl({ NEON_POSTGRES_URL: "postgres://x/y" })?.name).toBe("NEON_POSTGRES_URL");
+    expect(findDatabaseUrl({ DATABASE_URL: "postgres://main/db", STORAGE_DATABASE_URL: "postgres://other/db" })?.name).toBe("DATABASE_URL");
+    expect(findDatabaseUrl({ TEST_POSTGRES_URL: "postgres://t/t", E2E_DATABASE_URL: "postgres://e/e" })).toBeNull();
+    expect(findDatabaseUrl({ STORAGE_DATABASE_URL: "not-a-url" })).toBeNull();
+    expect(databaseEnvNames({ STORAGE_DATABASE_URL: "postgres://secret@host/db", OTHER: "x" })).toEqual(["STORAGE_DATABASE_URL"]);
+  });
+});
