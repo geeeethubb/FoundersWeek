@@ -1,8 +1,7 @@
 /**
- * AgendaPreview — a compact, hairline-divided list of schedule entries for the home page and
- * "also on this day" lists. Each row: date/time, title (the row's single link, stretched over the
- * row), badges and a one-line meta ("Panel · 100 MSEB · …", "11 sessions" for program blocks).
- * Featured entries (Founders' priorities) get the orange certainty rule, as in the calendar.
+ * AgendaPreview — a compact, hairline-divided list of schedule entries for the home page and the
+ * event page's "Also on this day". Each row: (date and) time, title (the row's single link,
+ * stretched over the row), place, and labels.
  *
  * Props
  * - `entries`: ScheduleEntry[] to show, in the order given (pass them chronologically; slice
@@ -16,14 +15,12 @@
  * link to the event page (office-hours rows reach the application from there).
  */
 import Link from "next/link";
-import { ArrowRightIcon } from "@/components/ui/icons";
-import { EVENT_TYPE_LABELS, mentorAffiliation, type ScheduleEntry } from "@/lib/schedule/entries";
-import { dayLabels, entryCertainty, entryStartText, locationSummary } from "@/lib/schedule/format";
+import { mentorAffiliation, type ScheduleEntry } from "@/lib/schedule/entries";
+import { dayLabels, entryStartText, locationSummary } from "@/lib/schedule/format";
 import { sessionCountLabel } from "@/lib/schedule/program";
 import { eventHref } from "@/lib/schedule/url";
 import { cn } from "@/lib/cn";
 import { EntryBadges } from "./entry-badges";
-import { CERTAINTY_BORDER, isFeatured } from "./time-gutter";
 
 export interface AgendaPreviewProps {
   entries: ScheduleEntry[];
@@ -37,15 +34,11 @@ export function AgendaPreview({
   entries,
   showDate = true,
   headingLevel: Heading = "h3",
-  emptyMessage = "Nothing is listed yet — events appear here as they’re confirmed.",
+  emptyMessage = "Nothing’s listed yet. Events show up here once they’re confirmed.",
   className,
 }: AgendaPreviewProps) {
   if (!entries.length) {
-    return (
-      <p className={cn("border-y border-dotted border-line-strong py-6 text-sm text-paper-muted", className)}>
-        {emptyMessage}
-      </p>
-    );
+    return <p className={cn("border-y border-line py-6 text-sm text-text-muted", className)}>{emptyMessage}</p>;
   }
 
   return (
@@ -54,10 +47,8 @@ export function AgendaPreview({
         const day = dayLabels(entry.date);
         const time = entryStartText(entry);
         const canceled = entry.status === "canceled";
-        const featured = isFeatured(entry);
-        const who = entry.kind === "office-hours" ? (entry.mentor ? mentorAffiliation(entry.mentor) : null) : entry.organizer;
+        const who = entry.kind === "office-hours" && entry.mentor ? mentorAffiliation(entry.mentor) : null;
         const meta = [
-          entry.types.map((t) => EVENT_TYPE_LABELS[t]).join(" · "),
           locationSummary(entry.location),
           entry.sessions.length ? sessionCountLabel(entry.sessions.length) : null,
           who,
@@ -65,64 +56,42 @@ export function AgendaPreview({
 
         return (
           <li key={entry.id}>
-            <article
-              className={cn(
-                "group relative grid gap-x-6 gap-y-2 py-5 sm:grid-cols-[7.5rem_minmax(0,1fr)_auto]",
-                "before:pointer-events-none before:absolute before:inset-y-0 before:-left-3 before:-right-3 before:rounded-sm before:bg-paper/[0.025] before:opacity-0 before:transition-opacity before:duration-200 hover:before:opacity-100 focus-within:before:opacity-100",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex flex-wrap items-baseline gap-x-2 gap-y-1 border-l-2 pl-3 font-mono tabular sm:flex-col sm:gap-1",
-                  CERTAINTY_BORDER[entryCertainty(entry)],
-                  canceled ? "border-danger/55" : featured ? "border-accent" : "border-paper/35",
-                )}
-              >
+            <article className="group relative isolate grid gap-x-6 gap-y-1.5 py-5 sm:grid-cols-[7rem_minmax(0,1fr)]">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 -inset-x-3 -z-10 rounded-md bg-surface-subtle opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+              />
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm tabular sm:flex-col sm:gap-0.5">
                 {showDate ? (
-                  <span className="mono-label text-paper-subtle">
-                    <time dateTime={entry.date}>
-                      {day.weekday} {day.monthDay}
-                    </time>
-                  </span>
+                  <time dateTime={entry.date} className="font-medium text-text-subtle">
+                    {day.weekday} {day.monthDay}
+                  </time>
                 ) : null}
-                <span
-                  className={cn(
-                    "text-[0.9375rem] font-medium",
-                    canceled ? "text-paper-muted line-through" : "text-paper",
-                    !time.dateTime && "text-[0.8125rem] uppercase leading-snug tracking-[0.02em]",
-                  )}
-                >
+                <span className={cn("font-semibold", canceled ? "text-text-muted line-through" : "text-text")}>
                   {time.dateTime ? <time dateTime={`${entry.date}T${time.dateTime}`}>{time.text}</time> : time.text}
                 </span>
-              </div>
+              </p>
 
               <div className="min-w-0">
                 <Heading
                   className={cn(
-                    "font-wide text-[1.0625rem] font-semibold leading-snug tracking-[-0.015em]",
-                    canceled ? "text-paper-muted" : "text-paper",
+                    "text-[1.0625rem] font-semibold leading-snug tracking-tight",
+                    canceled ? "text-text-muted" : "text-text",
                   )}
                 >
                   <Link
                     href={eventHref(entry.id)}
                     className={cn(
                       "rounded-xs underline-offset-4 after:absolute after:inset-0 after:content-['']",
-                      canceled ? "line-through decoration-danger/60" : "group-hover:underline group-hover:decoration-paper/40",
+                      canceled ? "line-through decoration-danger/60" : "decoration-text-subtle group-hover:underline",
                     )}
                   >
                     {entry.title}
                   </Link>
                 </Heading>
-                <EntryBadges entry={entry} className="mt-2.5" />
-                <p className="mt-2 text-sm leading-snug text-paper-muted">{meta.join(" · ")}</p>
+                <p className="mt-1 text-sm leading-snug text-text-muted">{meta.join(" · ")}</p>
+                <EntryBadges entry={entry} showWeek={false} className="mt-2.5" />
               </div>
-
-              <span
-                aria-hidden
-                className="hidden size-8 items-center justify-center self-center rounded-sm border border-line text-paper-subtle transition-[color,border-color,transform] duration-200 group-hover:translate-x-0.5 group-hover:border-line-strong group-hover:text-paper sm:inline-flex"
-              >
-                <ArrowRightIcon className="size-3.5" />
-              </span>
             </article>
           </li>
         );

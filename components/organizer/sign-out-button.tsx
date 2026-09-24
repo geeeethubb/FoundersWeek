@@ -21,7 +21,7 @@ export function SignOutButton({ className }: { className?: string }) {
         }
       }}
       className={cn(
-        "inline-flex min-h-11 items-center rounded-xs px-2 text-sm text-paper-muted underline-offset-4 transition-colors duration-150 hover:text-paper hover:underline disabled:opacity-60 sm:min-h-8",
+        "inline-flex min-h-11 shrink-0 items-center rounded-xs px-2 text-sm font-medium text-text underline-offset-4 transition-colors duration-150 hover:underline disabled:opacity-60 sm:min-h-9",
         className,
       )}
     >

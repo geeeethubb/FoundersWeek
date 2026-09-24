@@ -6,13 +6,6 @@ import { site } from "@/content/site";
 import type { ScheduleEvent } from "@/content/types";
 import { buildScheduleEntries, eventToEntry, featuredEntries, scheduleDays } from "@/lib/schedule/entries";
 import {
-  featuredBand,
-  featuredDayMarks,
-  featuredEvents,
-  officeHoursMentorSummaries,
-  schedulingMentorNames,
-} from "@/lib/schedule/featured";
-import {
   agendaBlocks,
   dayCounts,
   entriesOverlap,
@@ -23,17 +16,18 @@ import {
   overlapsFor,
   relaxations,
   typeFacets,
-  viewCounts,
 } from "@/lib/schedule/filter";
 import {
+  agendaTime,
+  apMonthDay,
+  calendarIntro,
   dateRangeLabel,
-  entryCertainty,
+  entryStartText,
   entryTimeText,
-  entryWhenText,
-  gutterTime,
+  locationLines,
   locationSummary,
-  timeZoneNote,
 } from "@/lib/schedule/format";
+import { mentorHeadshots } from "@/lib/schedule/headshots";
 import { pendingMentorMatches, pendingMentors } from "@/lib/schedule/pending-mentors";
 import {
   defaultProgramOpen,
@@ -42,7 +36,6 @@ import {
   matchingSessionIndexes,
   mentorProfileHref,
   programMentors,
-  programTrack,
   sessionAnchorId,
   sessionCountLabel,
   sessionLineText,
@@ -80,6 +73,22 @@ const PANEL = "how-to-make-10k-a-month-in-college";
 const SHOWCASE = "founders-showcase-day-sessions";
 const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
 const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
+const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
+const HEALTH_PANEL = "Health Innovation: From Therapeutics to Devices";
+const HAPPY_HOUR = "happy-hour-at-legends-with-arnav-mishra";
+const FAILURE_LAB = "founder-failure-lab";
+const HAPPY_HOUR_TITLE = "Happy Hour with Arnav Mishra at Legends";
+const TECHRISE = "techrise-pitch-competition";
+
+/**
+ * The Founders Week Afterparty (Sat Oct 3, HERE Apartments) was canceled and must never appear.
+ * (Arnav's Wednesday happy hour at Legends is a separate, real event.)
+ */
+function expectNoCanceledAfterparty(s: string) {
+  expect(s).not.toMatch(/HERE Apartments/i);
+  expect(s).not.toContain("founders-week-afterparty");
+  expect(s).not.toMatch(/Founders Week Afterparty/i);
+}
 
 describe("production calendar", () => {
   it("lists the full week (Mon Sep 28 – Sat Oct 3) in chronological order", () => {
@@ -87,10 +96,15 @@ describe("production calendar", () => {
       DAN,
       PANEL,
       "founders-week-kickoff-reception",
+      // Arnav's happy hour starts as the kickoff reception ends (5:00 PM).
+      HAPPY_HOUR,
+      FAILURE_LAB,
       PATRICK_OH,
       "science-and-practice-of-pitching",
       "entrepreneurial-impact-launching-from-illinois",
       "techrise-pitch-competition",
+      // Rishab's Thursday office hours have no time yet, so they sort after Thursday's timed entries.
+      RISHAB_OH,
       ARNAV_OH,
       SHOWCASE,
       "founders-evening-showcase-and-reception",
@@ -98,39 +112,148 @@ describe("production calendar", () => {
       "tailgate-and-enterpriseworks-tour",
       "illinois-football-vs-purdue",
     ]);
+    expect(production).toHaveLength(15);
     const days = scheduleDays(production);
     expect(days).toEqual(["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"]);
     expect(dateRangeLabel(days[0], days[days.length - 1])).toBe("Mon Sep 28 – Sat Oct 3");
   });
 
   it("no longer lists the canceled afterparty, but keeps the university's Friday evening showcase", () => {
-    const text = JSON.stringify(production);
-    expect(text).not.toMatch(/afterparty/i);
-    expect(text).not.toMatch(/HERE Apartments/i);
+    expectNoCanceledAfterparty(JSON.stringify(production));
     expect(production.some((e) => e.id === "founders-week-afterparty")).toBe(false);
+    // No Saturday afterparty: Saturday is the tailgate and the game only.
+    expect(ids(production.filter((e) => e.date === "2026-10-03"))).toEqual([
+      "tailgate-and-enterpriseworks-tour",
+      "illinois-football-vs-purdue",
+    ]);
     const evening = byId("founders-evening-showcase-and-reception");
     expect(evening).toMatchObject({ date: "2026-10-02", status: "confirmed" });
+  });
+
+  it("lists Arnav's happy hour as a confirmed related pick with an external RSVP, exportable to calendars", () => {
+    expect(byId(HAPPY_HOUR)).toMatchObject({
+      kind: "event",
+      title: HAPPY_HOUR_TITLE,
+      date: "2026-09-30",
+      time: { kind: "exact", start: "17:00", end: "19:00" },
+      status: "confirmed",
+      types: ["social", "networking"],
+      involvement: "supported",
+      related: true,
+      foundersPick: true,
+      featuredRank: 4,
+      location: { kind: "in-person", venue: "Legends", address: "6th & Green" },
+      registration: { label: "RSVP on Partiful", url: "https://partiful.com/e/bUDJZTuCJyBqSeXAsfrN", internal: false },
+      calendar: { available: true },
+      mentor: null,
+      startsAt: "2026-09-30T22:00:00.000Z",
+      endsAt: "2026-10-01T00:00:00.000Z",
+    });
+    expect(byId(HAPPY_HOUR).speakers).toEqual([
+      expect.objectContaining({ name: "Arnav Mishra", role: "host", mentorId: "arnav-mishra" }),
+    ]);
   });
 
   it("only creates office-hours entries for mentors with published windows", () => {
     expect(production.filter((e) => e.kind === "office-hours").map((e) => e.mentor!.id)).toEqual([
       "patrick-haddox",
+      "rishab-veldur",
       "arnav-mishra",
     ]);
-    // Ron and Vik are "Scheduling in progress": no schedule entries, no invented windows.
-    expect(production.some((e) => e.mentor?.id === "ron-lewis" || e.mentor?.id === "vikram-lakhwara")).toBe(false);
+    // Vik, Elliott and Ron are "Scheduling in progress": no schedule entries, no invented windows.
+    for (const id of ["vikram-lakhwara", "elliott-notrica", "ron-lewis"]) {
+      expect(production.some((e) => e.mentor?.id === id)).toBe(false);
+    }
+  });
+
+  it("lists Rishab's office hours once, on Thu Oct 1, with the time to be announced", () => {
+    const mine = production.filter((e) => e.mentor?.id === "rishab-veldur");
+    expect(ids(mine)).toEqual([RISHAB_OH]);
+    // He only has time for office hours on Oct 1: nothing on Friday.
+    expect(production.filter((e) => e.date === "2026-10-02" && e.kind === "office-hours").map((e) => e.id)).toEqual([
+      ARNAV_OH,
+    ]);
+    expect(byId(RISHAB_OH)).toEqual({
+      id: RISHAB_OH,
+      kind: "office-hours",
+      title: "Office hours with Rishab Veldur",
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      timeLabel: "Exact time to be confirmed",
+      status: "planned",
+      statusNote:
+        "Rishab has time for office hours on Thursday, October 1. We’re still confirming the exact time, length and location.",
+      types: ["office-hours"],
+      involvement: "hosted",
+      foundersPick: true,
+      organizer: "Founders – Illinois Entrepreneurs",
+      location: { kind: "tba", note: "Location is shared with selected students once confirmed." },
+      summary: "By application. Meet Rishab of Auvi Labs during Founders Week. Appointments are limited.",
+      description: expect.any(String),
+      // No approved topic list: nothing is inferred from his background tags.
+      speakers: [],
+      topics: [],
+      registration: {
+        url: "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
+        label: "Apply to meet Rishab",
+        internal: true,
+      },
+      links: [],
+      sessions: [],
+      featuredRank: 1,
+      related: false,
+      callout: null,
+      sources: mentors.find((m) => m.id === "rishab-veldur")!.sources,
+      mentor: {
+        id: "rishab-veldur",
+        name: "Rishab Veldur",
+        firstName: "Rishab",
+        role: "Co-Founder & CEO",
+        company: "Auvi Labs",
+        windowId: "rishab-veldur-2026-10-01",
+      },
+      demo: false,
+      sortMinutes: 24 * 60,
+      startsAt: null,
+      endsAt: null,
+      calendar: {
+        available: false,
+        reason: "Office hours are by application. Selected students get their confirmed time by email.",
+      },
+    });
+    // Displayed and searchable text (sources are citations for organizers, not rendered).
+    const text = JSON.stringify({ ...byId(RISHAB_OH), sources: [] });
+    expect(text).not.toMatch(/October 2|Oct 2\b|Friday|student teams|phone/i);
+    expect(text).not.toMatch(/FDA|\bcleared\b|commercially available|clinically proven|one-on-one/i);
+  });
+
+  it("links Rishab on the Friday Showcase's Health Innovation session, not as office hours", () => {
+    const showcase = byId(SHOWCASE);
+    const session = showcase.sessions[6];
+    expect(session).toMatchObject({ start: "13:20", end: "13:55", title: HEALTH_PANEL });
+    expect(session.people).toContainEqual({ name: "Rishab Veldur", verified: true, mentorId: "rishab-veldur" });
+    expect(sessionPeopleText(session)).toBe("Marty Burke, Carol Curtis, Steve Boppart, Rishab Veldur and Rohit Bhargava");
+    expect(sessionLineText(session)).toBe(
+      "1:20–1:55 PM: Health Innovation: From Therapeutics to Devices (Marty Burke, Carol Curtis, Steve Boppart, Rishab Veldur and Rohit Bhargava)",
+    );
+    expect(sessionAnchorId(session)).toBe("session-1320");
   });
 
   it("never surfaces organizer-only notes or draft topics in searchable or displayed text", () => {
     const text = JSON.stringify(production);
     expect(text).not.toMatch(/Wednesday through Saturday/i);
     expect(text).not.toMatch(/commitments/i);
-    expect(text).not.toMatch(/Revenue strategy/i);
+    expect(text).not.toMatch(/Revenue strategy|Startup financial planning|Communicating business progress/i);
+    // Elliott's organizer note ("much more available… extra sessions") stays organizer-only too.
+    expect(text).not.toMatch(/much more available|extra sessions/i);
+    // So do Rishab's email details (Oct 2 attendance, preference for student teams, phone number).
+    expect(text).not.toMatch(/student teams|eligibility rule|phone number|Oct 1 and 2/i);
   });
 
   it("never offers an application or booking for anything but office hours (Dan Caruso included)", () => {
     for (const e of production.filter((x) => x.kind === "event")) {
       expect(e.registration?.internal ?? false).toBe(false);
+      expect(e.registration?.url ?? "").not.toMatch(/^\/|#apply|mentor=/);
     }
     const dan = byId(DAN);
     expect(dan.registration).toBeNull();
@@ -149,24 +272,42 @@ describe("search", () => {
 
   it("matches program sub-session titles and people", () => {
     expect(find("Isbell")).toEqual([SHOWCASE]);
-    expect(find("quantum")).toEqual([SHOWCASE]);
+    // Dan Caruso's bio mentions Caruso Ventures' quantum investments; Friday has a quantum session.
+    expect(find("quantum")).toEqual([DAN, SHOWCASE]);
     expect(find("Hannah")).toEqual(["science-and-practice-of-pitching"]);
-    expect(find("where are they now")).toEqual(["techrise-pitch-competition"]);
-    expect(find("Martinis")).toEqual(["science-and-practice-of-pitching", "techrise-pitch-competition", SHOWCASE]);
+    expect(find("where are they now")).toEqual([TECHRISE]);
+    expect(find("Martinis")).toEqual(["science-and-practice-of-pitching", TECHRISE, SHOWCASE]);
+    expect(find("Elliott Notrica")).toEqual([TECHRISE]);
   });
 
   it("matches speakers, mentors and companies across events and office hours", () => {
     expect(find("Kennedy")).toEqual([PANEL]);
-    expect(find("doss")).toEqual([ARNAV_OH, SHOWCASE]);
+    expect(find("doss")).toEqual([HAPPY_HOUR, ARNAV_OH, SHOWCASE]);
+    expect(find("arnav")).toEqual([HAPPY_HOUR, ARNAV_OH, SHOWCASE]);
     expect(find("aerospace")).toEqual([PATRICK_OH, SHOWCASE]);
     expect(find("caruso ventures")).toEqual([DAN]);
-    expect(find("100 MSEB")).toEqual([PANEL]);
+    expect(find("zayo")).toEqual([DAN]);
+    expect(find("room 1025")).toEqual([DAN]);
+    expect(find("beckman")).toEqual([DAN, "entrepreneurial-impact-launching-from-illinois"]);
+    expect(find("materials science")).toEqual([PANEL]);
+    expect(find("1304 W. Green")).toEqual([PANEL]);
+    expect(find("legends")).toEqual([HAPPY_HOUR]);
+    expect(find("6th green")).toEqual([HAPPY_HOUR]);
+    expect(find("happy hour")).toEqual([HAPPY_HOUR]);
+    // Rishab (and Auvi Labs): his Thursday office hours, and Friday's Showcase, whose blurb names him and Auvi Labs.
+    expect(find("rishab")).toEqual([RISHAB_OH, SHOWCASE]);
+    expect(find("Rishab Veldur")).toEqual([RISHAB_OH, SHOWCASE]);
+    expect(find("auvi")).toEqual([RISHAB_OH, SHOWCASE]);
+    expect(find("Auvi Labs")).toEqual([RISHAB_OH, SHOWCASE]);
+    expect(find("health innovation")).toEqual([SHOWCASE]);
+    expect(ids(filterEntries(production, f({ types: ["office-hours"], q: "rishab" })))).toEqual([RISHAB_OH]);
   });
 
-  it("returns nothing for unknown terms and for the removed afterparty", () => {
+  it("returns nothing for unknown terms or the canceled afterparty", () => {
     expect(find("zzz")).toEqual([]);
     expect(find("here apartments")).toEqual([]);
-    expect(find("afterparty")).toEqual([]);
+    expect(find("founders week afterparty")).toEqual([]);
+    expect(ids(filterEntries(production, f({ day: "2026-10-03", q: "party" })))).toEqual([]);
   });
 
   it("finds demo content and ignores unverified speakers", () => {
@@ -198,6 +339,8 @@ describe("search", () => {
     expect(showcase.sessions[3].title).toMatch(/^Fireside Chat with Chancellor Charles Isbell/);
     expect(matchingSessionIndexes(showcase, "quantum")).toEqual([2]);
     expect(matchingSessionIndexes(showcase, "Doss")).toEqual([7]);
+    expect(matchingSessionIndexes(showcase, "Rishab")).toEqual([6]);
+    expect(matchingSessionIndexes(showcase, "veldur health")).toEqual([6]);
     expect(matchingSessionIndexes(showcase, "charles isbell")).toEqual([3]);
     // Matched through the block's venue: no session is singled out (one title says "Illinois’").
     expect(matchingSessionIndexes(showcase, "Illinois Conference Center")).toEqual([]);
@@ -215,10 +358,32 @@ describe("filters and facets", () => {
       PATRICK_OH,
       "science-and-practice-of-pitching",
       "entrepreneurial-impact-launching-from-illinois",
-      "techrise-pitch-competition",
+      TECHRISE,
+      RISHAB_OH,
     ]);
-    expect(ids(filterEntries(production, f({ view: "picks" })))).toEqual([DAN, PANEL, PATRICK_OH, ARNAV_OH, SHOWCASE]);
-    expect(ids(filterEntries(production, f({ types: ["office-hours"] })))).toEqual([PATRICK_OH, ARNAV_OH]);
+    expect(ids(filterEntries(production, f({ day: "2026-09-30" })))).toEqual([
+      "founders-week-kickoff-reception",
+      HAPPY_HOUR,
+      FAILURE_LAB,
+    ]);
+    expect(ids(filterEntries(production, f({ view: "picks" })))).toEqual([
+      DAN,
+      PANEL,
+      HAPPY_HOUR,
+      FAILURE_LAB,
+      PATRICK_OH,
+      RISHAB_OH,
+      ARNAV_OH,
+      SHOWCASE,
+    ]);
+    expect(ids(filterEntries(production, f({ types: ["office-hours"] })))).toEqual([PATRICK_OH, RISHAB_OH, ARNAV_OH]);
+    expect(ids(filterEntries(production, f({ day: "2026-10-01", types: ["office-hours"] })))).toEqual([
+      PATRICK_OH,
+      RISHAB_OH,
+    ]);
+    expect(ids(filterEntries(production, f({ day: "2026-10-02", types: ["office-hours"] })))).toEqual([ARNAV_OH]);
+    expect(ids(filterEntries(production, f({ types: ["office-hours"], q: "Auvi" })))).toEqual([RISHAB_OH]);
+    expect(ids(filterEntries(production, f({ types: ["social"], view: "picks" })))).toEqual([HAPPY_HOUR]);
     expect(ids(filterEntries(production, f({ types: ["panel"], q: "Kennedy" })))).toEqual([PANEL]);
     expect(ids(filterEntries(production, f({ day: "2026-10-02", q: "Isbell" })))).toEqual([SHOWCASE]);
   });
@@ -227,27 +392,60 @@ describe("filters and facets", () => {
     const facets = typeFacets(production, f());
     // Office hours lead, then the core types, then the other types present in content.
     expect(facets.map((x) => [x.type, x.count])).toEqual([
-      ["office-hours", 2],
+      ["office-hours", 3],
       ["talk", 2],
-      ["panel", 6],
-      ["networking", 5],
+      ["panel", 7],
+      ["networking", 6],
       ["pitch", 2],
-      ["social", 4],
+      ["social", 5],
     ]);
 
     const panels = dayCounts(production, days, f({ types: ["panel"] }));
-    expect(panels.all).toBe(6);
+    expect(panels.all).toBe(7);
     expect(panels.byDay).toEqual({
       "2026-09-28": 0,
       "2026-09-29": 1,
-      "2026-09-30": 0,
+      "2026-09-30": 1,
       "2026-10-01": 3,
       "2026-10-02": 2,
       "2026-10-03": 0,
     });
 
-    expect(viewCounts(production, f())).toEqual({ all: 12, picks: 5 });
-    expect(viewCounts(production, f({ day: "2026-10-02" }))).toEqual({ all: 3, picks: 2 });
+    expect(filterEntries(production, f({ view: "picks" }))).toHaveLength(8);
+    expect(filterEntries(production, f({ day: "2026-09-30", view: "picks" }))).toHaveLength(2);
+    expect(filterEntries(production, f({ day: "2026-10-01", view: "picks" }))).toHaveLength(2);
+    expect(filterEntries(production, f({ day: "2026-10-02", view: "picks" }))).toHaveLength(2);
+    const all = dayCounts(production, days, f());
+    expect(all.all).toBe(15);
+    expect(all.byDay).toEqual({
+      "2026-09-28": 1,
+      "2026-09-29": 1,
+      "2026-09-30": 3,
+      "2026-10-01": 5,
+      "2026-10-02": 3,
+      "2026-10-03": 2,
+    });
+
+    const officeHours = dayCounts(production, days, f({ types: ["office-hours"] }));
+    expect(officeHours.all).toBe(3);
+    expect(officeHours.byDay).toEqual({
+      "2026-09-28": 0,
+      "2026-09-29": 0,
+      "2026-09-30": 0,
+      "2026-10-01": 2,
+      "2026-10-02": 1,
+      "2026-10-03": 0,
+    });
+
+    // Facet counts follow the other filters: Thursday has two office-hours windows (Patrick, Rishab).
+    expect(typeFacets(production, f({ day: "2026-10-01" })).map((x) => [x.type, x.count])).toEqual([
+      ["office-hours", 2],
+      ["talk", 0],
+      ["panel", 3],
+      ["networking", 2],
+      ["pitch", 1],
+      ["social", 0],
+    ]);
   });
 
   it("explains empty results with one-filter-at-a-time relaxations", () => {
@@ -255,23 +453,59 @@ describe("filters and facets", () => {
     expect(filterEntries(production, filters)).toHaveLength(0);
     const r = relaxations(production, filters);
     expect(r.map((x) => [x.dimension, x.count])).toEqual([
-      ["day", 6],
+      ["day", 7],
       ["types", 1],
     ]);
     const search = relaxations(production, f({ q: "zzz" }));
-    expect(search).toEqual([{ dimension: "q", count: 12, filters: f() }]);
+    expect(search).toEqual([{ dimension: "q", count: 15, filters: f() }]);
+    // No office hours on Saturday: clearing the day brings back all three windows.
+    const saturday = f({ day: "2026-10-03", types: ["office-hours"] });
+    expect(filterEntries(production, saturday)).toHaveLength(0);
+    expect(relaxations(production, saturday).map((x) => [x.dimension, x.count])).toEqual([
+      ["day", 3],
+      ["types", 2],
+    ]);
+    // Rishab only has Thursday office hours: a Friday search for him finds the Showcase alone.
+    expect(ids(filterEntries(production, f({ day: "2026-10-02", q: "rishab" })))).toEqual([SHOWCASE]);
+    const friday = f({ day: "2026-10-02", types: ["office-hours"], q: "rishab" });
+    expect(relaxations(production, friday).map((x) => [x.dimension, x.count])).toEqual([
+      ["day", 1],
+      ["types", 1],
+      ["q", 1],
+    ]);
   });
 });
 
 describe("overlaps", () => {
-  it("the production calendar has no clashing exact times", () => {
+  it("the production calendar's only clash is Wednesday evening: Arnav's happy hour and Failure Lab", () => {
     for (const group of groupByDay(production)) {
-      expect(agendaBlocks(group.entries).every((b) => b.kind === "single")).toBe(true);
+      const blocks = agendaBlocks(group.entries);
+      if (group.date === "2026-09-30") {
+        expect(blocks.filter((b) => b.kind !== "single")).toHaveLength(1);
+      } else {
+        expect(blocks.every((b) => b.kind === "single")).toBe(true);
+      }
     }
+    expect(entriesOverlap(byId(HAPPY_HOUR), byId(FAILURE_LAB))).toBe(true);
     // Back-to-back blocks (Thu 3–5 PM, then 5–7 PM) are not overlaps.
-    expect(entriesOverlap(byId("entrepreneurial-impact-launching-from-illinois"), byId("techrise-pitch-competition"))).toBe(
-      false,
-    );
+    expect(entriesOverlap(byId("entrepreneurial-impact-launching-from-illinois"), byId(TECHRISE))).toBe(false);
+    // Nor are Wednesday's kickoff reception (3:30–5 PM) and Arnav's happy hour (5–7 PM).
+    expect(entriesOverlap(byId("founders-week-kickoff-reception"), byId(HAPPY_HOUR))).toBe(false);
+    expect(ids(overlapsFor(byId(HAPPY_HOUR), production))).toEqual([FAILURE_LAB]);
+    // Rishab's Thursday window has no time yet, so it can't clash with anything (and adds no overlap).
+    expect(overlapsFor(byId(RISHAB_OH), production)).toEqual([]);
+    expect(entriesOverlap(byId(RISHAB_OH), byId(PATRICK_OH))).toBe(false);
+    const thursday = groupByDay(production).find((g) => g.date === "2026-10-01")!;
+    expect(agendaBlocks(thursday.entries).map((b) => (b.kind === "single" ? b.entry.id : "overlap"))).toEqual([
+      PATRICK_OH,
+      "science-and-practice-of-pitching",
+      "entrepreneurial-impact-launching-from-illinois",
+      TECHRISE,
+      RISHAB_OH,
+    ]);
+    // Every clash in the calendar, as pairs: still only the Wednesday evening one.
+    const pairs = production.flatMap((a) => overlapsFor(a, production).filter((b) => a.id < b.id).map((b) => [a.id, b.id]));
+    expect(pairs).toEqual([[FAILURE_LAB, HAPPY_HOUR]]);
   });
 
   it("clusters entries whose exact intervals intersect, in chronological order", () => {
@@ -315,70 +549,68 @@ describe("overlaps", () => {
 });
 
 describe("featured placement", () => {
-  it("orders priorities: office hours, then Dan Caruso, then the Sep 29 panel", () => {
-    expect(ids(featuredEntries(production))).toEqual([PATRICK_OH, ARNAV_OH, DAN, PANEL]);
-    const band = featuredBand(production);
-    expect(ids(band.officeHours)).toEqual([PATRICK_OH, ARNAV_OH]);
-    expect(ids(band.events)).toEqual([DAN, PANEL]);
-    expect(ids(featuredEvents(production))).toEqual([DAN, PANEL]);
-    expect(band.events.map((e) => [e.featuredRank, e.involvement, e.related])).toEqual([
+  it("orders priorities: office hours, then Dan Caruso, the Sep 29 panel, Arnav's happy hour and Failure Lab", () => {
+    // Office hours share rank 1 and keep chronological order among themselves.
+    expect(ids(featuredEntries(production))).toEqual([
+      PATRICK_OH,
+      RISHAB_OH,
+      ARNAV_OH,
+      DAN,
+      PANEL,
+      HAPPY_HOUR,
+      FAILURE_LAB,
+    ]);
+    expect(
+      featuredEntries(production)
+        .filter((e) => e.kind === "event")
+        .map((e) => [e.featuredRank, e.involvement, e.related]),
+    ).toEqual([
       [2, "supported", true],
       [3, "cohosted", true],
+      [4, "supported", true],
+      [5, "hosted", false],
     ]);
   });
 
   it("keeps the agenda chronological regardless of featured rank", () => {
     const featuredIds = new Set(ids(featuredEntries(production)));
-    expect(ids(production.filter((e) => featuredIds.has(e.id)))).toEqual([DAN, PANEL, PATRICK_OH, ARNAV_OH]);
+    expect(ids(production.filter((e) => featuredIds.has(e.id)))).toEqual([
+      DAN,
+      PANEL,
+      HAPPY_HOUR,
+      FAILURE_LAB,
+      PATRICK_OH,
+      RISHAB_OH,
+      ARNAV_OH,
+    ]);
   });
 
   it("never features a canceled entry", () => {
     const canceled = eventToEntry({ ...events[0], id: "canceled-feature", status: "canceled", featured: { rank: 2 } });
-    expect(ids(featuredEvents([...production, canceled]))).toEqual([DAN, PANEL]);
+    expect(ids(featuredEntries([...production, canceled]))).not.toContain("canceled-feature");
   });
+});
 
-  it("summarizes all four mentors — including those still scheduling — with verified fields only", () => {
-    const summaries = officeHoursMentorSummaries(publicMentors);
-    expect(summaries.map((m) => m.id)).toEqual(["patrick-haddox", "arnav-mishra", "vikram-lakhwara", "ron-lewis"]);
-    expect(summaries[0]).toMatchObject({
-      affiliation: "CEO & Co-Founder, Samara Aerospace",
-      status: "available",
-      availability: "window",
-      whenDay: "Thu, Oct 1",
-      whenTime: "10:00–11:30 AM CT",
-      when: "Thu, Oct 1 · 10:00–11:30 AM CT",
-      ctaLabel: "Apply to meet Patrick",
-      applyHref: "/office-hours?mentor=patrick-haddox#apply",
-      profileHref: "/office-hours/patrick-haddox",
-    });
-    expect(summaries[1]).toMatchObject({ availability: "window-approx", whenTime: "Morning, before noon CT" });
-    expect(summaries[2]).toMatchObject({
-      affiliation: "Stakehouse",
-      status: "in-progress",
-      availability: "in-progress",
-      when: null,
-      ctaLabel: "Express interest",
-      applyHref: "/office-hours?mentor=vikram-lakhwara#apply",
-    });
-    expect(schedulingMentorNames(summaries)).toEqual(["Vik", "Ron"]);
-    expect(JSON.stringify(summaries)).not.toMatch(/Wednesday|commitments|Revenue strategy/i);
-  });
-
-  it("marks each day's priorities for the week strip", () => {
-    expect(featuredDayMarks(production, "2026-09-28")).toEqual([
-      { rank: 2, label: "Dan Caruso — Fireside Chat", href: `/schedule/${DAN}` },
+describe("mentor headshots", () => {
+  it("maps every public mentor to their approved photo (alt text = their name)", () => {
+    const map = mentorHeadshots(publicMentors);
+    expect(Object.keys(map)).toEqual([
+      "patrick-haddox",
+      "arnav-mishra",
+      "vikram-lakhwara",
+      "elliott-notrica",
+      "ron-lewis",
+      "rishab-veldur",
     ]);
-    expect(featuredDayMarks(production, "2026-09-29")).toEqual([
-      { rank: 3, label: "How to Make $10K/Month in College", href: `/schedule/${PANEL}` },
-    ]);
-    expect(featuredDayMarks(production, "2026-10-01")).toEqual([{ rank: 1, label: "Office hours", href: "/office-hours" }]);
-    expect(featuredDayMarks(production, "2026-09-30")).toEqual([]);
+    expect(map["rishab-veldur"]).toEqual({ src: "/mentors/rishab-veldur.jpg", alt: "Rishab Veldur", width: 800, height: 800 });
+    for (const m of publicMentors) expect(map[m.id]).toMatchObject({ src: `/mentors/${m.id}.jpg`, alt: m.name });
+    expect(mentorHeadshots([{ id: "no-photo", headshot: null }])).toEqual({});
   });
 });
 
 describe("program blocks", () => {
   const showcase = byId(SHOWCASE);
-  const techrise = byId("techrise-pitch-competition");
+  const techrise = byId(TECHRISE);
 
   it("identifies blocks and labels their sessions", () => {
     expect(hasProgram(showcase)).toBe(true);
@@ -400,15 +632,24 @@ describe("program blocks", () => {
     expect(sessionPeopleText(cohort)).toBe("Mehmet Gunal and Elliott Notrica; Additional participants to be announced");
     expect(isLogistics(showcase.sessions[0])).toBe(true);
     expect(isLogistics(cohort)).toBe(false);
-    expect(sessionLineText(showcase.sessions[0])).toBe("8:00–8:45 AM — Check-In and Breakfast Networking");
+    expect(sessionLineText(showcase.sessions[0])).toBe("8:00–8:45 AM: Check-In and Breakfast Networking");
   });
 
   it("links office-hours mentors who speak, in program order", () => {
     expect(programMentors(showcase)).toEqual([
       {
+        mentorId: "rishab-veldur",
+        name: "Rishab Veldur",
+        sessionTitle: HEALTH_PANEL,
+        start: "13:20",
+        end: "13:55",
+        anchor: "session-1320",
+        role: "speaker",
+      },
+      {
         mentorId: "arnav-mishra",
         name: "Arnav Mishra",
-        sessionTitle: "From Idea to Scale — Building Doss: Lessons from an Illini Founder",
+        sessionTitle: "From Idea to Scale: Building Doss, Lessons from an Illini Founder",
         start: "13:55",
         end: "14:25",
         anchor: "session-1355",
@@ -417,8 +658,23 @@ describe("program blocks", () => {
       expect.objectContaining({ mentorId: "patrick-haddox", start: "14:40", role: "speaker" }),
       expect.objectContaining({ mentorId: "vikram-lakhwara", start: "14:55", role: "speaker" }),
     ]);
-    expect(programMentors(techrise)).toEqual([]);
+    // Elliott speaks on the TechRise Cohort 2 panel.
+    expect(programMentors(techrise)).toEqual([
+      {
+        mentorId: "elliott-notrica",
+        name: "Elliott Notrica",
+        sessionTitle: "TechRise × University of Illinois Founders Week Cohort 2: Where Are They Now?",
+        start: "18:30",
+        end: "18:50",
+        anchor: "session-1830",
+        role: "speaker",
+      },
+    ]);
+    // A plain event (no program) links its host through speakers, not programMentors.
+    expect(programMentors(byId(HAPPY_HOUR))).toEqual([]);
     expect(mentorProfileHref("vikram-lakhwara")).toBe("/office-hours/vikram-lakhwara");
+    expect(mentorProfileHref("elliott-notrica")).toBe("/office-hours/elliott-notrica");
+    expect(mentorProfileHref("rishab-veldur")).toBe("/office-hours/rishab-veldur");
   });
 
   it("starts collapsed on All days, open for a single day or a matching search", () => {
@@ -427,18 +683,6 @@ describe("program blocks", () => {
     expect(defaultProgramOpen(showcase, { day: null, q: "Isbell" })).toBe(true);
     expect(defaultProgramOpen(showcase, { day: null, q: "Illinois Conference Center" })).toBe(false);
     expect(defaultProgramOpen(byId("founders-week-kickoff-reception"), { day: "2026-09-30", q: "" })).toBe(false);
-  });
-
-  it("draws a proportional track inside the block's span", () => {
-    const track = programTrack(showcase);
-    expect(track).toHaveLength(11);
-    expect(track[0]).toMatchObject({ left: 0, logistics: true, mentor: false });
-    expect(track.map((s, i) => (s.mentor ? i : -1)).filter((i) => i >= 0)).toEqual([7, 8, 9]);
-    for (const s of track) {
-      expect(s.width).toBeGreaterThan(0);
-      expect(s.left + s.width).toBeLessThanOrEqual(100);
-    }
-    expect(programTrack(byId(DAN))).toEqual([]);
   });
 });
 
@@ -467,45 +711,81 @@ describe("shareable URLs", () => {
 });
 
 describe("display helpers", () => {
-  it("formats gutter times for exact, part-of-day and forthcoming times", () => {
-    expect(gutterTime(byId(PATRICK_OH))).toEqual({ kind: "exact", primary: "10:00", period: "AM", secondary: "–11:30 AM" });
-    expect(gutterTime(byId(ARNAV_OH))).toMatchObject({ kind: "part-of-day", primary: "Morning", secondary: "before noon" });
-    expect(gutterTime(byId(DAN))).toEqual({ kind: "tba", primary: "Time forthcoming", period: null, secondary: null });
-    expect(entryTimeText(byId(DAN))).toBe("Time forthcoming");
-    expect(entryTimeText(byId("tailgate-and-enterpriseworks-tour"))).toBe("Time forthcoming");
-    expect(entryWhenText(byId(PANEL))).toBe("Tue, Sep 29 · 6:00–8:00 PM CT");
+  it("formats the agenda's time column for exact, part-of-day and forthcoming times", () => {
+    expect(agendaTime(byId(PATRICK_OH))).toEqual({ main: "10:00 AM", sub: "to 11:30 AM", start: "10:00", end: "11:30" });
+    expect(agendaTime(byId(ARNAV_OH))).toEqual({ main: "Morning", sub: "before noon", start: null, end: null });
+    // Dan Caruso: a 4 p.m. start and no announced end — no end time is invented.
+    expect(agendaTime(byId(DAN))).toEqual({ main: "4:00 PM", sub: null, start: "16:00", end: null });
+    expect(agendaTime(byId("tailgate-and-enterpriseworks-tour"))).toEqual({
+      main: "Time to be announced",
+      sub: null,
+      start: null,
+      end: null,
+    });
+    expect(entryStartText(byId(PANEL))).toEqual({ text: "6:00 PM", dateTime: "18:00" });
+    expect(entryTimeText(byId(DAN))).toBe("4:00 PM CT");
+    expect(entryTimeText(byId(PANEL))).toBe("6:00–8:00 PM CT");
+    expect(entryTimeText(byId("tailgate-and-enterpriseworks-tour"))).toBe("Time to be announced");
+    // Rishab's date-only window: the time is still to be announced (nothing is invented).
+    expect(agendaTime(byId(RISHAB_OH))).toEqual({ main: "Time to be announced", sub: null, start: null, end: null });
+    expect(entryStartText(byId(RISHAB_OH))).toEqual({ text: "Time to be announced", dateTime: null });
+    expect(entryTimeText(byId(RISHAB_OH))).toBe("Time to be announced");
+    expect(locationSummary(byId(RISHAB_OH).location)).toBe("Location to be announced");
   });
 
-  it("encodes certainty as line style", () => {
-    expect(entryCertainty(byId(PANEL))).toBe("solid"); // confirmed, exact
-    expect(entryCertainty(byId(PATRICK_OH))).toBe("dashed"); // availability window
-    expect(entryCertainty(byId(ARNAV_OH))).toBe("dotted"); // exact times forthcoming
-    expect(entryCertainty(byId(DAN))).toBe("dotted"); // time forthcoming
-  });
-
-  it("summarizes locations and time zones honestly", () => {
-    expect(locationSummary(byId(PANEL).location)).toBe("100 MSEB");
-    expect(locationSummary(byId(DAN).location)).toBe("Location forthcoming");
+  it("summarizes locations honestly", () => {
+    expect(locationSummary(byId(PANEL).location)).toBe("Materials Science and Engineering Building · Room 100");
+    expect(locationSummary(byId(DAN).location)).toBe("Beckman Institute · Auditorium (Room 1025)");
+    expect(locationLines(byId(DAN).location)).toEqual([
+      "Beckman Institute",
+      "Auditorium (Room 1025)",
+      "405 N. Mathews Ave., Urbana, IL 61801",
+    ]);
+    expect(locationLines(byId(HAPPY_HOUR).location)).toEqual(["Legends", "6th & Green"]);
+    expect(locationSummary(byId(PATRICK_OH).location)).toBe("Location to be announced");
     expect(locationSummary({ kind: "virtual", platform: "Zoom" })).toBe("Virtual · Zoom");
-    expect(timeZoneNote("2026-10-01", "10:00")).toBe("Central Time (CDT, UTC−5)");
-    expect(timeZoneNote("2026-12-03", "10:00")).toBe("Central Time (CST, UTC−6)");
+  });
+
+  it("introduces the calendar with the official dates and when related events begin", () => {
+    const days = scheduleDays(production);
+    expect(calendarIntro(site.week.name, site.week.dates, days[0])).toBe(
+      "Founders Week runs Sept 30 – Oct 3, and related events begin Sept 28. All times Central Time.",
+    );
+    expect(calendarIntro("Founders Week", { start: "2026-09-30", end: "2026-10-03" }, "2026-09-30")).toBe(
+      "Founders Week runs Sept 30 – Oct 3. All times Central Time.",
+    );
+    expect(calendarIntro("Founders Week", null, "2026-09-28")).toBe("The Founders Week calendar. All times Central Time.");
+    expect(apMonthDay("2026-08-04")).toBe("Aug 4");
+    expect(apMonthDay("2026-06-01")).toBe("June 1");
   });
 });
 
 describe("pending mentors", () => {
   it("lists scheduling-in-progress mentors with public fields and an application link", () => {
     const list = pendingMentors(publicMentors);
-    expect(list.map((m) => m.id)).toEqual(["vikram-lakhwara", "ron-lewis"]);
-    const [vik, ron] = list;
+    // Rishab has a published (date-only) window, so he isn't "Scheduling in progress".
+    expect(list.map((m) => m.id)).toEqual(["vikram-lakhwara", "elliott-notrica", "ron-lewis"]);
+    const [vik, elliott, ron] = list;
     expect(ron).toMatchObject({
       affiliation: "Co-Founder, Auctus Advisory",
       ctaLabel: "Express interest",
       href: "/office-hours?mentor=ron-lewis#apply",
     });
-    expect(vik.affiliation).toBe("Stakehouse");
-    expect(JSON.stringify(list)).not.toMatch(/Wednesday|commitments|Revenue strategy/i);
+    expect(elliott).toMatchObject({
+      name: "Elliott Notrica",
+      firstName: "Elliott",
+      affiliation: "Founder & CEO, Symbio Bioculinary",
+      ctaLabel: "Express interest",
+      href: "/office-hours?mentor=elliott-notrica#apply",
+      headshot: { src: "/mentors/elliott-notrica.jpg", alt: "Elliott Notrica" },
+    });
+    expect(vik.affiliation).toBe("Founder & Managing Member, Stakehouse");
+    expect(JSON.stringify(list)).not.toMatch(/Wednesday|commitments|Revenue strategy|much more available/i);
     expect(pendingMentorMatches(ron, "auctus")).toBe(true);
     expect(pendingMentorMatches(vik, "stakehouse")).toBe(true);
+    expect(pendingMentorMatches(vik, "managing member")).toBe(true);
     expect(pendingMentorMatches(vik, "aerospace")).toBe(false);
+    expect(pendingMentorMatches(elliott, "symbio")).toBe(true);
+    expect(pendingMentorMatches(elliott, "notrica")).toBe(true);
   });
 });

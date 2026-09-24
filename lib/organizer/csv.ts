@@ -29,7 +29,7 @@ export function csvField(value: unknown): string {
   return /[",\r\n]|^\s|\s$/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** CSV document with CRLF line endings (no BOM — the route adds it for Excel). */
+/** CSV document with CRLF line endings (no BOM here; the route adds it for Excel). */
 export function toCsv(header: readonly string[], rows: readonly (readonly unknown[])[]): string {
   return [header, ...rows].map((r) => r.map(csvField).join(",")).join("\r\n") + "\r\n";
 }
@@ -63,7 +63,7 @@ export const APPLICATION_CSV_COLUMNS = [
 const label = (options: readonly { value: string; label: string }[], value: string) =>
   options.find((o) => o.value === value)?.label ?? value;
 
-/** "2026-09-23 14:15 CT" — sortable, unambiguous. */
+/** "2026-09-23 14:15 CT": sortable, unambiguous. */
 export function csvTimestamp(iso: string): string {
   const { date, time } = utcToZoned(new Date(iso));
   return `${date} ${time} ${TZ_LABEL}`;
@@ -77,7 +77,7 @@ export function applicationCsvRow(app: ApplicationRecord, directory: OrganizerDi
           return `${r.mentorName}: ${r.label}${r.kind === "window" ? " (window)" : r.certainty ? ` (${r.certainty} slot)` : ""}`;
         })
         .join("; ")
-    : "Interest only — no time selected";
+    : "Interest only (no time selected)";
   const appointments = app.appointments
     .filter((a) => a.status !== "canceled")
     .map((a) => `${mentorName(directory, a.mentorId)}: ${intervalLabel(a.startsAt, a.endsAt)} (${a.status})`)

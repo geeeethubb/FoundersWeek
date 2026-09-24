@@ -22,7 +22,7 @@ export function CopyLink({ url, label }: { url: string; label: string }) {
           readOnly
           value={url}
           onFocus={(e) => e.currentTarget.select()}
-          className="field-control min-w-0 flex-1 truncate font-mono text-xs"
+          className="field-control min-w-0 flex-1 truncate text-sm"
         />
         <Button
           variant="secondary"

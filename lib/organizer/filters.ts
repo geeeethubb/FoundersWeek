@@ -5,7 +5,7 @@
  *
  *   /organizers?mentor=ron-lewis&choice=first   first choice = Ron
  *   /organizers?availability=slot:<id>          selected a specific slot (or window:<id>)
- *   /organizers?availability=none               interest only — no time selected
+ *   /organizers?availability=none               interest only (no time selected)
  *   /organizers?status=under_review&q=aero&sort=oldest
  *
  * Pure — safe on server and client.

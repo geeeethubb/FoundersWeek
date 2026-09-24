@@ -1,52 +1,53 @@
 /**
  * Text models for the generated social images (OpenGraph + Twitter cards). Pure — every string is
- * derived from public content (mentors from `getMentors()`, entries from `getScheduleEntries()`),
- * so the images never state anything the site doesn't. Rendering lives in ./cards.tsx.
+ * derived from public content (mentors from `getMentors()`, entries from `getScheduleEntries()`,
+ * settings from `getSite()`), so the images never state anything the site doesn't. Rendering
+ * lives in ./cards.tsx.
  *
- * - `siteCardModel`: the site default — Founders Office Hours first.
- * - `mentorCardModel`: name, verified role · organization, availability state, CTA wording.
- * - `eventCardModel`: date, priority numeral, involvement/status badges, title, time and place.
- *   Events never carry an application CTA (the Dan Caruso fireside chat in particular); only
- *   office-hours entries point to the application.
+ * - `siteCardModel`: the site default — Founders Office Hours, every mentor, "Apply for Office Hours".
+ * - `mentorCardModel`: headshot, name, verified role and company, one availability line.
+ * - `eventCardModel`: date, Founders involvement, title, time and place. Events never carry an
+ *   application CTA (the Dan Caruso fireside chat in particular); only office-hours entries do.
  */
-import type { AvailabilityKind } from "@/components/ui/status";
-import { initialsOf } from "@/components/ui/portrait";
-import type { ISODate, Mentor, SiteSettings } from "@/content/types";
-import { INTEREST_COPY, PRIMARY_CTA_LABEL, schedulingStatus } from "@/lib/mentors";
-import { availabilityHeadline, mentorAffiliation, mentorCta, mentorIndexCaption } from "@/lib/mentors-view";
 import {
-  EVENT_TYPE_LABELS,
-  INVOLVEMENT_LABELS,
-  RELATED_EVENT_LABEL,
-  STATUS_LABELS,
-  type ScheduleEntry,
-} from "@/lib/schedule/entries";
-import { dateRangeLabel, entryTimeText, locationSummary, rankNumeral } from "@/lib/schedule/format";
-import { sessionCountLabel } from "@/lib/schedule/program";
-import { dateParts, formatDate } from "@/lib/time";
+  longDate,
+  namesText,
+  officialDates,
+  placeText,
+  previewAvailability,
+  timeText,
+} from "@/components/home/home-model";
+import { initialsOf } from "@/components/ui/portrait";
+import type { Involvement, Mentor, SiteSettings } from "@/content/types";
+import { PRIMARY_CTA_LABEL } from "@/lib/mentors";
+import { INVOLVEMENT_LABELS, mentorAffiliation, STATUS_LABELS, type ScheduleEntry } from "@/lib/schedule/entries";
+import { dateParts } from "@/lib/time";
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 
-export type OgTone = "accent-solid" | "accent" | "muted" | "warning";
-export type OgLine = "solid" | "dashed" | "dotted";
-export interface OgBadge {
-  label: string;
-  tone: OgTone;
-  line: OgLine;
-}
+/** Headline shared with the home page. */
+export const OG_HEADLINE = "Meet the people building what’s next.";
 
-export interface OgPortrait {
+export interface OgPerson {
   id: string;
   name: string;
   initials: string;
-  /** "01 / 04" */
-  caption: string;
+  /** Path under /public of the approved headshot, or null (initials are drawn instead). */
+  headshot: string | null;
 }
 
-/** Top-right mono stamp shared by the cards: "Founders Week 2026 · UIUC · Mon Sep 28 – Sat Oct 3". */
-export function weekStamp(site: SiteSettings, days: ISODate[]): string {
-  const range = days.length ? dateRangeLabel(days[0], days[days.length - 1]) : null;
-  return [`${site.week.name} ${site.week.year}`, "UIUC", range].filter(Boolean).join(" · ");
+function person(mentor: Pick<Mentor, "id" | "name" | "headshot">): OgPerson {
+  return {
+    id: mentor.id,
+    name: mentor.name,
+    initials: initialsOf(mentor.name),
+    headshot: mentor.headshot?.src ?? null,
+  };
+}
+
+/** "Founders Week 2026" — the small label next to the logo. */
+export function weekLabel(site: Pick<SiteSettings, "week">): string {
+  return `${site.week.name} ${site.week.year}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,48 +55,34 @@ export function weekStamp(site: SiteSettings, days: ISODate[]): string {
 // ---------------------------------------------------------------------------
 
 export interface SiteCardModel {
-  stamp: string;
+  label: string;
   kicker: string;
-  /** Headline in two parts: wide sans, then the serif-italic accent. */
   headline: string;
-  headlineAccent: string;
+  /** "Sept 30 – Oct 3 · University of Illinois Urbana-Champaign" */
   sub: string;
-  portraits: OgPortrait[];
-  meta: string;
-  cta: string;
+  people: OgPerson[];
+  /** "Patrick, Arnav, Vik, Elliott, Ron and Rishab" */
+  peopleLine: string;
+  /** "Apply for Office Hours" while the application is open, else null. */
+  cta: string | null;
   alt: string;
 }
 
-function namesText(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-export function siteCardModel(site: SiteSettings, mentors: Mentor[], days: ISODate[]): SiteCardModel {
-  const count = mentors.length;
-  const firstNames = namesText(mentors.map((m) => m.firstName));
-  const range = days.length ? dateRangeLabel(days[0], days[days.length - 1]) : null;
+export function siteCardModel(site: SiteSettings, mentors: Mentor[]): SiteCardModel {
+  const dates = officialDates(site);
+  const cta = site.applications.open ? PRIMARY_CTA_LABEL : null;
+  const where = `${site.week.name}${dates ? ` (${dates})` : ""} at UIUC`;
   return {
-    stamp: weekStamp(site, days),
+    label: weekLabel(site),
     kicker: "Founders Office Hours",
-    headline: "Office hours with founders",
-    headlineAccent: "& operators.",
-    sub: count
-      ? `Meet ${firstNames} one-on-one during ${site.week.name}. One application covers every mentor.`
-      : `One-on-one office hours during ${site.week.name}.`,
-    portraits: mentors.map((m, i) => ({
-      id: m.id,
-      name: m.name,
-      initials: initialsOf(m.name),
-      caption: mentorIndexCaption(i, count),
-    })),
-    meta: [count ? `${count} ${count === 1 ? "mentor" : "mentors"}` : null, "One application", range]
-      .filter(Boolean)
-      .join(" · "),
-    cta: PRIMARY_CTA_LABEL,
-    alt: count
-      ? `Founders Office Hours at ${site.week.name} (UIUC): meet ${namesText(mentors.map((m) => m.name))} one-on-one. ${PRIMARY_CTA_LABEL}.`
-      : `Founders Office Hours at ${site.week.name} (UIUC). ${PRIMARY_CTA_LABEL}.`,
+    headline: OG_HEADLINE,
+    sub: [dates, site.university].filter(Boolean).join(" · "),
+    people: mentors.map(person),
+    peopleLine: namesText(mentors.map((m) => m.firstName)),
+    cta,
+    alt: mentors.length
+      ? `Founders Office Hours during ${where}: meet ${namesText(mentors.map((m) => m.name))}.${cta ? ` ${cta}.` : ""}`
+      : `Founders Office Hours during ${where}.${cta ? ` ${cta}.` : ""}`,
   };
 }
 
@@ -104,43 +91,35 @@ export function siteCardModel(site: SiteSettings, mentors: Mentor[], days: ISODa
 // ---------------------------------------------------------------------------
 
 export interface MentorCardModel {
-  stamp: string;
-  portrait: OgPortrait;
+  label: string;
+  person: OgPerson;
   name: string;
-  /** Verified "Role · Organization" (either part may be missing), or null. */
-  roleLine: string | null;
-  availability: { kind: AvailabilityKind; label: string; value: string };
-  cta: string;
+  /** Verified role and company (either may be missing). */
+  role: string | null;
+  company: string | null;
+  /** "Thu, Oct 1 · 10:00–11:30 AM CT" (a window, never a booking) or "Scheduling in progress". */
+  availability: { known: boolean; text: string };
+  /** "Apply for Office Hours" while the application is open and the mentor is selectable. */
+  cta: string | null;
   alt: string;
 }
 
-export function mentorCardModel(
-  mentor: Mentor,
-  index: number,
-  total: number,
-  options: { applicationsOpen: boolean } = { applicationsOpen: true },
-): MentorCardModel {
-  const h = availabilityHeadline(mentor);
-  const inProgress = schedulingStatus(mentor) === "in-progress";
-  const cta = mentorCta(mentor, options);
-  const roleLine = [mentor.role, mentor.company].filter(Boolean).join(" · ") || null;
-  const value = inProgress ? INTEREST_COPY.followUp : h.date ? `${h.date} · ${h.time}` : h.time;
+export function mentorCardModel(mentor: Mentor, site: SiteSettings): MentorCardModel {
+  const a = previewAvailability(mentor);
+  const text = a.known ? `${a.date} · ${a.time}` : a.label;
   const affiliation = mentorAffiliation(mentor);
+  const cta = site.applications.open && mentor.acceptingApplications ? PRIMARY_CTA_LABEL : null;
   return {
-    stamp: `Founders Office Hours${index >= 0 ? ` · ${mentorIndexCaption(index, total)}` : ""}`,
-    portrait: {
-      id: mentor.id,
-      name: mentor.name,
-      initials: initialsOf(mentor.name),
-      caption: index >= 0 ? mentorIndexCaption(index, total) : "",
-    },
+    label: `${weekLabel(site)} · Office Hours`,
+    person: person(mentor),
     name: mentor.name,
-    roleLine,
-    availability: { kind: h.kind, label: h.label, value },
-    cta: cta.href ? cta.label : "Founders Office Hours",
-    alt: `Founders Office Hours with ${mentor.name}${affiliation ? `, ${affiliation}` : ""}. ${h.label}${
-      h.date ? `: ${h.date}, ${h.time}` : ""
-    }.`,
+    role: mentor.role,
+    company: mentor.company,
+    availability: { known: a.known, text },
+    cta,
+    alt: `Founders Office Hours with ${mentor.name}${affiliation ? `, ${affiliation}` : ""}. ${
+      a.known ? `Available ${a.date}, ${a.time}.` : `${a.label}.`
+    }`,
   };
 }
 
@@ -148,86 +127,72 @@ export function mentorCardModel(
 // Event
 // ---------------------------------------------------------------------------
 
+export type OgInvolvementTone = "solid" | "soft" | "neutral";
+
 export interface EventCardModel {
-  stamp: string;
+  label: string;
+  /** "Monday" */
   weekday: string;
+  /** "28" */
   day: string;
+  /** "September" */
   month: string;
-  /** "02 — Featured" for Founders' priorities, else null. */
-  rank: string | null;
-  badges: OgBadge[];
+  involvement: { label: string; tone: OgInvolvementTone } | null;
+  /** "Canceled", "Planned"… for events that aren't confirmed; null otherwise. */
+  status: string | null;
   title: string;
-  /** "6:00–8:00 PM CT" · "Time forthcoming" */
+  /** Up to two verified speakers (name and stated title); empty when none are listed. */
+  people: { name: string; title: string | null }[];
+  /** Verified speakers beyond the two shown. */
+  morePeople: number;
+  /** "4:00 PM CT" · "Time to be announced" */
   when: string;
+  /** "Beckman Institute, Auditorium (Room 1025)" · "Location to be announced" */
   where: string;
-  /** Line style for the date rule: solid confirmed, dashed planned/window, dotted forthcoming. */
-  certainty: OgLine;
-  /** Verified speakers, e.g. "Dan Caruso · Founder, Caruso Ventures"; null when none are listed. */
-  people: string | null;
-  /** e.g. "Panel · 3 sessions"; null when there's nothing useful to add. */
-  detail: string | null;
   /** Only office-hours entries point to the application. */
   cta: string | null;
   alt: string;
 }
 
-const INVOLVEMENT_TONE = { hosted: "accent-solid", cohosted: "accent", supported: "accent", week: "muted" } as const;
+const INVOLVEMENT_TONE: Record<Involvement, OgInvolvementTone> = {
+  hosted: "solid",
+  cohosted: "soft",
+  supported: "soft",
+  week: "neutral",
+};
 
 export function eventCardModel(entry: ScheduleEntry, site: SiteSettings): EventCardModel {
   const p = dateParts(entry.date);
   const isOfficeHours = entry.kind === "office-hours";
-  const badges: OgBadge[] = [];
-  if (entry.involvement) {
-    badges.push({ label: INVOLVEMENT_LABELS[entry.involvement], tone: INVOLVEMENT_TONE[entry.involvement], line: "solid" });
-  }
-  if (entry.related) badges.push({ label: RELATED_EVENT_LABEL, tone: "muted", line: "dashed" });
-  if (!isOfficeHours && entry.status !== "confirmed") {
-    badges.push({
-      label: STATUS_LABELS[entry.status],
-      tone: entry.status === "canceled" ? "muted" : "warning",
-      line: entry.status === "tentative" ? "dotted" : entry.status === "canceled" ? "solid" : "dashed",
-    });
-  }
-
-  const certainty: OgLine =
-    entry.time.kind !== "exact" ? "dotted" : entry.status === "confirmed" || entry.status === "canceled" ? "solid" : "dashed";
-  const when = entryTimeText(entry);
-  const where = locationSummary(entry.location);
-  const types = entry.types.map((t) => EVENT_TYPE_LABELS[t]).join(" · ");
-  const detail = isOfficeHours
-    ? "By application · Appointments are limited"
-    : [types || null, entry.sessions.length ? sessionCountLabel(entry.sessions.length) : null].filter(Boolean).join(" · ") ||
-      null;
-
-  const people = entry.speakers.length
-    ? entry.speakers
-        .slice(0, 2)
-        .map((sp) => (sp.title ? `${sp.name} · ${sp.title}` : sp.name))
-        .join("  /  ") + (entry.speakers.length > 2 ? ` +${entry.speakers.length - 2}` : "")
-    : null;
+  const when = timeText(entry.time);
+  const where = placeText(entry.location);
+  const people = entry.speakers.slice(0, 2).map((s) => ({ name: s.name, title: s.title ?? null }));
+  const status = !isOfficeHours && entry.status !== "confirmed" ? STATUS_LABELS[entry.status] : null;
+  const cta = isOfficeHours && site.applications.open ? PRIMARY_CTA_LABEL : null;
 
   return {
-    stamp: `${site.week.name} ${site.week.year} · Calendar`,
-    weekday: p.weekdayShort,
-    day: p.dayPadded,
-    month: p.monthShort,
-    rank: entry.featuredRank !== null && entry.status !== "canceled" ? `${rankNumeral(entry.featuredRank)} — Featured` : null,
-    badges,
+    label: `${weekLabel(site)} · Calendar`,
+    weekday: p.weekdayLong,
+    day: String(p.day),
+    month: p.monthLong,
+    involvement: entry.involvement
+      ? { label: INVOLVEMENT_LABELS[entry.involvement], tone: INVOLVEMENT_TONE[entry.involvement] }
+      : null,
+    status,
     title: entry.title,
+    people,
+    morePeople: Math.max(0, entry.speakers.length - 2),
     when,
     where,
-    certainty,
-    people,
-    detail,
-    cta: isOfficeHours ? PRIMARY_CTA_LABEL : null,
-    alt: `${entry.title} — ${formatDate(entry.date, "long")} · ${when} · ${where}. ${site.name}.`,
+    cta,
+    alt: `${entry.title}${status ? ` (${status.toLowerCase()})` : ""}: ${longDate(entry.date)}, ${when}, ${where}. ${site.name}.`,
   };
 }
 
 /** Title size steps so long titles still fit in three lines. */
 export function titleFontSize(title: string): number {
-  if (title.length <= 28) return 76;
-  if (title.length <= 44) return 64;
-  if (title.length <= 64) return 54;
-  return 46;
+  if (title.length <= 28) return 72;
+  if (title.length <= 44) return 62;
+  if (title.length <= 64) return 52;
+  return 44;
 }

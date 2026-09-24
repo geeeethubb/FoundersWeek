@@ -1,36 +1,38 @@
 import type { Metadata } from "next";
-import { getMentors, getScheduleDays, getScheduleEntries, getSite } from "@/content";
-import { HomeCalendarPreview } from "@/components/home/calendar-preview";
-import { ClosingCta } from "@/components/home/closing-cta";
-import { HomeFeaturedEvents } from "@/components/home/featured-event";
-import { GuideExplainer } from "@/components/home/guide-explainer";
+import { getMentors, getScheduleEntries, getSite } from "@/content";
+import { FeaturedEvents } from "@/components/home/featured-events";
 import { HomeHero } from "@/components/home/home-hero";
 import {
-  agendaPreviewEntries,
+  calendarNote,
+  featuredEventView,
   homeFeaturedEvents,
-  liveEntries,
-  mentorNamesText,
-  weekRange,
+  mentorPreviews,
+  namesText,
+  officialDates,
 } from "@/components/home/home-model";
-import { appearancesByMentor } from "@/lib/mentors-view";
+import { MentorPreviews } from "@/components/home/mentor-previews";
 
 /**
- * Home — Office Hours first, in the product owner's priority order:
- *   01 Founders Office Hours (hero: the opportunity, "Apply for Office Hours", every mentor)
- *   02 Dan Caruso — Fireside Chat (Supported by Founders; information only)
- *   03 How to Make $10K/Month in College (Co-hosted by Founders)
- *   04 The rest of the calendar (week strip + a short agenda)
- * then "Founders vs. Founders Week" with the badge legend, and a closing application CTA.
- * Every count and list is computed from /content.
+ * Home — calm and short, in this order:
+ *   1. Hero: "Meet the people building what’s next.", one sentence on Founders Week office hours,
+ *      and "Apply for Office Hours".
+ *   2. Every mentor, compact (headshot, name, role and company, one availability line).
+ *   3. Featured events: Dan Caruso's fireside chat, the Sept 29 panel, the Sept 30 happy hour and
+ *      Founder Failure Lab (hosted by Founders, on a light-orange card).
+ *   4. The link to the full calendar with the official dates.
+ * Everything is computed from /content.
  */
 
 export function generateMetadata(): Metadata {
   const site = getSite();
   const mentors = getMentors();
-  const range = weekRange(getScheduleDays());
-  const title = `${site.name} — Office Hours & Calendar · UIUC`;
-  const who = mentors.length ? `meet ${mentorNamesText(mentors)} one-on-one` : "meet founders and operators one-on-one";
-  const description = `Apply for Founders Office Hours: ${who} during ${site.week.name} at UIUC${range ? ` (${range})` : ""}. Plus the full calendar, in order.`;
+  const dates = officialDates(site);
+  const title = `${site.name} · Office Hours & Calendar at UIUC`;
+  const who = mentors.length
+    ? ` The mentors are startup founders and investors: ${namesText(mentors.map((m) => m.name))}.`
+    : " Meet startup founders and investors.";
+  const description = `Apply for Founders Office Hours during ${site.week.name} at UIUC${dates ? ` (${dates})` : ""}.${who} One application covers every mentor.`;
+  const socialTitle = `Founders Office Hours · ${site.week.name} ${site.week.year}`;
   return {
     title: { absolute: title },
     description,
@@ -40,12 +42,12 @@ export function generateMetadata(): Metadata {
       siteName: site.name,
       locale: "en_US",
       url: "/",
-      title: `Founders Office Hours · ${site.week.name} ${site.week.year}`,
+      title: socialTitle,
       description,
     },
     twitter: {
       card: "summary_large_image",
-      title: `Founders Office Hours · ${site.week.name} ${site.week.year}`,
+      title: socialTitle,
       description,
     },
   };
@@ -53,30 +55,16 @@ export function generateMetadata(): Metadata {
 
 export default function HomePage() {
   const site = getSite();
-  const mentors = getMentors();
   const entries = getScheduleEntries();
-  const days = getScheduleDays();
-  const appearances = appearancesByMentor(entries, mentors);
 
   return (
     <>
-      <HomeHero
-        site={site}
-        mentors={mentors}
-        appearances={appearances}
-        range={weekRange(days)}
-        entryCount={liveEntries(entries).length}
-        dayCount={days.length}
+      <HomeHero site={site} />
+      <MentorPreviews mentors={mentorPreviews(getMentors())} />
+      <FeaturedEvents
+        events={homeFeaturedEvents(entries).map(featuredEventView)}
+        calendarNote={calendarNote(entries, site)}
       />
-      <HomeFeaturedEvents entries={homeFeaturedEvents(entries)} />
-      <HomeCalendarPreview
-        entries={entries}
-        days={days}
-        preview={agendaPreviewEntries(entries)}
-        weekName={site.week.name}
-      />
-      <GuideExplainer site={site} entries={entries} />
-      <ClosingCta mentors={mentors} applicationsOpen={site.applications.open} />
     </>
   );
 }

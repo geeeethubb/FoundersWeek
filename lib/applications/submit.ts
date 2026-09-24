@@ -21,7 +21,7 @@ import {
   type AcknowledgmentInput,
 } from "@/lib/email/acknowledgment";
 import { hashIdentifier } from "@/lib/security/crypto";
-import { consumeRateLimit } from "@/lib/security/rate-limit";
+import { consumeRateLimit, retryAfter } from "@/lib/security/rate-limit";
 import { clientIp, isSameOriginRequest } from "@/lib/security/request";
 import { statusPath } from "@/lib/security/status-token";
 import {
@@ -33,7 +33,13 @@ import {
 } from "./api-contract";
 import { buildApplicationCatalog, parseOptionKey, type ApplicationCatalog } from "./catalog";
 import { LIMITS } from "./constants";
-import { findApplicationIdByIdempotencyKey, firstNameOf, insertApplication, type NewApplicationRecord } from "./repository";
+import {
+  countRecentApplications,
+  findApplicationIdByIdempotencyKey,
+  firstNameOf,
+  insertApplication,
+  type NewApplicationRecord,
+} from "./repository";
 import { createApplicationSchema, toFieldErrors, type ValidApplication } from "./schema";
 import { getSubmissionState as loadSubmissionState, type SubmissionState } from "./submission-state";
 
@@ -66,7 +72,9 @@ const defaultDeps: SubmitDeps = {
 // Rate limits (documented in README → Configuration)
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_RATE_LIMITS = { perIpPerHour: 10, perEmailPerDay: 5 } as const;
+// Per-network is generous on purpose: campus Wi-Fi puts many students behind a few shared public
+// addresses. The per-email limit counts saved applications, so failed attempts never use it up.
+export const DEFAULT_RATE_LIMITS = { perIpPerHour: 60, perEmailPerDay: 5 } as const;
 
 function positiveInt(value: string | undefined, fallback: number): number {
   const n = Number(value);
@@ -74,8 +82,8 @@ function positiveInt(value: string | undefined, fallback: number): number {
 }
 
 /**
- * APPLICATION_RATE_LIMIT_PER_HOUR (per IP, default 10) and
- * APPLICATION_RATE_LIMIT_PER_EMAIL_PER_DAY (per Illinois email, default 5).
+ * APPLICATION_RATE_LIMIT_PER_HOUR (attempts per network address, default 60) and
+ * APPLICATION_RATE_LIMIT_PER_EMAIL_PER_DAY (saved applications per Illinois email, default 5).
  */
 export function getApplicationRateLimits(env: Record<string, string | undefined> = process.env) {
   return {
@@ -100,10 +108,11 @@ function fail(status: number, error: SubmitFailure["error"], message: string, ex
 
 /** Log without PII: error class, driver code and constraint only. */
 function logFailure(stage: string, error: unknown) {
-  const e = error as { name?: string; code?: string; constraint?: string };
+  const e = error as { name?: string; code?: string; constraint?: string; constraint_name?: string };
+  const constraint = e?.constraint_name ?? e?.constraint;
   console.error(
     `[applications] ${stage} failed: ${e?.name ?? "Error"}${e?.code ? ` code=${e.code}` : ""}${
-      e?.constraint ? ` constraint=${e.constraint}` : ""
+      constraint ? ` constraint=${constraint}` : ""
     }`,
   );
 }
@@ -255,20 +264,24 @@ export async function handleApplicationSubmission(
       limit: limits.perIpPerHour,
       windowSeconds: 60 * 60,
     });
-    const perEmail = perIp.allowed
-      ? await consumeRateLimit(db, {
-          bucket: "application:email",
-          key: data.email.trim().toLowerCase(),
-          limit: limits.perEmailPerDay,
-          windowSeconds: 24 * 60 * 60,
-        })
-      : perIp;
-    if (!perEmail.allowed) {
-      const retry = perEmail.retryAfterSeconds;
+    const limited = !perIp.allowed
+      ? { retry: perIp.retryAfterSeconds, kind: "network" as const }
+      : await (async () => {
+          const recent = await countRecentApplications(db, data.email, 24 * 60 * 60);
+          return recent.count >= limits.perEmailPerDay
+            ? { retry: retryAfter(recent.oldest, 24 * 60 * 60), kind: "email" as const }
+            : null;
+        })();
+    if (limited) {
       return respond(
         429,
-        { ok: false, error: "rate-limited", message: rateLimitMessage(retry), retryAfterSeconds: retry },
-        { "Retry-After": String(retry) },
+        {
+          ok: false,
+          error: "rate-limited",
+          message: rateLimitMessage(limited.retry, limited.kind),
+          retryAfterSeconds: limited.retry,
+        },
+        { "Retry-After": String(limited.retry) },
       );
     }
 
@@ -287,7 +300,7 @@ export async function handleApplicationSubmission(
         to: data.email,
         firstName: firstNameOf(data.fullName),
         statusUrl: `${deps.siteUrl()}${statusUrl}`,
-        siteName: site.name,
+        siteName: site.shortName,
         orgName: site.org.name,
         mentors: record.mentorIds.map((mentorId) => ({
           name: byId.get(mentorId)?.name ?? mentorId,

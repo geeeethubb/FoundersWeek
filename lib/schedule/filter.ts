@@ -30,7 +30,7 @@ export function queryTokens(query: string): string[] {
 
 /**
  * Everything a student might search for: title, summary, description, speakers, organizer,
- * topics, venue, mentor — and, for program blocks, every sub-session's title and people
+ * topics, venue, mentor and, for program blocks, every sub-session's title and people
  * ("Isbell", "quantum", "Doss" all find the Founders Showcase day program).
  */
 export function entrySearchText(entry: ScheduleEntry): string {
@@ -92,12 +92,6 @@ export function dayCounts(entries: ScheduleEntry[], days: readonly ISODate[], fi
     all: pool.length,
     byDay: Object.fromEntries(days.map((d) => [d, pool.filter((e) => e.date === d).length])) as Record<ISODate, number>,
   };
-}
-
-/** "All events" vs "Founders picks" counts under the other active filters. */
-export function viewCounts(entries: ScheduleEntry[], filters: ScheduleFilters) {
-  const pool = entries.filter((e) => matches(e, filters, "view"));
-  return { all: pool.length, picks: pool.filter((e) => e.foundersPick).length };
 }
 
 /**
@@ -314,9 +308,4 @@ function latestLocalEnd(entries: ScheduleEntry[]): string {
     if (e.time.kind === "exact" && e.time.end && e.time.end > latest) latest = e.time.end;
   }
   return latest;
-}
-
-/** Number of entries on `date` that are part of any overlap cluster (for day summaries). */
-export function overlapCount(dayEntries: ScheduleEntry[]): number {
-  return agendaBlocks(dayEntries).reduce((n, b) => (b.kind === "overlap" ? n + b.entries.length : n), 0);
 }

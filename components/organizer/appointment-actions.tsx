@@ -76,7 +76,7 @@ export function AppointmentActions({
         ) : status === "proposed" && confirmBlockedReason ? (
           <p className="mt-2 text-xs text-warning">{confirmBlockedReason}</p>
         ) : confirmingCancel ? (
-          <p className="mt-2 text-xs text-paper-subtle">This frees the seat. The student’s status is updated if needed.</p>
+          <p className="mt-2 text-xs text-text-subtle">This frees up the seat and updates the student’s status if needed.</p>
         ) : null}
       </div>
     </div>

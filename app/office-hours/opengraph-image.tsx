@@ -1,15 +1,15 @@
 /**
- * OpenGraph image for /office-hours (also used for its Twitter card): the Office Hours card with
- * every mentor's portrait and "Apply for Office Hours".
+ * OpenGraph image for /office-hours (also used for its Twitter card): the Founders Office Hours
+ * card with every mentor's headshot and "Apply for Office Hours".
  */
-import { getMentors, getScheduleDays, getSite } from "@/content";
+import { getMentors, getSite } from "@/content";
 import { renderSiteCard } from "@/lib/og/cards";
 import { OG_SIZE, siteCardModel } from "@/lib/og/model";
 
-export const alt = siteCardModel(getSite(), getMentors(), getScheduleDays()).alt;
+export const alt = siteCardModel(getSite(), getMentors()).alt;
 export const size = OG_SIZE;
 export const contentType = "image/png";
 
 export default async function Image() {
-  return renderSiteCard(siteCardModel(getSite(), getMentors(), getScheduleDays()));
+  return renderSiteCard(siteCardModel(getSite(), getMentors()));
 }

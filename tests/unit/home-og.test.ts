@@ -1,25 +1,44 @@
 /**
  * Social images, sitemap and robots, against the public (default-env) content:
- * - card models say only what the site says (verified role/org, availability state, CTA wording),
- *   and no event card — Dan Caruso's in particular — carries an application CTA;
- * - every character the cards would render exists in the bundled fonts (a missing glyph would make
- *   the image renderer fetch a fallback font over the network);
+ * - card models say only what the site says (verified role and company, one availability line,
+ *   Founders involvement), and no event card — Dan Caruso's in particular — carries an
+ *   application CTA; nothing private or canceled appears;
+ * - the site card shows all six mentors (headshots in content order, first names, alt text);
+ * - the cards render to PNG with the network disabled (logo and headshots come from /public on
+ *   disk, fonts from lib/og/fonts), and every character they draw exists in the bundled fonts;
  * - sitemap lists public pages as absolute URLs; robots keeps organizer/API/status links out.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
-import { getMentors, getScheduleDays, getScheduleEntries, getSite } from "@/content";
-import { eventCardModel, mentorCardModel, siteCardModel, titleFontSize, weekStamp } from "@/lib/og/model";
+import { getMentor, getMentors, getScheduleEntries, getSite } from "@/content";
+import type { SiteSettings } from "@/content/types";
+import { publicImageDataUrl } from "@/lib/og/assets";
+import { renderEventCard, renderMentorCard, renderSiteCard } from "@/lib/og/cards";
+import { OG_FONT_FILES } from "@/lib/og/fonts";
+import { eventCardModel, mentorCardModel, siteCardModel, titleFontSize } from "@/lib/og/model";
 
 const entry = (id: string) => getScheduleEntries().find((e) => e.id === id)!;
-const mentorModel = (id: string) => {
-  const mentors = getMentors();
-  const i = mentors.findIndex((m) => m.id === id);
-  return mentorCardModel(mentors[i], i, mentors.length);
-};
+const mentorModel = (id: string, site: SiteSettings = getSite()) => mentorCardModel(getMentor(id)!, site);
+const closed = (): SiteSettings => ({ ...getSite(), applications: { ...getSite().applications, open: false } });
+
+const MENTOR_IDS = [
+  "patrick-haddox",
+  "arnav-mishra",
+  "vikram-lakhwara",
+  "elliott-notrica",
+  "ron-lewis",
+  "rishab-veldur",
+];
+const SIX_NAMES =
+  "Patrick Haddox, Arnav Mishra, Vikram “Vik” Lakhwara, Elliott Notrica, Ron Lewis and Rishab Veldur";
+const SITE_ALT = `Founders Office Hours during Founders Week (Sept 30 – Oct 3) at UIUC: meet ${SIX_NAMES}. Apply for Office Hours.`;
+const PRIVATE =
+  /commitments|much more available|extra sessions|Wednesday through Saturday|Revenue strategy|Startup financial planning|basis|student teams|phone number|email signature|Oct 1 and 2/i;
 
 describe("social image models (public data)", () => {
   beforeEach(() => {
@@ -28,82 +47,301 @@ describe("social image models (public data)", () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it("site card leads with Founders Office Hours and every mentor", () => {
-    const m = siteCardModel(getSite(), getMentors(), getScheduleDays());
-    expect(m.kicker).toBe("Founders Office Hours");
-    expect(m.cta).toBe("Apply for Office Hours");
-    expect(m.portraits.map((p) => p.initials)).toEqual(["PH", "AM", "VL", "RL"]);
-    expect(m.portraits.map((p) => p.caption)).toEqual(["01 / 04", "02 / 04", "03 / 04", "04 / 04"]);
-    expect(m.sub).toBe("Meet Patrick, Arnav, Vik and Ron one-on-one during Founders Week. One application covers every mentor.");
-    expect(m.meta).toBe("4 mentors · One application · Mon Sep 28 – Sat Oct 3");
-    expect(m.stamp).toBe("Founders Week 2026 · UIUC · Mon Sep 28 – Sat Oct 3");
-    expect(m.alt).toContain("Patrick Haddox, Arnav Mishra, Vikram “Vik” Lakhwara and Ron Lewis");
+  it("site card: the home headline, the official dates and every mentor", () => {
+    const m = siteCardModel(getSite(), getMentors());
+    expect(m).toMatchObject({
+      label: "Founders Week 2026",
+      kicker: "Founders Office Hours",
+      headline: "Meet the people building what’s next.",
+      sub: "Sept 30 – Oct 3 · University of Illinois Urbana-Champaign",
+      peopleLine: "Patrick, Arnav, Vik, Elliott, Ron and Rishab",
+      cta: "Apply for Office Hours",
+    });
+    expect(m.people.map((p) => p.id)).toEqual(MENTOR_IDS);
+    expect(m.people.map((p) => p.initials)).toEqual(["PH", "AM", "VL", "EN", "RL", "RV"]);
+    expect(m.people.map((p) => p.headshot)).toEqual(MENTOR_IDS.map((id) => `/mentors/${id}.jpg`));
+    expect(m.alt).toBe(SITE_ALT);
+    expect(JSON.stringify(m)).not.toMatch(/one-on-one/i);
+    // No CTA while the application is switched off.
+    expect(siteCardModel(closed(), getMentors()).cta).toBeNull();
+    expect(siteCardModel(closed(), getMentors()).alt).not.toMatch(/apply/i);
   });
 
-  it("mentor cards show verified role · organization, availability state and the right CTA", () => {
-    expect(mentorModel("patrick-haddox")).toMatchObject({
+  it("site card: six people, Rishab last, with the same alt on the site, Twitter and Office Hours images", async () => {
+    const m = siteCardModel(getSite(), getMentors());
+    expect(m.people).toHaveLength(6);
+    expect(m.people.at(-1)).toEqual({
+      id: "rishab-veldur",
+      name: "Rishab Veldur",
+      initials: "RV",
+      headshot: "/mentors/rishab-veldur.jpg",
+    });
+    expect(m.people.every((p) => p.headshot)).toBe(true);
+    expect(siteCardModel(closed(), getMentors()).alt).toBe(
+      `Founders Office Hours during Founders Week (Sept 30 – Oct 3) at UIUC: meet ${SIX_NAMES}.`,
+    );
+    // The route modules compute their alt text at import time: load them fresh under this env.
+    vi.resetModules();
+    const [site, twitter, officeHours] = await Promise.all([
+      import("@/app/opengraph-image"),
+      import("@/app/twitter-image"),
+      import("@/app/office-hours/opengraph-image"),
+    ]);
+    expect([site.alt, twitter.alt, officeHours.alt]).toEqual([SITE_ALT, SITE_ALT, SITE_ALT]);
+  });
+
+  it("mentor cards: verified role and company, one availability line, the primary CTA", () => {
+    expect(mentorModel("patrick-haddox")).toEqual({
+      label: "Founders Week 2026 · Office Hours",
+      person: { id: "patrick-haddox", name: "Patrick Haddox", initials: "PH", headshot: "/mentors/patrick-haddox.jpg" },
       name: "Patrick Haddox",
-      roleLine: "CEO & Co-Founder · Samara Aerospace",
-      availability: { kind: "window", label: "Availability window", value: "Thu, Oct 1 · 10:00–11:30 AM CT" },
-      cta: "Apply to meet Patrick",
+      role: "CEO & Co-Founder",
+      company: "Samara Aerospace",
+      availability: { known: true, text: "Thu, Oct 1 · 10:00–11:30 AM CT" },
+      cta: "Apply for Office Hours",
+      alt: "Founders Office Hours with Patrick Haddox, CEO & Co-Founder, Samara Aerospace. Available Thu, Oct 1, 10:00–11:30 AM CT.",
     });
-    expect(mentorModel("arnav-mishra")).toMatchObject({
-      roleLine: "Co-Founder & CTO · Doss",
-      availability: { kind: "window-approx", value: "Fri, Oct 2 · Morning, before noon CT" },
-      cta: "Apply to meet Arnav",
+    expect(mentorModel("arnav-mishra").availability).toEqual({ known: true, text: "Fri, Oct 2 · Morning, before noon CT" });
+    for (const id of ["vikram-lakhwara", "elliott-notrica", "ron-lewis"]) {
+      expect(mentorModel(id).availability).toEqual({ known: false, text: "Scheduling in progress" });
+      expect(mentorModel(id).alt).toMatch(/\. Scheduling in progress\.$/);
+    }
+    expect(mentorModel("vikram-lakhwara")).toMatchObject({ role: "Founder & Managing Member", company: "Stakehouse" });
+    expect(mentorModel("elliott-notrica")).toMatchObject({ role: "Founder & CEO", company: "Symbio Bioculinary" });
+    expect(mentorModel("ron-lewis")).toMatchObject({ role: "Co-Founder", company: "Auctus Advisory" });
+    expect(mentorModel("ron-lewis", closed()).cta).toBeNull();
+
+    const json = JSON.stringify(MENTOR_IDS.map((id) => mentorModel(id)));
+    expect(json).not.toMatch(PRIVATE);
+    expect(json).not.toMatch(/one-on-one/i);
+  });
+
+  it("Rishab's card: Thu, Oct 1 with the exact time to be confirmed, never Oct 2, no device claims", () => {
+    const rishab = mentorModel("rishab-veldur");
+    expect(rishab).toMatchObject({
+      label: "Founders Week 2026 · Office Hours",
+      person: { id: "rishab-veldur", name: "Rishab Veldur", initials: "RV", headshot: "/mentors/rishab-veldur.jpg" },
+      name: "Rishab Veldur",
+      role: "Co-Founder & CEO",
+      company: "Auvi Labs",
+      availability: { known: true, text: "Thu, Oct 1 · Exact time to be confirmed" },
+      cta: "Apply for Office Hours",
     });
-    // Vik's title is unverified: organization only.
-    expect(mentorModel("vikram-lakhwara")).toMatchObject({
-      roleLine: "Stakehouse",
-      availability: { kind: "in-progress", label: "Scheduling in progress" },
-      cta: "Express interest",
-    });
-    expect(mentorModel("ron-lewis")).toMatchObject({ roleLine: "Co-Founder · Auctus Advisory", cta: "Express interest" });
-    const json = JSON.stringify(getMentors().map((m) => mentorModel(m.id)));
-    expect(json).not.toMatch(/commitments|Revenue strategy|Wednesday/i);
+    expect(rishab.alt).toMatch(
+      /^Founders Office Hours with Rishab Veldur, Co-Founder & CEO, Auvi Labs\. Available Thu, Oct 1, exact time to be confirmed\.$/i,
+    );
+    const json = JSON.stringify(rishab);
+    expect(json).not.toMatch(/Oct 2|Fri|Time to be announced|Scheduling in progress/);
+    expect(json).not.toMatch(/FDA|clinically|commercially available|one-on-one/i);
+    expect(json).not.toMatch(PRIVATE);
+    expect(mentorModel("rishab-veldur", closed()).cta).toBeNull();
   });
 
   it("event cards carry no application CTA — only office-hours entries do", () => {
     const site = getSite();
     const dan = eventCardModel(entry("dan-caruso-fireside-chat"), site);
-    expect(dan).toMatchObject({
-      rank: "02 — Featured",
-      title: "Dan Caruso — Fireside Chat",
-      when: "Time forthcoming",
-      where: "Location forthcoming",
-      certainty: "dotted",
-      people: "Dan Caruso · Founder, Caruso Ventures",
+    expect(dan).toEqual({
+      label: "Founders Week 2026 · Calendar",
+      weekday: "Monday",
+      day: "28",
+      month: "September",
+      involvement: { label: "Supported by Founders", tone: "soft" },
+      status: null,
+      title: "Fireside Chat with Dan Caruso",
+      people: [{ name: "Dan Caruso", title: "Founder, Caruso Ventures · Founding CEO, Zayo Group" }],
+      morePeople: 0,
+      when: "4:00 PM CT",
+      where: "Beckman Institute, Auditorium (Room 1025)",
       cta: null,
+      alt: "Fireside Chat with Dan Caruso: Monday, Sept 28, 4:00 PM CT, Beckman Institute, Auditorium (Room 1025). Founders × Founders Week.",
     });
-    expect(dan.badges.map((b) => b.label)).toEqual(["Supported by Founders", "Related event", "Planned"]);
-    expect(JSON.stringify(dan)).not.toMatch(/apply|interest|waitlist|book/i);
+    expect(JSON.stringify(dan)).not.toMatch(/apply|interest|waitlist|book|private session/i);
 
     const panel = eventCardModel(entry("how-to-make-10k-a-month-in-college"), site);
     expect(panel).toMatchObject({
-      rank: "03 — Featured",
+      involvement: { label: "Co-hosted by Founders", tone: "soft" },
       when: "6:00–8:00 PM CT",
-      where: "100 MSEB",
-      certainty: "solid",
+      where: "Materials Science and Engineering Building, Room 100",
       cta: null,
     });
-    expect(panel.badges.map((b) => b.label)).toEqual(["Co-hosted by Founders", "Related event"]);
-
-    const showcase = eventCardModel(entry("founders-showcase-day-sessions"), site);
-    expect(showcase).toMatchObject({ rank: null, cta: null, detail: "Talk · Panel · Networking · 11 sessions" });
 
     const oh = eventCardModel(entry("office-hours-patrick-haddox-2026-10-01-am"), site);
-    expect(oh).toMatchObject({ rank: "01 — Featured", cta: "Apply for Office Hours", certainty: "dashed" });
-    expect(oh.badges.map((b) => b.label)).toEqual(["Hosted by Founders"]);
+    expect(oh).toMatchObject({
+      involvement: { label: "Hosted by Founders", tone: "solid" },
+      status: null,
+      when: "10:00–11:30 AM CT",
+      where: "Location to be announced",
+      cta: "Apply for Office Hours",
+    });
+    expect(eventCardModel(entry("office-hours-patrick-haddox-2026-10-01-am"), closed()).cta).toBeNull();
+
+    // Arnav's happy hour: supported by Founders, not an application.
+    const happyHour = eventCardModel(entry("happy-hour-at-legends-with-arnav-mishra"), site);
+    expect(happyHour).toMatchObject({
+      weekday: "Wednesday",
+      day: "30",
+      month: "September",
+      involvement: { label: "Supported by Founders" },
+      title: "Happy Hour with Arnav Mishra at Legends",
+      when: "5:00–7:00 PM CT",
+      where: "Legends",
+      cta: null,
+    });
 
     for (const e of getScheduleEntries().filter((x) => x.kind === "event")) {
-      expect(eventCardModel(e, site).cta).toBeNull();
+      const model = eventCardModel(e, site);
+      expect(model.cta).toBeNull();
+      expect(JSON.stringify(model)).not.toMatch(/HERE Apartments|after[\s-]?party/i);
     }
   });
 
+  it("Rishab's office-hours calendar entry: Thu, Oct 1, time and place to be announced, hosted by Founders", () => {
+    const site = getSite();
+    expect(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), site)).toEqual({
+      label: "Founders Week 2026 · Calendar",
+      weekday: "Thursday",
+      day: "1",
+      month: "October",
+      involvement: { label: "Hosted by Founders", tone: "solid" },
+      status: null,
+      title: "Office hours with Rishab Veldur",
+      people: [],
+      morePeople: 0,
+      when: "Time to be announced",
+      where: "Location to be announced",
+      cta: "Apply for Office Hours",
+      alt: "Office hours with Rishab Veldur: Thursday, Oct 1, Time to be announced, Location to be announced. Founders × Founders Week.",
+    });
+    expect(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), closed()).cta).toBeNull();
+    // Office-hours cards on the calendar: Patrick and Rishab on Oct 1, Arnav on Oct 2; none for Rishab on Oct 2.
+    expect(getScheduleEntries().filter((e) => e.kind === "office-hours").map((e) => e.id)).toEqual([
+      "office-hours-patrick-haddox-2026-10-01-am",
+      "office-hours-rishab-veldur-2026-10-01",
+      "office-hours-arnav-mishra-2026-10-02-am",
+    ]);
+  });
+
   it("sizes long titles down", () => {
-    expect(titleFontSize("Dan Caruso — Fireside Chat")).toBe(76);
-    expect(titleFontSize("How to Make $10K/Month in College")).toBe(64);
-    expect(titleFontSize("TechRise Pitch Competition and Panel Discussion")).toBe(54);
+    expect(titleFontSize("Fireside Chat with Dan Caruso")).toBe(62);
+    expect(titleFontSize("How to Make $10K/Month in College")).toBe(62);
+    expect(titleFontSize("TechRise Pitch Competition and Panel Discussion")).toBe(52);
+    expect(titleFontSize("Tailgate")).toBe(72);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Assets and rendering — offline.
+// ---------------------------------------------------------------------------
+
+describe("social image assets and rendering", () => {
+  beforeEach(() => {
+    vi.stubEnv("SHOW_DEMO_CONTENT", "");
+    vi.stubEnv("SHOW_DRAFT_CONTENT", "");
+    // Any network access (e.g. a fallback-font download for a missing glyph) fails the test.
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("network access is not allowed in image generation")));
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("reads the Founders logo and approved headshots from /public as data URLs", async () => {
+    const logo = await publicImageDataUrl(getSite().brand.foundersLogo!.src);
+    expect(logo).toMatch(/^data:image\/png;base64,iVBORw0KGgo/);
+    for (const m of getMentors()) {
+      expect(await publicImageDataUrl(m.headshot!.src)).toMatch(/^data:image\/jpeg;base64,\/9j\//);
+    }
+  });
+
+  it("refuses anything outside public/brand and public/mentors", async () => {
+    for (const src of [
+      "/../package.json",
+      "/brand/../../.env.local",
+      "/mentors/../../lib/og/fonts/Archivo-Medium.ttf",
+      "/brand/.hidden.png",
+      "/brand/missing-logo.png",
+      "https://example.com/logo.png",
+      "/favicon.ico",
+      "",
+      null,
+    ]) {
+      expect(await publicImageDataUrl(src)).toBeNull();
+    }
+  });
+
+  const isPng = async (res: Response) => {
+    expect(res.headers.get("content-type")).toBe("image/png");
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect([...bytes.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(bytes.length).toBeGreaterThan(10_000);
+  };
+
+  it("renders the site, mentor and event cards to PNG without the network", async () => {
+    const site = getSite();
+    await isPng(await renderSiteCard(siteCardModel(site, getMentors())));
+    await isPng(await renderMentorCard(mentorCardModel(getMentor("vikram-lakhwara")!, site)));
+    await isPng(await renderEventCard(eventCardModel(entry("dan-caruso-fireside-chat"), site)));
+    await isPng(await renderEventCard(eventCardModel(entry("office-hours-patrick-haddox-2026-10-01-am"), site)));
+    await isPng(await renderMentorCard(mentorCardModel(getMentor("rishab-veldur")!, site)));
+    await isPng(await renderEventCard(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), site)));
+  }, 60_000);
+});
+
+// ---------------------------------------------------------------------------
+// What the site card draws — the element tree handed to ImageResponse, as markup.
+// ---------------------------------------------------------------------------
+
+describe("site social card drawing", () => {
+  beforeEach(() => {
+    vi.stubEnv("SHOW_DEMO_CONTENT", "");
+    vi.stubEnv("SHOW_DRAFT_CONTENT", "");
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("network access is not allowed in image generation")));
+  });
+  afterEach(() => {
+    vi.doUnmock("next/og");
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows six people: every mentor's headshot in content order, beside their first names", async () => {
+    const drawn: ReactElement[] = [];
+    vi.resetModules();
+    vi.doMock("next/og", () => ({
+      ImageResponse: class {
+        constructor(node: ReactElement) {
+          drawn.push(node);
+        }
+      },
+    }));
+    const [cards, model, content, assets] = await Promise.all([
+      import("@/lib/og/cards"),
+      import("@/lib/og/model"),
+      import("@/content"),
+      import("@/lib/og/assets"),
+    ]);
+    await cards.renderSiteCard(model.siteCardModel(content.getSite(), content.getMentors()));
+    expect(drawn).toHaveLength(1);
+    const html = renderToStaticMarkup(drawn[0]);
+
+    const srcs = [...html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]);
+    const photos = await Promise.all(MENTOR_IDS.map((id) => assets.publicImageDataUrl(`/mentors/${id}.jpg`)));
+    expect(photos.every((p) => p?.startsWith("data:image/jpeg;base64,"))).toBe(true);
+    // The logo first, then one photo per mentor, in content order (indexes into `photos`).
+    expect(srcs).toHaveLength(7);
+    expect(srcs[0]).toMatch(/^data:image\/png;base64,/);
+    expect(srcs.slice(1).map((s) => photos.indexOf(s))).toEqual([0, 1, 2, 3, 4, 5]);
+    // Photos, not initials, for all six.
+    expect(html).not.toMatch(/>(PH|AM|VL|EN|RL|RV)</);
+
+    const t = html
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/\s+/g, " ")
+      .trim();
+    expect(t).toContain("Patrick, Arnav, Vik, Elliott, Ron and Rishab");
+    expect(t).toContain("Apply for Office Hours");
+    expect(t).not.toMatch(/one-on-one/i);
   });
 });
 
@@ -151,40 +389,32 @@ function missing(text: string, font: Set<number>): string[] {
 }
 
 describe("social image fonts cover every rendered character", () => {
-  const sans = cmapCodepoints("Archivo-Medium.ttf");
-  const wide = cmapCodepoints("Archivo-SemiExpanded-ExtraBold.ttf");
-  const mono = cmapCodepoints("JetBrainsMono-Medium.ttf");
-  const serif = cmapCodepoints("InstrumentSerif-Italic.ttf");
+  beforeEach(() => vi.stubEnv("SHOW_DEMO_CONTENT", ""));
+  afterEach(() => vi.unstubAllEnvs());
 
-  it("covers the site, mentor and event cards", () => {
+  it("uses Archivo only", () => {
+    expect(Object.values(OG_FONT_FILES)).toEqual(["Archivo-Medium.ttf", "Archivo-SemiExpanded-Bold.ttf"]);
+  });
+
+  it("covers the site, mentor and event cards in both weights", () => {
     const site = getSite();
-    const mentors = getMentors();
-    const days = getScheduleDays();
-    const s = siteCardModel(site, mentors, days);
-    const wideText = [s.headline, ...s.portraits.map((p) => p.initials), "Founders"];
-    const serifText = [s.headlineAccent, "×"];
-    const sansText = [s.sub, s.cta, "Founders Week"];
-    const monoText = [s.kicker, s.meta, s.stamp, ...s.portraits.map((p) => p.caption), weekStamp(site, days)];
-
-    mentors.forEach((m, i) => {
-      const model = mentorCardModel(m, i, mentors.length);
-      wideText.push(model.name, model.portrait.initials);
-      sansText.push(model.roleLine ?? "", model.cta);
-      monoText.push(model.stamp, model.availability.label, model.availability.value);
-    });
+    const s = siteCardModel(site, getMentors());
+    const text: string[] = [s.label, s.kicker, s.headline, s.sub, s.peopleLine, s.cta ?? "", "Founders"];
+    text.push(...s.people.map((p) => p.initials));
+    for (const m of getMentors()) {
+      const model = mentorCardModel(m, site);
+      text.push(model.label, model.name, model.role ?? "", model.company ?? "", model.availability.text, model.cta ?? "");
+    }
     for (const e of getScheduleEntries()) {
       const model = eventCardModel(e, site);
-      wideText.push(model.title, model.day);
-      sansText.push(model.people ?? "", model.cta ?? "");
-      monoText.push(model.stamp, model.weekday, model.month, model.rank ?? "", model.when, model.where, model.detail ?? "", "·");
-      monoText.push(...model.badges.map((b) => b.label));
+      text.push(model.label, model.weekday, model.day, model.month, model.title, model.when, model.where);
+      text.push(model.involvement?.label ?? "", model.status ?? "", `and ${model.morePeople} more`, model.cta ?? "");
+      for (const p of model.people) text.push(p.name, p.title ?? "");
     }
-    // Mono labels render uppercase.
-    const monoAll = monoText.join(" ");
-    expect(missing(wideText.join(" "), wide)).toEqual([]);
-    expect(missing(serifText.join(" "), serif)).toEqual([]);
-    expect(missing(sansText.join(" "), sans)).toEqual([]);
-    expect(missing(`${monoAll} ${monoAll.toUpperCase()}`, mono)).toEqual([]);
+    const all = text.join(" ");
+    for (const file of Object.values(OG_FONT_FILES)) {
+      expect(missing(all, cmapCodepoints(file)), file).toEqual([]);
+    }
   });
 });
 
@@ -207,11 +437,14 @@ describe("sitemap and robots", () => {
       "https://founders.example.edu/office-hours",
       "https://founders.example.edu/schedule",
     ]);
-    for (const id of ["patrick-haddox", "arnav-mishra", "vikram-lakhwara", "ron-lewis"]) {
-      expect(urls).toContain(`https://founders.example.edu/office-hours/${id}`);
-    }
+    for (const id of MENTOR_IDS) expect(urls).toContain(`https://founders.example.edu/office-hours/${id}`);
     for (const e of getScheduleEntries()) expect(urls).toContain(`https://founders.example.edu/schedule/${e.id}`);
+    expect(urls).toContain("https://founders.example.edu/schedule/happy-hour-at-legends-with-arnav-mishra");
+    expect(urls).toContain("https://founders.example.edu/office-hours/rishab-veldur");
+    expect(urls).toContain("https://founders.example.edu/schedule/office-hours-rishab-veldur-2026-10-01");
     expect(urls).toHaveLength(3 + getMentors().length + getScheduleEntries().length);
+    // Three public pages, six mentor profiles and fifteen calendar entries.
+    expect([getMentors().length, getScheduleEntries().length, urls.length]).toEqual([6, 15, 24]);
     expect(urls.every((u) => u.startsWith("https://founders.example.edu"))).toBe(true);
     expect(urls.join(" ")).not.toMatch(/organizers|\/api\/|\/apply|afterparty|demo/);
   });

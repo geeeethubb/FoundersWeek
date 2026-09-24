@@ -5,10 +5,14 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getAppSecret } from "@/lib/config";
 import { safeReturnPath } from "./paths";
 import { getSessionFromCookieValue, SESSION_COOKIE, type OrganizerSession } from "./session";
 
 export async function getOrganizerPageSession(): Promise<OrganizerSession | null> {
+  // Without a signing secret no session can be verified (production refuses the dev fallback):
+  // treat everyone as signed out so the sign-in page can explain the missing setting.
+  if (!getAppSecret()) return null;
   const store = await cookies();
   return getSessionFromCookieValue(store.get(SESSION_COOKIE)?.value);
 }

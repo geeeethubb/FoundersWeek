@@ -1,15 +1,20 @@
 # Brand assets
 
-No official Founders or University of Illinois brand assets were supplied, so the site uses a
-typographic lockup ("Founders × Founders Week") and no logos. Nothing here is synthesized.
+- `founders-logo-original.png`: the Founders – Illinois Entrepreneurs logo exactly as it was sent to us
+  (dark grey and orange #FF9600 on white, with a pale emblem in the background). Keep this file as is.
+- `founders-logo.png`: the version the site uses. It's a tight crop of the original with just the mark
+  and wordmark. We removed the white background and the pale emblem, and left the colors and proportions
+  alone.
+
+We don't use any University of Illinois marks.
 
 To add approved assets:
 
-1. Put the files in this folder, e.g.
-   - `public/brand/founders-logo.svg` — Founders – Illinois Entrepreneurs wordmark (SVG preferred, or PNG ≥ 2× display size)
-   - `public/brand/illinois-mark.svg` — only if the org is permitted to use an Illinois mark
-2. Reference them in `content/site.ts` → `brand`, with the file's **intrinsic** width and height so the
-   aspect ratio is preserved:
+1. Put the files in this folder, for example:
+   - `public/brand/founders-logo.svg`: the Founders – Illinois Entrepreneurs wordmark (SVG is best, or a PNG at least 2× its display size)
+   - `public/brand/illinois-mark.svg`: only if the org has permission to use an Illinois mark
+2. Point `brand` in `content/site.ts` at them, using each file's **intrinsic** width and height so the
+   aspect ratio stays correct:
 
    ```ts
    brand: {
@@ -18,8 +23,8 @@ To add approved assets:
    },
    ```
 
-The header lockup (`components/site/brand.tsx`) switches to the logo automatically and scales it by
-height only.
+The header logo (`components/site/brand.tsx`) picks up the new file on its own and only scales it by
+height, so it never gets stretched.
 
-Mentor headshots go in `public/mentors/<mentor-id>.jpg` and are referenced from `content/mentors.ts`
-(`headshot: { src, alt, width, height }`). Use only photos the mentor has approved.
+Mentor headshots go in `public/mentors/<mentor-id>.jpg` and are set in `content/mentors.ts`
+(`headshot: { src, alt, width, height }`). Only use photos the mentor has approved.

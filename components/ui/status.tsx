@@ -2,7 +2,7 @@
  * The four scheduling concepts, always visually distinct (use these everywhere):
  *
  * 1. Availability window   — when a mentor is generally free. Not an appointment.   neutral · dashed
- *    (exact times forthcoming — a rough window like "Friday morning")               neutral · dotted
+ *    (exact times TBA — a rough window like "Friday morning")                       neutral · dotted
  *    (scheduling in progress — no availability published yet)                       muted   · dotted
  * 2. Proposed slot / appointment — a specific time not yet confirmed.                amber   · dashed
  * 3. Confirmed slot / appointment — time confirmed.                                  green   · solid
@@ -20,18 +20,18 @@ export type AvailabilityKind = "window" | "window-approx" | "in-progress" | "pro
 
 export const AVAILABILITY_KIND_LABELS: Record<AvailabilityKind, string> = {
   window: "Availability window",
-  "window-approx": "Exact times forthcoming",
+  "window-approx": "Exact times TBA",
   "in-progress": "Scheduling in progress",
   proposed: "Proposed slot",
   confirmed: "Confirmed slot",
 };
 
 export const AVAILABILITY_KIND_DESCRIPTIONS: Record<AvailabilityKind, string> = {
-  window: "When the mentor is generally available. Not a booked appointment.",
-  "window-approx": "The mentor is available in this part of the day; exact times will be shared once confirmed.",
-  "in-progress": "Availability isn’t finalized yet. You can still express interest — Founders will follow up.",
-  proposed: "A specific time proposed to the mentor, not yet confirmed.",
-  confirmed: "A specific appointment time confirmed by the mentor.",
+  window: "When the mentor is generally free. It’s not a booked appointment.",
+  "window-approx": "The mentor is free during this part of the day. Founders will share exact times once they’re confirmed.",
+  "in-progress": "Availability isn’t set yet. You can still express interest, and Founders will follow up.",
+  proposed: "A specific time proposed to the mentor. It isn’t confirmed yet.",
+  confirmed: "An appointment time the mentor has confirmed.",
 };
 
 const availabilityStyles: Record<AvailabilityKind, { tone: BadgeTone; line: LineStyle }> = {

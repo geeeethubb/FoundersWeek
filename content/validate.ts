@@ -61,8 +61,9 @@ const speaker = z.object({
   name: z.string().min(1),
   title: z.string().optional(),
   verified: z.boolean(),
-  role: z.literal("moderator").optional(),
+  role: z.enum(["moderator", "host"]).optional(),
   mentorId: slug.optional(),
+  profileUrl: httpsUrl.optional(),
 });
 
 const programSession = z
@@ -126,6 +127,7 @@ const mentorSchema = z.object({
   expertise: draftable(z.array(z.object({ label: z.string().min(1), basis: z.string().min(1) }))),
   askMeAbout: draftable(z.array(z.string().min(1))),
   goodFitFor: draftable(z.array(z.string().min(1))),
+  backgroundTags: z.array(z.string().min(1).max(40)).max(6).optional(),
   session: z.object({
     format: sessionFormat.nullable(),
     durationMinutes: z.number().int().positive().nullable(),

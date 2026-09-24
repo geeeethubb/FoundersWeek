@@ -2,7 +2,7 @@
 
 /**
  * The Calendar (/schedule) explorer: day tabs, All/Picks, type chips, search (including program
- * sub-sessions and their people), live result summary and the chronological agenda.
+ * sub-sessions and their people), a one-line result summary and the chronological agenda.
  *
  * The URL is the single source of truth (lib/schedule/url.ts: day, view, type, q). Controls call
  * `router.replace(…, { scroll: false })`; `useOptimistic` shows the new state immediately while
@@ -13,8 +13,10 @@
  * - `entries`: every public ScheduleEntry (chronological). Filtering happens here, client-side.
  * - `days`: dates with entries (ascending) — one tab each.
  * - `partial`: the official schedule hasn't been fully added (site.week.scheduleCompleteness).
- * - `pendingMentors`: mentors with "Scheduling in progress" (public fields only).
+ * - `pendingMentors`: mentors with "Scheduling in progress" (public fields only); shown when a
+ *   search matches them, since they have no calendar rows yet.
  * - `calendarCount`: number of calendar-eligible entries (shows the "all confirmed events" .ics link).
+ * - `headshots`: mentor photos by id (office-hours rows, mentors on stage).
  *
  * Program blocks start collapsed on "All days" and expanded when a single day is selected or a
  * search matches one of their sessions (see lib/schedule/program.ts `defaultProgramOpen`).
@@ -33,10 +35,10 @@ import {
   isDefaultFilters,
   relaxations,
   typeFacets,
-  viewCounts,
   type Relaxation,
 } from "@/lib/schedule/filter";
 import { dayLabels, plural } from "@/lib/schedule/format";
+import type { MentorHeadshots } from "@/lib/schedule/headshots";
 import { pendingMentorMatches, type PendingMentor } from "@/lib/schedule/pending-mentors";
 import {
   DEFAULT_SCHEDULE_FILTERS,
@@ -44,7 +46,6 @@ import {
   scheduleQuery,
   type ScheduleFilters,
 } from "@/lib/schedule/url";
-import { TZ_LABEL } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { Agenda } from "./agenda";
 import { DayTabs, SearchField, TypeChips, ViewToggle } from "./explorer-controls";
@@ -58,9 +59,17 @@ export interface ScheduleExplorerProps {
   partial: boolean;
   pendingMentors: PendingMentor[];
   calendarCount: number;
+  headshots?: MentorHeadshots;
 }
 
-export function ScheduleExplorer({ entries, days, partial, pendingMentors, calendarCount }: ScheduleExplorerProps) {
+export function ScheduleExplorer({
+  entries,
+  days,
+  partial,
+  pendingMentors,
+  calendarCount,
+  headshots = {},
+}: ScheduleExplorerProps) {
   const router = useRouter();
   const pathname = usePathname() ?? "/schedule";
   const searchParams = useSearchParams();
@@ -143,15 +152,14 @@ export function ScheduleExplorer({ entries, days, partial, pendingMentors, calen
   const results = useMemo(() => filterEntries(entries, filters), [entries, filters]);
   const groups = useMemo(() => groupByDay(results), [results]);
   const dCounts = useMemo(() => dayCounts(entries, days, filters), [entries, days, filters]);
-  const vCounts = useMemo(() => viewCounts(entries, filters), [entries, filters]);
   const facets = useMemo(() => typeFacets(entries, filters), [entries, filters]);
   const filtered = !isDefaultFilters(filters);
 
-  const visibleMentors = useMemo(() => {
+  // Mentors still scheduling have no calendar rows; a search for them lists them after the agenda.
+  const matchingMentors = useMemo(() => {
+    if (!filters.q.trim()) return [];
     if (filters.types.length && !filters.types.includes("office-hours")) return [];
-    if (filters.q.trim()) return pendingMentors.filter((m) => pendingMentorMatches(m, filters.q));
-    // Pending mentors have no date yet, so they belong to the whole week, not a single day.
-    return filters.day ? [] : pendingMentors;
+    return pendingMentors.filter((m) => pendingMentorMatches(m, filters.q));
   }, [pendingMentors, filters]);
 
   // Screen-reader announcement follows the committed URL (naturally debounced while typing).
@@ -164,27 +172,24 @@ export function ScheduleExplorer({ entries, days, partial, pendingMentors, calen
 
   return (
     <div>
-      {/* Day tabs + view switch. Sticky under the site header on desktop. */}
-      <div id="calendar" className="border-b border-line bg-ink-900 md:sticky md:top-[calc(4rem+1px)] md:z-30">
-        <div className="mx-auto flex w-full max-w-[76rem] items-stretch justify-between gap-6 sm:px-8">
+      {/* Day tabs. Sticky under the site header on desktop. */}
+      <div id="calendar" className="border-b border-line bg-surface md:sticky md:top-[calc(4.5rem+1px)] md:z-30">
+        <div className="mx-auto w-full max-w-[76rem] sm:px-8">
           <DayTabs
             days={days}
             active={filters.day}
             counts={dCounts}
             hrefFor={(day) => hrefFor({ ...filters, day })}
             onSelect={selectDay}
-            className="-mb-px flex-1 px-2 sm:px-0 md:-mx-4 md:flex-none md:overflow-x-auto md:[scrollbar-width:none] md:[&::-webkit-scrollbar]:hidden"
+            className="-mb-px px-2 sm:px-0 md:-mx-4 md:overflow-x-auto md:[scrollbar-width:none] md:[&::-webkit-scrollbar]:hidden"
           />
-          <div className="hidden shrink-0 items-center md:flex">
-            <ViewToggle view={filters.view} counts={vCounts} onChange={(view) => navigate({ ...filters, view })} />
-          </div>
         </div>
       </div>
 
       <div className="mx-auto w-full max-w-[76rem] px-5 sm:px-8">
         {/* Search + filters */}
-        <div className="flex flex-col gap-3 pt-6 md:flex-row md:items-start md:gap-6">
-          <div className="flex gap-2 md:w-80 md:shrink-0">
+        <div className="flex flex-col gap-3 pt-6 md:pt-8 lg:flex-row lg:items-center lg:gap-5">
+          <div className="flex gap-2 lg:w-80 lg:shrink-0">
             <SearchField
               value={query}
               onChange={onQueryChange}
@@ -199,15 +204,13 @@ export function ScheduleExplorer({ entries, days, partial, pendingMentors, calen
               onClick={() => setPanelOpen((o) => !o)}
               className={cn(
                 "inline-flex h-11 shrink-0 items-center gap-2 rounded-sm border px-3.5 text-sm font-medium transition-colors md:hidden",
-                panelOpen || activeFilterCount
-                  ? "border-paper/35 text-paper"
-                  : "border-line-strong text-paper-muted hover:text-paper",
+                panelOpen || activeFilterCount ? "border-text-subtle text-text" : "border-line-strong text-text-muted hover:text-text",
               )}
             >
               <FilterIcon className="size-4" />
               Filters
               {activeFilterCount ? (
-                <span className="inline-flex min-w-5 items-center justify-center rounded-xs bg-accent px-1 font-mono text-[0.6875rem] tabular text-accent-ink">
+                <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-semibold tabular text-accent-ink">
                   {activeFilterCount}
                 </span>
               ) : null}
@@ -216,45 +219,33 @@ export function ScheduleExplorer({ entries, days, partial, pendingMentors, calen
 
           <div
             id="schedule-filter-panel"
-            className={cn(panelOpen ? "flex" : "hidden", "min-w-0 flex-col gap-3 md:flex md:flex-1 md:flex-row md:items-center")}
+            className={cn(panelOpen ? "flex" : "hidden", "min-w-0 flex-col gap-3 md:flex md:flex-row md:flex-wrap md:items-center md:gap-x-5")}
           >
-            <ViewToggle
-              view={filters.view}
-              counts={vCounts}
-              onChange={(view) => navigate({ ...filters, view })}
-              className="w-full md:hidden"
-            />
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-              <span className="mono-label hidden text-paper-subtle lg:inline">Type</span>
-              <TypeChips facets={facets} selected={filters.types} onToggle={toggleType} />
-            </div>
+            <ViewToggle view={filters.view} onChange={(view) => navigate({ ...filters, view })} className="w-full md:w-auto" />
+            <TypeChips facets={facets} selected={filters.types} onToggle={toggleType} />
           </div>
         </div>
 
         {/* Result summary */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-y border-line py-3">
-          <p className="font-mono text-[0.75rem] uppercase tracking-[0.08em] tabular text-paper-muted">
-            {summaryText(results.length, entries.length, filters, days.length)}
-          </p>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div className="mt-5 flex min-h-11 flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm text-text-muted">
+          <p className="tabular">{summaryText(results.length, entries.length, filters, days.length)}</p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            {filtered ? (
+              <Button variant="ghost" size="sm" onClick={reset} className="-ml-2 min-h-11 text-text md:min-h-8">
+                <XIcon className="size-3.5" />
+                Reset filters
+              </Button>
+            ) : null}
             {calendarCount > 0 ? (
               <a
                 href="/schedule/calendar.ics"
                 download
-                className="inline-flex min-h-11 items-center gap-1.5 text-[0.8125rem] text-paper-muted underline-offset-4 transition-colors hover:text-paper hover:underline md:min-h-8"
+                className="inline-flex min-h-11 items-center gap-1.5 underline-offset-4 transition-colors hover:text-text hover:underline md:min-h-8"
               >
-                <DownloadIcon className="size-3.5" />
-                <span>
-                  All {calendarCount} confirmed events <span className="font-mono text-[0.75rem]">.ics</span>
-                </span>
+                <DownloadIcon className="size-4" />
+                Add all confirmed events to your calendar
+                <span className="sr-only"> (.ics file, {plural(calendarCount, "event", "events")})</span>
               </a>
-            ) : null}
-            <span className="mono-label hidden text-paper-subtle sm:inline">Times in {TZ_LABEL}</span>
-            {filtered ? (
-              <Button variant="ghost" size="sm" onClick={reset} className="-mr-2 text-paper">
-                <XIcon className="size-3.5" />
-                Reset filters
-              </Button>
             ) : null}
           </div>
         </div>
@@ -263,9 +254,9 @@ export function ScheduleExplorer({ entries, days, partial, pendingMentors, calen
         </p>
 
         {/* Agenda */}
-        <div ref={resultsRef} className="scroll-mt-6 pt-10 md:scroll-mt-[calc(4rem+1px+4rem+1.5rem)] md:pt-12">
+        <div ref={resultsRef} className="scroll-mt-40 pt-8 md:scroll-mt-[calc(4.5rem+1px+4rem+1.5rem)] md:pt-10">
           {results.length ? (
-            <Agenda groups={groups} filters={{ day: filters.day, q: filters.q }} />
+            <Agenda groups={groups} filters={{ day: filters.day, q: filters.q }} headshots={headshots} />
           ) : (
             <EmptyState
               hasEntries={entries.length > 0}
@@ -274,13 +265,13 @@ export function ScheduleExplorer({ entries, days, partial, pendingMentors, calen
               partial={partial}
               onApply={apply}
               onReset={reset}
-              mentorMatches={visibleMentors.length}
+              mentorMatches={matchingMentors.length}
             />
           )}
-          {visibleMentors.length ? <PendingMentors mentors={visibleMentors} className="mt-16" /> : null}
+          {matchingMentors.length ? <PendingMentors mentors={matchingMentors} className="mt-14" /> : null}
           {partial && results.length ? (
-            <p className="mt-14 max-w-2xl border-l-2 border-dotted border-paper/35 pl-4 text-sm leading-relaxed text-paper-muted">
-              More events will appear here as they’re confirmed. The official Founders Week schedule hasn’t been
+            <p className="mt-14 max-w-2xl text-sm leading-relaxed text-text-muted">
+              More events will show up here as they’re confirmed. The official Founders Week schedule hasn’t been
               added to this calendar yet.
             </p>
           ) : null}
@@ -296,9 +287,9 @@ export function ScheduleExplorer({ entries, days, partial, pendingMentors, calen
 
 function summaryText(count: number, total: number, filters: ScheduleFilters, dayCount: number): string {
   if (isDefaultFilters(filters)) {
-    return `${plural(count, "entry", "entries")}${dayCount > 1 ? ` across ${plural(dayCount, "day", "days")}` : ""}`;
+    return `${plural(count, "event", "events")}${dayCount > 1 ? ` over ${plural(dayCount, "day", "days")}` : ""}`;
   }
-  const parts = [`${count} of ${plural(total, "entry", "entries")}`];
+  const parts = [`${count} of ${plural(total, "event", "events")}`];
   if (filters.day) parts.push(dayLabels(filters.day).short);
   if (filters.view === "picks") parts.push("Founders picks");
   if (filters.types.length) parts.push(filters.types.map((t) => EVENT_TYPE_PLURALS[t]).join(", "));
@@ -339,11 +330,10 @@ function EmptyState({
 }) {
   if (!hasEntries) {
     return (
-      <div className="rounded-sm border border-dotted border-line-strong px-6 py-12 md:px-10">
-        <p className="mono-label text-paper-subtle">Calendar</p>
-        <h2 className="mt-3 font-wide text-2xl font-bold tracking-[-0.025em] text-paper">Nothing listed yet</h2>
-        <p className="mt-3 max-w-xl text-paper-muted">
-          Events appear here as they’re confirmed.
+      <div className="rounded-md border border-line bg-surface-subtle px-6 py-10 md:px-10">
+        <h2 className="text-2xl font-semibold tracking-tight text-text">Nothing listed yet</h2>
+        <p className="mt-2 max-w-xl leading-relaxed text-text-muted">
+          Events show up here as they’re confirmed.
           {partial ? " The official Founders Week schedule hasn’t been added to this calendar yet." : null}
         </p>
       </div>
@@ -353,7 +343,7 @@ function EmptyState({
   // "No workshops or talks among Founders picks on Friday, October 2 matching “zzz”."
   const what = filters.types.length
     ? filters.types.map((t) => EVENT_TYPE_PLURALS[t].toLowerCase()).join(" or ")
-    : "entries";
+    : "events";
   const scope = [
     filters.view === "picks" ? "among Founders picks" : null,
     filters.day ? `on ${dayLabels(filters.day).long}` : null,
@@ -361,60 +351,41 @@ function EmptyState({
   ].filter(Boolean);
 
   return (
-    <div className="rounded-sm border border-dotted border-line-strong px-5 py-10 md:px-10 md:py-12">
-      <p className="mono-label text-paper-subtle">No matches</p>
-      <h2 className="mt-3 font-wide text-2xl font-bold tracking-[-0.025em] text-paper md:text-[1.75rem]">
-        {mentorMatches ? "No calendar entries match" : "Nothing matches these filters"}
+    <div className="rounded-md border border-line bg-surface-subtle px-5 py-8 md:px-10 md:py-10">
+      <h2 className="text-2xl font-semibold tracking-tight text-text">
+        {mentorMatches ? "No calendar events match" : "Nothing matches these filters"}
       </h2>
-      <p className="mt-3 max-w-xl leading-relaxed text-paper-muted">
+      <p className="mt-2 max-w-xl leading-relaxed text-text-muted">
         No {what}
-        {scope.length ? (
-          <>
-            {" "}
-            <span className="text-paper">{scope.join(" ")}</span>
-          </>
-        ) : (
-          " listed yet"
-        )}
-        .
-        {mentorMatches ? " A matching mentor is still scheduling office hours — see below." : null}
+        {scope.length ? ` ${scope.join(" ")}` : " listed yet"}.
+        {mentorMatches ? " A matching office-hours mentor is listed below." : null}
       </p>
 
       {options.length ? (
-        <div className="mt-7">
-          <p className="mono-label text-paper-subtle">Try</p>
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {options.map((r) => (
-              <li key={r.dimension}>
-                <button
-                  type="button"
-                  onClick={() => onApply(r.filters)}
-                  disabled={r.count === 0}
-                  className="inline-flex min-h-11 items-center gap-2.5 rounded-sm border border-line-strong px-3.5 text-sm text-paper transition-colors hover:border-paper/40 hover:bg-paper/[0.04] disabled:border-line disabled:text-paper-subtle md:min-h-10"
-                >
-                  {relaxationLabel(r, filters)}
-                  <span className="font-mono text-[0.75rem] tabular text-paper-subtle">
-                    {r.count === 0 ? "still 0" : plural(r.count, "result", "results")}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ul aria-label="Ways to widen your search" className="mt-6 flex flex-wrap gap-2">
+          {options.map((r) => (
+            <li key={r.dimension}>
+              <button
+                type="button"
+                onClick={() => onApply(r.filters)}
+                disabled={r.count === 0}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-surface px-4 text-sm font-medium text-text transition-colors hover:border-text-subtle disabled:border-line disabled:text-text-subtle md:min-h-10"
+              >
+                {relaxationLabel(r, filters)}
+                <span className="font-normal text-text-subtle">
+                  {r.count === 0 ? "(still none)" : `(${plural(r.count, "result", "results")})`}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
-      <div className="mt-7 flex flex-wrap items-center gap-4">
-        <Button variant="primary" onClick={onReset}>
+      <div className="mt-6">
+        <Button variant="secondary" onClick={onReset} className="min-h-11 bg-surface">
           Reset all filters
         </Button>
       </div>
-
-      {partial ? (
-        <p className="mt-8 max-w-xl border-t border-line pt-5 text-sm leading-relaxed text-paper-muted">
-          This calendar is still growing: the official Founders Week schedule hasn’t been added yet, so some events
-          may not be listed.
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -50,7 +50,14 @@ function toRow(app: ApplicationRecord, directory: OrganizerDirectory): Row {
   };
 }
 
-/** Desktop table (lg+) and a stacked list designed for phones. Rows link to the detail page. */
+const HEADINGS: [string, string][] = [
+  ["Applicant", "w-[27%]"],
+  ["Preferred mentors", "w-[22%]"],
+  ["Selected availability", "w-[26%]"],
+  ["Status & appointments", "w-[25%]"],
+];
+
+/** Desktop table (lg+) and a stacked card list for phones. Rows link to the detail page. */
 export function ApplicationResults({
   applications,
   directory,
@@ -61,18 +68,13 @@ export function ApplicationResults({
   const rows = applications.map((a) => toRow(a, directory));
   return (
     <>
-      <div className="hidden overflow-x-auto lg:block">
+      <div className="hidden overflow-x-auto rounded-md border border-line lg:block">
         <table className="w-full min-w-[58rem] table-fixed border-collapse text-left text-sm">
           <caption className="sr-only">Applications matching the current filters</caption>
-          <thead>
-            <tr className="border-b border-line-strong">
-              {[
-                ["Applicant", "w-[26%]"],
-                ["Preferred mentors", "w-[20%]"],
-                ["Selected availability", "w-[27%]"],
-                ["Status & appointments", "w-[27%]"],
-              ].map(([h, w]) => (
-                <th key={h} scope="col" className={`mono-label px-3 pb-3 font-medium text-paper-subtle first:pl-0 last:pr-0 ${w}`}>
+          <thead className="bg-surface-subtle">
+            <tr className="border-b border-line">
+              {HEADINGS.map(([h, w]) => (
+                <th key={h} scope="col" className={`px-4 py-3 text-sm font-medium text-text-muted first:pl-5 last:pr-5 ${w}`}>
                   {h}
                 </th>
               ))}
@@ -80,39 +82,39 @@ export function ApplicationResults({
           </thead>
           <tbody className="divide-y divide-line">
             {rows.map((r) => (
-              <tr key={r.app.id} className="group relative align-top transition-colors duration-150 hover:bg-paper/[0.025]">
-                <td className="py-4 pl-0 pr-3">
+              <tr key={r.app.id} className="group relative align-top transition-colors duration-150 hover:bg-surface-subtle">
+                <td className="py-4 pl-5 pr-4">
                   <Link
                     href={r.href}
-                    className="font-medium text-[0.9375rem] text-paper underline-offset-4 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] group-hover:underline"
+                    className="text-[0.9375rem] font-semibold text-text underline-offset-4 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] group-hover:underline"
                   >
                     {r.app.fullName}
                   </Link>
-                  <p className="mt-0.5 break-all font-mono text-xs text-paper-muted">{r.app.email}</p>
-                  <p className="mt-2 text-xs leading-5 text-paper-muted">{r.meta}</p>
-                  <p className="text-xs leading-5 text-paper-subtle">{r.work}</p>
+                  <p className="mt-0.5 break-all text-sm text-text-muted">{r.app.email}</p>
+                  <p className="mt-2 text-sm leading-snug text-text-muted">{r.meta}</p>
+                  <p className="text-sm leading-snug text-text-subtle">{r.work}</p>
                   <DuplicateFlag count={r.app.duplicateCount} className="mt-2" />
-                  <p className="mt-2 font-mono text-[0.6875rem] text-paper-subtle">
-                    <time dateTime={r.app.createdAt}>{formatInstant(r.app.createdAt)}</time>
+                  <p className="mt-2 text-xs text-text-subtle">
+                    Submitted <time dateTime={r.app.createdAt}>{formatInstant(r.app.createdAt)}</time>
                   </p>
                 </td>
-                <td className="px-3 py-4">
-                  <PreferenceList mentors={r.preferences} dense />
+                <td className="px-4 py-4">
+                  <PreferenceList mentors={r.preferences} />
                   {r.demo ? <DemoBadge className="mt-2" /> : null}
                 </td>
-                <td className="px-3 py-4">
+                <td className="px-4 py-4">
                   <AvailabilityList items={r.availability} />
                 </td>
-                <td className="py-4 pl-3 pr-0">
+                <td className="py-4 pl-4 pr-5">
                   <div className="flex items-start justify-between gap-3">
                     <ApplicationStatusBadge status={r.app.status} />
                     <ChevronRightIcon
                       aria-hidden
-                      className="mt-1 size-4 shrink-0 text-paper-subtle transition-colors duration-150 group-hover:text-accent"
+                      className="mt-1 size-4 shrink-0 text-text-subtle transition-colors duration-150 group-hover:text-text"
                     />
                   </div>
                   {r.appointments.length ? (
-                    <div className="mt-3 space-y-2.5 border-t border-dashed border-line pt-3">
+                    <div className="mt-3 space-y-3">
                       {r.appointments.map((a) => (
                         <AppointmentLine key={a.id} status={a.status} mentorName={a.mentorName} when={a.when} />
                       ))}
@@ -125,55 +127,53 @@ export function ApplicationResults({
         </table>
       </div>
 
-      <ul className="divide-y divide-line border-y border-line lg:hidden">
+      <ul className="space-y-3 lg:hidden">
         {rows.map((r) => (
           <li key={r.app.id} className="relative">
-            <article className="py-5">
+            <article className="rounded-md border border-line bg-surface p-4 transition-[border-color,box-shadow] duration-150 hover:border-line-strong hover:shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h3 className="text-base font-semibold tracking-[-0.01em] text-paper [overflow-wrap:anywhere]">
-                    <Link href={r.href} className="after:absolute after:inset-0 after:content-['']">
+                  <h3 className="text-base font-semibold text-text [overflow-wrap:anywhere]">
+                    <Link href={r.href} className="after:absolute after:inset-0 after:rounded-md after:content-['']">
                       {r.app.fullName}
                     </Link>
                   </h3>
-                  <p className="mt-0.5 break-all font-mono text-xs text-paper-muted">{r.app.email}</p>
+                  <p className="mt-0.5 break-all text-sm text-text-muted">{r.app.email}</p>
                 </div>
-                <ChevronRightIcon className="mt-1 size-4 shrink-0 text-paper-subtle" />
+                <ChevronRightIcon className="mt-1 size-4 shrink-0 text-text-subtle" />
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <ApplicationStatusBadge status={r.app.status} />
                 {r.demo ? <DemoBadge /> : null}
               </div>
               <DuplicateFlag count={r.app.duplicateCount} className="mt-2" />
-              <dl className="mt-4 grid grid-cols-[6.75rem_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
-                <dt className="mono-label pt-0.5 text-paper-subtle">Student</dt>
-                <dd className="text-paper-muted">
+              <dl className="mt-4 grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-3 border-t border-line pt-4 text-sm">
+                <dt className="text-text-subtle">Student</dt>
+                <dd className="text-text-muted">
                   {r.meta}
-                  <span className="block text-paper-subtle">{r.work}</span>
+                  <span className="block text-text-subtle">{r.work}</span>
                 </dd>
-                <dt className="mono-label pt-0.5 text-paper-subtle">Mentors</dt>
+                <dt className="text-text-subtle">Mentors</dt>
                 <dd>
-                  <PreferenceList mentors={r.preferences} dense />
+                  <PreferenceList mentors={r.preferences} />
                 </dd>
-                <dt className="mono-label pt-0.5 text-paper-subtle">Times</dt>
+                <dt className="text-text-subtle">Times</dt>
                 <dd>
                   <AvailabilityList items={r.availability} />
                 </dd>
                 {r.appointments.length ? (
                   <>
-                    <dt className="mono-label pt-0.5 text-paper-subtle">Appointments</dt>
-                    <dd className="space-y-2.5">
+                    <dt className="text-text-subtle">Appointments</dt>
+                    <dd className="space-y-3">
                       {r.appointments.map((a) => (
                         <AppointmentLine key={a.id} status={a.status} mentorName={a.mentorName} when={a.when} />
                       ))}
                     </dd>
                   </>
                 ) : null}
-                <dt className="mono-label pt-0.5 text-paper-subtle">Submitted</dt>
-                <dd>
-                  <time dateTime={r.app.createdAt} className="font-mono text-xs text-paper-muted">
-                    {formatInstant(r.app.createdAt)}
-                  </time>
+                <dt className="text-text-subtle">Submitted</dt>
+                <dd className="text-text-muted">
+                  <time dateTime={r.app.createdAt}>{formatInstant(r.app.createdAt)}</time>
                 </dd>
               </dl>
             </article>

@@ -13,10 +13,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 Student-curated guide to Founders Week at UIUC, run by **Founders – Illinois Entrepreneurs** (the student org). Founders Week is the broader event series; never imply Founders organizes every event.
 
 ## Priorities (drive navigation, layout, emphasis and CTAs)
-1. **Founders Office Hours** — the primary experience. /office-hours is the most important page; it contains the application (section `#apply`). "Apply for Office Hours" is the primary sitewide CTA. Mentor CTAs link to `/office-hours?mentor=<id>[&window|slot=<id>]#apply` (see `applyHref`/`mentorApplyHref`). All four mentors are always visible (no carousels).
+1. **Founders Office Hours** — the primary experience. /office-hours is the most important page; it contains the application (section `#apply`). "Apply for Office Hours" is the primary sitewide CTA. Mentor CTAs link to `/office-hours?mentor=<id>[&window|slot=<id>]#apply` (see `applyHref`/`mentorApplyHref`). Every mentor is always visible (no carousels).
 2. **Dan Caruso — Fireside Chat** (Mon Sep 28) — "Supported by Founders". NO application/interest/waitlist/booking flow of any kind.
-3. **How to Make $10K/Month in College** (Tue Sep 29, 6–8 PM, 100 MSEB) — "Co-hosted by Founders".
-4. All other Founders Week events. The Calendar (/schedule, nav label "Calendar") is the second most important page; it stays chronological with featured placement + badges for priorities (`featuredEntries`).
+3. **How to Make $10K/Month in College** (Tue Sep 29, 6–8 PM, Materials Science and Engineering Building, Room 100) — "Co-hosted by Founders".
+4. **Happy Hour with Arnav Mishra at Legends** (Wed Sep 30, 5–7 PM) — "Supported by Founders", RSVP on Partiful.
+5. **Founder Failure Lab** (Wed Sep 30, 6:30–8:30 PM, CIF Room 1038) — "Hosted by Founders"; its featured card is light orange (`bg-accent-soft`). Registration on Luma.
+6. All other Founders Week events. The home page features items 2–5 in that order. The Calendar (/schedule, nav label "Calendar") is the second most important page; it stays chronological with featured placement + badges for priorities (`featuredEntries`).
 The Founders afterparty was canceled and must not appear anywhere. The university's Friday "Founders Evening Showcase and Reception" is a separate event and stays.
 
 ## Content integrity (non-negotiable)
@@ -36,7 +38,7 @@ The Founders afterparty was canceled and must not appear anywhere. The universit
 - `components/ui/*` — design-system primitives (Button, Badge, Notice, Monogram, field helpers, icons, status badges).
 
 ## Design system
-Ink/navy surfaces, warm paper text, Illinois orange (`accent`) only for CTAs, active states, "Hosted by Founders", picks, and focus. Monospace (`mono-label`, `font-mono tabular`) for dates, times and metadata. Line style carries certainty: solid = confirmed, dashed = planned/proposed/window, dotted = TBA/in progress. Prefer hairline-divided lists over card grids. No gradients, glow, blobs, glassmorphism or emoji. `paper-faint` is decorative only (fails contrast for text).
+Founders brand, calm and simple: white background, charcoal text (`text`, `charcoal`), Founders orange (`accent`, #FF9600) for primary buttons (charcoal text on orange), involvement badges and focus rings; `accent-strong` is the only orange allowed for text. One sans-serif family (Archivo) everywhere — the legacy `font-serif`/`font-mono`/`mono-label` utilities map to it. Header: the supplied Founders logo (public/brand/founders-logo.png) plus "Founders Week 2026". No orbit art, grids, brackets, step numbering, gradients, glow or emoji; keep badges to Founders involvement and "Founders pick". Legacy `ink-*`/`paper-*` tokens are aliases of the light palette.
 
 ## Next.js 16 specifics
 `params`/`searchParams` are Promises; `cookies()`/`headers()` are async; `middleware` is now `proxy.ts`. Type page props explicitly, e.g. `{ params: Promise<{ id: string }> }`.

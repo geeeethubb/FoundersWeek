@@ -4,7 +4,13 @@
 //   Port 3200 · distDir .next-e2e (never the default .next) · demo content on · drafts off ·
 //   fixed organizer password + app secret · generous application rate limits.
 //
-// Database
+// `--no-demo` starts the second server instead: the site exactly as students see it (production
+// content only — no demo mentors or events), for tests/e2e/production-content.spec.ts.
+//
+//   Port 3201 (E2E_NODEMO_PORT) · distDir .next-e2e-nodemo · demo content off · drafts off ·
+//   its own fresh PGlite in ./.data/e2e-nodemo (it only serves public pages; nothing is written).
+//
+// Database (main server)
 //   - E2E_DATABASE_URL set  → used as DATABASE_URL, so the SAME suite runs against a real Postgres
 //     (Neon/Supabase/local). Optional E2E_DATABASE_SCHEMA → DATABASE_SCHEMA. The suite only creates
 //     its own data (unique e2e-… emails) and never deletes anything it didn't create.
@@ -18,8 +24,11 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-const E2E_PORT = Number(process.env.E2E_PORT ?? 3200);
-const E2E_DIST_DIR = ".next-e2e";
+const NO_DEMO = process.argv.includes("--no-demo");
+// Keep ports in sync with tests/e2e/support/env.ts.
+const MAIN_PORT = Number(process.env.E2E_PORT ?? 3200);
+const E2E_PORT = NO_DEMO ? Number(process.env.E2E_NODEMO_PORT ?? MAIN_PORT + 1) : MAIN_PORT;
+const E2E_DIST_DIR = NO_DEMO ? ".next-e2e-nodemo" : ".next-e2e";
 const E2E_ORGANIZER_PASSWORD = "e2e-organizer-password-123";
 // Test-only signing secret (≥ 32 characters). Never used outside this suite.
 // Keep in sync with tests/e2e/support/env.ts.
@@ -27,7 +36,11 @@ const E2E_APP_SECRET = "e2e-only-app-secret-0123456789-abcdefghijklmnopqrstuvwxy
 
 let databaseUrl;
 let databaseLabel;
-if (process.env.E2E_DATABASE_URL?.trim()) {
+if (NO_DEMO) {
+  rmSync(path.join(root, ".data", "e2e-nodemo"), { recursive: true, force: true });
+  databaseUrl = "pglite:./.data/e2e-nodemo";
+  databaseLabel = "fresh PGlite at ./.data/e2e-nodemo";
+} else if (process.env.E2E_DATABASE_URL?.trim()) {
   databaseUrl = process.env.E2E_DATABASE_URL.trim();
   databaseLabel = "E2E_DATABASE_URL (external Postgres)";
 } else {
@@ -43,8 +56,8 @@ const env = {
   PORT: String(E2E_PORT),
   NEXT_PUBLIC_SITE_URL: `http://localhost:${E2E_PORT}`,
   DATABASE_URL: databaseUrl,
-  DATABASE_SCHEMA: process.env.E2E_DATABASE_SCHEMA ?? "",
-  SHOW_DEMO_CONTENT: "true",
+  DATABASE_SCHEMA: NO_DEMO ? "" : (process.env.E2E_DATABASE_SCHEMA ?? ""),
+  SHOW_DEMO_CONTENT: NO_DEMO ? "false" : "true",
   SHOW_DRAFT_CONTENT: "false",
   ORGANIZER_PASSWORD: E2E_ORGANIZER_PASSWORD,
   APP_SECRET: E2E_APP_SECRET,
@@ -56,7 +69,9 @@ const env = {
 };
 if (!env.DATABASE_SCHEMA) delete env.DATABASE_SCHEMA;
 
-console.log(`[e2e-server] next dev on http://localhost:${E2E_PORT} · distDir ${E2E_DIST_DIR} · database: ${databaseLabel}`);
+console.log(
+  `[e2e-server] next dev on http://localhost:${E2E_PORT} · distDir ${E2E_DIST_DIR} · demo content ${NO_DEMO ? "off" : "on"} · database: ${databaseLabel}`,
+);
 
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
 const server = spawn(process.execPath, [nextBin, "dev", "-p", String(E2E_PORT)], {

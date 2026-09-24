@@ -15,6 +15,7 @@ export interface AcknowledgmentInput {
   firstName: string;
   /** Absolute URL of the private status page. */
   statusUrl: string;
+  /** The event's short name, as it reads in a sentence ("Founders Week"). */
   siteName: string;
   orgName: string;
   /** Rank order; the first is the first choice. */
@@ -32,9 +33,10 @@ function escapeHtml(value: string): string {
 
 export function buildAcknowledgmentEmail(input: AcknowledgmentInput): { subject: string; text: string; html: string } {
   const subject = "We received your office-hours application";
-  const mentorLines = input.mentors.map(
-    (m, i) => `${m.name}${i === 0 ? " (first choice)" : ""}${m.schedulingInProgress ? " — scheduling in progress" : ""}`,
-  );
+  const mentorLines = input.mentors.map((m, i) => {
+    const notes = [i === 0 ? "first choice" : null, m.schedulingInProgress ? "scheduling in progress" : null].filter(Boolean);
+    return notes.length ? `${m.name} (${notes.join(", ")})` : m.name;
+  });
   const interestOnly = input.mentors.filter((m) => m.schedulingInProgress);
   const interestNote = interestOnly.length
     ? `${INTEREST_COPY.followUp} ${INTEREST_COPY.noReservation}`
@@ -42,28 +44,28 @@ export function buildAcknowledgmentEmail(input: AcknowledgmentInput): { subject:
 
   const paragraphs = [
     `Hi ${input.firstName},`,
-    `Thanks for applying for office hours during ${input.siteName}. Your application was received.`,
+    `Thanks for applying for office hours during ${input.siteName}. We got your application.`,
     `${APPLICATION_COPY.limited} ${APPLICATION_COPY.noReservation}`,
     interestNote,
-    "This email is a receipt, not a confirmation of an appointment.",
+    "This email is just a receipt. It doesn’t confirm an appointment.",
   ].filter((p): p is string => Boolean(p));
 
   const text = [
     ...paragraphs,
     `Mentors you chose:\n${mentorLines.map((l) => `- ${l}`).join("\n")}`,
     `Check your status any time with your private link (keep it to yourself):\n${input.statusUrl}`,
-    `— ${input.orgName}`,
+    `Best,\n${input.orgName}`,
   ].join("\n\n");
 
   const p = (s: string) => `<p style="margin:0 0 16px">${escapeHtml(s)}</p>`;
   const html = [
-    `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#0a0f1c;max-width:560px">`,
+    `<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#262626;max-width:560px">`,
     ...paragraphs.map(p),
     `<p style="margin:0 0 8px"><strong>Mentors you chose</strong></p>`,
     `<ul style="margin:0 0 16px;padding-left:20px">${mentorLines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>`,
     `<p style="margin:0 0 8px"><strong>Your private status link</strong> (keep it to yourself)</p>`,
-    `<p style="margin:0 0 16px"><a href="${escapeHtml(input.statusUrl)}" style="color:#c2410c">${escapeHtml(input.statusUrl)}</a></p>`,
-    p(`— ${input.orgName}`),
+    `<p style="margin:0 0 16px"><a href="${escapeHtml(input.statusUrl)}" style="color:#a35500">${escapeHtml(input.statusUrl)}</a></p>`,
+    `<p style="margin:0 0 16px">Best,<br>${escapeHtml(input.orgName)}</p>`,
     `</div>`,
   ].join("");
 

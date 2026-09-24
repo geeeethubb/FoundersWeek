@@ -1,40 +1,20 @@
 /**
- * Display helpers for schedule entries (agenda rows, previews, featured cards, detail page).
+ * Display helpers for schedule entries (agenda rows, previews, the event page).
  * Pure string formatting on top of lib/time.ts — deterministic, so server and client output match.
  */
 import type { AvailabilityKind } from "@/components/ui/status";
 import type { EventLocation, ISODate, LocalTime } from "@/content/types";
-import { dateParts, describeTime, formatDate, formatTime, zoneAbbreviation } from "@/lib/time";
+import { dateParts, describeTime, formatDate, formatTime, TZ_NAME } from "@/lib/time";
 import type { ScheduleEntry } from "./entries";
 
 /** Copy for an event whose time hasn't been announced (`time.kind === "tba"`). */
-export const TIME_FORTHCOMING = "Time forthcoming";
+export const TIME_FORTHCOMING = "Time to be announced";
 /** Copy for a location that hasn't been announced. */
-export const LOCATION_FORTHCOMING = "Location forthcoming";
-
-/** Line style that encodes certainty: solid = confirmed, dashed = planned/window, dotted = TBA/forthcoming. */
-export type Certainty = "solid" | "dashed" | "dotted";
-
-export function entryCertainty(entry: Pick<ScheduleEntry, "status" | "time">): Certainty {
-  if (entry.time.kind !== "exact") return "dotted";
-  if (entry.status === "confirmed" || entry.status === "canceled") return "solid";
-  if (entry.status === "tentative") return "dotted";
-  return "dashed";
-}
+export const LOCATION_FORTHCOMING = "Location to be announced";
 
 /** Office-hours rows describe an availability window (exact) or an approximate one. */
 export function entryAvailabilityKind(entry: Pick<ScheduleEntry, "time">): AvailabilityKind {
   return entry.time.kind === "exact" ? "window" : "window-approx";
-}
-
-export interface GutterTime {
-  kind: "exact" | "part-of-day" | "tba";
-  /** Large figure: "10:00", "Morning", "Time forthcoming". */
-  primary: string;
-  /** "AM"/"PM" for exact times. */
-  period: string | null;
-  /** Second line: "–11:30 AM", "before noon". */
-  secondary: string | null;
 }
 
 function bound(time: LocalTime): string {
@@ -43,21 +23,24 @@ function bound(time: LocalTime): string {
   return formatTime(time);
 }
 
-/** Compact time for the agenda gutter. */
-export function gutterTime(entry: Pick<ScheduleEntry, "time">): GutterTime {
+/**
+ * The agenda's time column as two short lines: "4:00 PM" / "to 6:00 PM", "Morning" / "before noon",
+ * "Time to be announced" / null. `start`/`end` are `HH:mm` for <time dateTime> (exact times only).
+ */
+export function agendaTime(entry: Pick<ScheduleEntry, "time">): {
+  main: string;
+  sub: string | null;
+  start: LocalTime | null;
+  end: LocalTime | null;
+} {
   const t = entry.time;
   if (t.kind === "exact") {
-    const d = describeTime(t);
-    return {
-      kind: "exact",
-      primary: d.start!.clock,
-      period: d.start!.period,
-      secondary: d.end ? `–${d.end.clock} ${d.end.period}` : null,
-    };
+    const end = t.end ?? null;
+    return { main: formatTime(t.start), sub: end ? `to ${formatTime(end)}` : null, start: t.start, end };
   }
   if (t.kind === "part-of-day") {
     const part = t.part.charAt(0).toUpperCase() + t.part.slice(1);
-    const secondary =
+    const sub =
       t.after && t.before
         ? `${bound(t.after)}–${bound(t.before)}`
         : t.before
@@ -65,14 +48,14 @@ export function gutterTime(entry: Pick<ScheduleEntry, "time">): GutterTime {
           : t.after
             ? `after ${bound(t.after)}`
             : null;
-    return { kind: "part-of-day", primary: part, period: null, secondary };
+    return { main: part, sub, start: null, end: null };
   }
-  return { kind: "tba", primary: TIME_FORTHCOMING, period: null, secondary: null };
+  return { main: TIME_FORTHCOMING, sub: null, start: null, end: null };
 }
 
 /**
  * The entry's time as one line of text: "6:00–8:00 PM CT", "Morning, before noon CT",
- * "Time forthcoming". Pass `{ zone: false }` to drop the "CT" suffix.
+ * "Time to be announced". Pass `{ zone: false }` to drop the "CT" suffix.
  */
 export function entryTimeText(entry: Pick<ScheduleEntry, "time">, options: { zone?: boolean } = {}): string {
   if (entry.time.kind === "tba") return TIME_FORTHCOMING;
@@ -80,21 +63,13 @@ export function entryTimeText(entry: Pick<ScheduleEntry, "time">, options: { zon
   return options.zone === false ? d.bare : d.label;
 }
 
-/** Start time only, for compact lists: "6:00 PM", "Morning", "Time forthcoming". */
+/** Start time only, for compact lists: "6:00 PM", "Morning", "Time to be announced". */
 export function entryStartText(entry: Pick<ScheduleEntry, "time">): { text: string; dateTime: string | null } {
-  const g = gutterTime(entry);
-  if (g.kind === "exact" && entry.time.kind === "exact") {
-    return { text: `${g.primary} ${g.period}`, dateTime: entry.time.start };
-  }
-  return { text: g.primary, dateTime: null };
+  const t = agendaTime(entry);
+  return { text: t.main, dateTime: t.start };
 }
 
-/** "Tue, Sep 29 · 6:00–8:00 PM CT" — date and time on one line (featured cards, metadata). */
-export function entryWhenText(entry: Pick<ScheduleEntry, "date" | "time">): string {
-  return `${formatDate(entry.date, "short")} · ${entryTimeText(entry)}`;
-}
-
-/** One-line location: "Illinois Conference Center", "Virtual · Zoom", "Location forthcoming". */
+/** One-line location: "Illinois Conference Center", "Virtual · Zoom", "Location to be announced". */
 export function locationSummary(location: EventLocation): string {
   switch (location.kind) {
     case "in-person":
@@ -109,32 +84,28 @@ export function locationSummary(location: EventLocation): string {
   }
 }
 
-function utcOffsetLabel(abbr: "CDT" | "CST"): string {
-  return `UTC−${abbr === "CDT" ? 5 : 6}`;
+/**
+ * Location as display lines for the event page: venue, room, street address
+ * (["Beckman Institute", "Auditorium (Room 1025)", "405 N. Mathews Ave., Urbana, IL 61801"]).
+ */
+export function locationLines(location: EventLocation): string[] {
+  switch (location.kind) {
+    case "in-person":
+      return [location.venue, location.room, location.address].filter((s): s is string => Boolean(s));
+    case "hybrid":
+      return [location.venue, location.room, location.address, "Also online"].filter((s): s is string => Boolean(s));
+    case "virtual":
+      return [location.platform ? `Virtual · ${location.platform}` : "Virtual"];
+    case "tba":
+    default:
+      return [LOCATION_FORTHCOMING];
+  }
 }
 
-/** "Central Time (CDT, UTC−5)" for the date/time an entry happens. */
-export function timeZoneNote(date: ISODate, time?: LocalTime): string {
-  const abbr = zoneAbbreviation(date, time);
-  return `Central Time (${abbr}, ${utcOffsetLabel(abbr)})`;
-}
-
-/** Compact form: "CDT · UTC−5". */
-export function timeZoneShort(date: ISODate, time?: LocalTime): string {
-  const abbr = zoneAbbreviation(date, time);
-  return `${abbr} · ${utcOffsetLabel(abbr)}`;
-}
-
-/** Start time for zone lookups (exact start, or noon when the time is approximate). */
-export function referenceTime(entry: Pick<ScheduleEntry, "time">): LocalTime | undefined {
-  return entry.time.kind === "exact" ? entry.time.start : undefined;
-}
-
-/** Day header labels: { mono: "THU · OCT 01", long: "Thursday, October 1", short: "Thu, Oct 1" }. */
+/** Day labels: { weekday: "Thu", monthDay: "Oct 1", long: "Thursday, October 1", short: "Thu, Oct 1" }. */
 export function dayLabels(date: ISODate) {
   const p = dateParts(date);
   return {
-    mono: `${p.weekdayShort} · ${p.monthShort} ${p.dayPadded}`.toUpperCase(),
     weekday: p.weekdayShort,
     monthDay: `${p.monthShort} ${p.day}`,
     long: formatDate(date, "long"),
@@ -151,9 +122,32 @@ export function dateRangeLabel(first: ISODate, last: ISODate): string {
   return `${a.weekdayShort} ${a.monthShort} ${a.day} – ${b.weekdayShort} ${b.monthShort} ${b.day}`;
 }
 
-/** Featured rank as an index numeral: 1 → "01". */
-export function rankNumeral(rank: number): string {
-  return String(rank).padStart(2, "0");
+/** AP-style month abbreviations for running text ("Sept 30", "Oct 3"). */
+const AP_MONTHS = ["Jan", "Feb", "March", "April", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
+
+/** "2026-09-30" → "Sept 30". */
+export function apMonthDay(date: ISODate): string {
+  const p = dateParts(date);
+  return `${AP_MONTHS[p.month - 1]} ${p.day}`;
+}
+
+/**
+ * The calendar's one-line introduction, from the official dates and the first listed day:
+ * "Founders Week runs Sept 30 – Oct 3, and related events begin Sept 28. All times Central Time."
+ */
+export function calendarIntro(
+  weekName: string,
+  dates: { start: ISODate; end: ISODate } | null,
+  firstDay: ISODate | null,
+): string {
+  const zone = `All times ${TZ_NAME}.`;
+  if (!dates) return `The ${weekName} calendar. ${zone}`;
+  const runs =
+    dates.start === dates.end
+      ? `${weekName} is ${apMonthDay(dates.start)}`
+      : `${weekName} runs ${apMonthDay(dates.start)} – ${apMonthDay(dates.end)}`;
+  const related = firstDay && firstDay < dates.start ? `, and related events begin ${apMonthDay(firstDay)}` : "";
+  return `${runs}${related}. ${zone}`;
 }
 
 /** Split a description into paragraphs on blank lines. */

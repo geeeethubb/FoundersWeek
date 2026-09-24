@@ -51,7 +51,7 @@ export interface WindowInfo {
   /** `window` = exact window; `window-approx` = part of day / exact times forthcoming. */
   kind: "window" | "window-approx";
   demo: boolean;
-  /** "Thu, Oct 1 · 10:00–11:30 AM CT" or "Fri, Oct 2 · Friday morning · Exact times forthcoming" */
+  /** "Thu, Oct 1 · 10:00–11:30 AM CT" or "Fri, Oct 2 · Friday morning · Exact times TBA" */
   label: string;
 }
 

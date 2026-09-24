@@ -5,13 +5,14 @@ A student-curated guide to **Founders Week** at the University of Illinois Urban
 
 What matters most, in order:
 
-1. **Founders Office Hours** (`/office-hours`). Meet experienced founders and operators one-on-one.
+1. **Founders Office Hours** (`/office-hours`). Students apply once to meet startup founders and
+   investors; Founders matches students by interests and availability and emails selected applicants.
    Mentor profiles, availability, and the application (`/office-hours#apply`). "Apply for Office Hours"
    is the primary call to action everywhere.
-2. **Dan Caruso — Fireside Chat** (Mon Sep 28). Supported by Founders. It is information only: there
-   is no application.
-3. **How to Make $10K/Month in College** (Tue Sep 29, 6–8 PM, 100 MSEB). Co-hosted by Founders.
-4. **The Calendar** (`/schedule`, also `/calendar`). The full Founders Week program by day, with
+2. **Featured events** (home page): Dan Caruso's fireside chat (Mon Sep 28, supported by Founders,
+   information only — no application), How to Make $10K/Month in College (Tue Sep 29, co-hosted by
+   Founders) and the Happy Hour with Arnav Mishra at Legends (Wed Sep 30, supported by Founders).
+3. **The Calendar** (`/schedule`, also `/calendar`). The full Founders Week program by day, with
    filters, search, program blocks, overlap detection, shareable links and calendar export.
 
 Organizers review applications and assign appointments in a protected view (`/organizers`).
@@ -52,7 +53,7 @@ Both flags are ignored on Vercel production deploys.
 
 | Route | What it is |
 | --- | --- |
-| `/` | Home: Office Hours first (all four mentors + apply), then Dan Caruso, the Sep 29 panel and a calendar preview |
+| `/` | Home: Office Hours first (every mentor + apply), then Dan Caruso, the Sep 29 panel and a calendar preview |
 | `/office-hours` | **Primary page.** Mentor lineup and profiles, how matching works, and the application (`#apply`) |
 | `/office-hours?mentor=<id>[&window=<id>\|&slot=<id>]#apply` | Application with that mentor (and time) preselected. Every mentor CTA uses this |
 | `/office-hours/[id]` | Mentor profile |
@@ -109,26 +110,39 @@ a slot outside its window, a speaker linked to an unknown mentor, and so on.
 
 ## Configuration
 
+### Vercel → Settings → Environment Variables → **Production** (all server-side)
+
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | For applications | Postgres connection string (`postgresql://…`), or `pglite:./.data/pglite` for local use (refused on Vercel) |
-| `POSTGRES_URL` | Alternative | Set automatically by Vercel's storage integrations. Used when `DATABASE_URL` is empty |
-| `DATABASE_SCHEMA` | No | Keep all tables in their own schema (e.g. `founders_week`) to share a database with another app |
-| `DATABASE_AUTO_MIGRATE` | No | `false` turns off automatic table setup on first use (then run `npm run db:migrate`) |
-| `APP_SECRET` | In production | ≥ 32 random chars. Signs organizer sessions and applicant status links |
-| `ORGANIZER_PASSWORD` | For `/organizers` | Shared organizer password (≥ 12 chars). Changing it signs everyone out |
-| `NEXT_PUBLIC_SITE_URL` | Recommended | Canonical origin for share links, social images, sitemap and emails |
-| `DATABASE_POOL_MAX` | No | Connections per server instance (default 3) |
-| `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | No | Acknowledgment email after an application is saved. Selection emails are never automatic |
-| `APPLICATION_RATE_LIMIT_PER_HOUR` | No | Submissions per IP per hour (default 10) |
-| `APPLICATION_RATE_LIMIT_PER_EMAIL_PER_DAY` | No | Submissions per email per day (default 5) |
-| `SHOW_DEMO_CONTENT`, `SHOW_DRAFT_CONTENT` | No | Preview-only content (ignored on production deploys) |
+| `APP_SECRET` | **Yes** | 32+ random characters. Signs applicant status links and organizer sessions. **Without it (or if it is shorter than 32 characters) the application stays disabled.** |
+| `DATABASE_URL` | **Yes**, unless `POSTGRES_URL` is set | Postgres connection string (`postgresql://…`). For Supabase use the *Transaction pooler* URI (port 6543) |
+| `POSTGRES_URL` | Alternative | Set automatically when you connect Vercel Storage (Neon) or Vercel's Supabase integration. Used when `DATABASE_URL` is empty |
+| `DATABASE_SCHEMA` | Only when sharing a database | e.g. `founders_week`. Keeps every table in its own schema inside an existing Supabase project |
+| `ORGANIZER_PASSWORD` | **Yes**, for `/organizers` | 12+ characters. Shared organizer password; changing it signs everyone out |
+| `NEXT_PUBLIC_SITE_URL` | Recommended | e.g. `https://foundersweek.vercel.app`. Canonical URL for share links and the sitemap. Vercel's own production URL is used if unset |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | Optional | Acknowledgment email after an application is saved. Selection emails are never automatic |
+| `DATABASE_POOL_MAX`, `DATABASE_AUTO_MIGRATE`, `APPLICATION_RATE_LIMIT_PER_HOUR`, `APPLICATION_RATE_LIMIT_PER_EMAIL_PER_DAY` | Optional | Tuning (defaults: 3 connections, auto-setup on, 60 attempts per network per hour, 5 saved applications per email per day). Leave them out unless you need them; an empty or invalid `DATABASE_POOL_MAX` falls back to 3 |
+
+The app never uses Supabase API keys. Don't add `SUPABASE_SERVICE_ROLE_KEY` or any `NEXT_PUBLIC_*`
+database or secret variable. Only `NEXT_PUBLIC_SITE_URL` is public, and it is just the site address.
+**Vercel only applies changed variables to new deployments, so redeploy after editing them.**
+
+### Local only (`.env.local`, never in Vercel)
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL=pglite:./.data/pglite` | Embedded local database (refused on Vercel) |
+| `SHOW_DEMO_CONTENT`, `SHOW_DRAFT_CONTENT` | Preview fictional demo content or draft mentor copy (ignored on production deploys) |
+| `TEST_POSTGRES_URL`, `E2E_DATABASE_URL`, `MIGRATION_DATABASE_URL` | Integration tests, end-to-end tests against a real Postgres, and running migrations through a different connection |
 
 Generate a secret: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
 
-Until `DATABASE_URL` (or `POSTGRES_URL`) points at a reachable database, and `APP_SECRET` is set in
-production, the application stays visible but **submission is disabled with an explanation**. Success
-is only ever shown after the database confirms the write.
+### Is it working? `/api/health`
+
+`https://<your-site>/api/health` lists each required setting as ok or missing, with the fix. It never
+shows secret values, connection strings or applicant data. The same checklist appears on
+`/organizers/login`. Until every check is ok, the application form stays visible but **submission is
+disabled with an honest notice**. Success is only ever shown after the database confirms the write.
 
 ## Database setup: pick one
 
@@ -145,10 +159,10 @@ serverless instances start at once. Nothing depends on Supabase.
 3. In **Settings → Environment Variables**, add:
    - `APP_SECRET`: 32+ random characters (`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`)
    - `ORGANIZER_PASSWORD`: a strong shared password for organizers
-   - `NEXT_PUBLIC_SITE_URL`: your site URL, e.g. `https://founders-week.vercel.app`
+   - `NEXT_PUBLIC_SITE_URL`: your site URL, e.g. `https://foundersweek.vercel.app`
 4. **Redeploy.** Open `/office-hours#apply`: the form is enabled, and the first request creates the
-   tables. Submit a test application, sign in at `/organizers`, and check it appears (the dashboard's
-   "Data store" indicator shows the connected database).
+   tables. `/api/health` should show every check as ok. Submit a test application, sign in at
+   `/organizers`, and check it appears.
 
 Any other Postgres host (Prisma Postgres, Railway, Render, RDS, a university server) works the same
 way: set `DATABASE_URL`.
@@ -206,9 +220,12 @@ explanation**. Success is only ever shown after the database confirms the write.
 
 ## Deployment (Vercel)
 
-1. Import `geeeethubb/FoundersWeek` in Vercel (framework: Next.js; defaults are fine).
-2. Complete **Database setup** above (Option A or B) and the environment variables.
-3. Deploy. `/organizers`, `/api` and status pages are `noindex` and uncached.
+1. Import `geeeethubb/FoundersWeek` in Vercel (framework: Next.js; defaults are fine). Use **one**
+   Vercel project. The live site `foundersweek.vercel.app` is the `foundersweek` project; an older
+   `founders-week` project also builds from this repo and can be deleted.
+2. Complete **Database setup** above (Option A or B) and the Production environment variables.
+3. Redeploy, then check `/api/health`. `/organizers`, `/api` and status pages are `noindex` and
+   uncached.
 
 Without a database the site still deploys and is fully browsable; only submissions are disabled.
 Any Node host also works (`npm run build && npm start`).

@@ -22,8 +22,11 @@ const nextConfig: NextConfig = {
   turbopack: { root: process.cwd() },
   // PGlite ships WASM + data files; load it with native require instead of bundling.
   serverExternalPackages: ["@electric-sql/pglite"],
-  // The app creates its own tables on first use, so migrations must ship with server functions.
-  outputFileTracingIncludes: { "/**": ["./db/migrations/*.sql"] },
+  // Files read from disk at runtime: SQL migrations (automatic setup) and the fonts and images the
+  // generated social cards inline.
+  outputFileTracingIncludes: {
+    "/**": ["./db/migrations/*.sql", "./lib/og/fonts/*.ttf", "./public/brand/*.png", "./public/mentors/*.jpg"],
+  },
   async redirects() {
     // The calendar lives at /schedule; /calendar is a friendly alias (query strings pass through).
     return [{ source: "/calendar", destination: "/schedule", permanent: false }];

@@ -4,7 +4,7 @@
  * the event detail timeline, calendar export and the tests.
  */
 import type { ISODate, ProgramSession, Speaker } from "@/content/types";
-import { formatTimeRange, minutesOfDay } from "@/lib/time";
+import { formatTimeRange } from "@/lib/time";
 import type { ScheduleEntry } from "./entries";
 import { normalizeSearchText, queryTokens } from "./filter";
 import { listText, plural } from "./format";
@@ -66,10 +66,10 @@ export function sessionPeopleText(session: Pick<ProgramSession, "people" | "peop
   return parts.join("; ");
 }
 
-/** Plain-text line for one session: "10:15–10:45 AM — Innovating in Quantum (Brian DeMarco, …)". */
+/** Plain-text line for one session: "10:15–10:45 AM: Innovating in Quantum (Brian DeMarco, …)". */
 export function sessionLineText(session: ProgramSession): string {
   const people = sessionPeopleText(session);
-  return `${sessionTimeLabel(session)} — ${session.title}${people ? ` (${people})` : ""}`;
+  return `${sessionTimeLabel(session)}: ${session.title}${people ? ` (${people})` : ""}`;
 }
 
 export interface ProgramMentor {
@@ -145,33 +145,4 @@ export function defaultProgramOpen(
   if (!hasProgram(entry)) return false;
   if (filters.day) return true;
   return matchingSessionIndexes(entry, filters.q).length > 0;
-}
-
-export interface TrackSegment {
-  /** Offset from the block start, as a % of the block's length. */
-  left: number;
-  /** Length as a % of the block's length. */
-  width: number;
-  /** Features an office-hours mentor. */
-  mentor: boolean;
-  logistics: boolean;
-}
-
-/** Proportional segments for the block's mini timeline (empty when the block has no exact span). */
-export function programTrack(entry: Pick<ScheduleEntry, "sessions" | "time">): TrackSegment[] {
-  if (entry.time.kind !== "exact" || !entry.time.end || !entry.sessions.length) return [];
-  const start = minutesOfDay(entry.time.start);
-  const span = minutesOfDay(entry.time.end) - start;
-  if (span <= 0) return [];
-  const pct = (n: number) => Math.round((n / span) * 10000) / 100;
-  return entry.sessions.map((s) => {
-    const a = Math.max(0, minutesOfDay(s.start) - start);
-    const b = Math.min(span, minutesOfDay(s.end) - start);
-    return {
-      left: pct(a),
-      width: pct(Math.max(0, b - a)),
-      mentor: s.people.some((p) => Boolean(p.mentorId)),
-      logistics: isLogistics(s),
-    };
-  });
 }

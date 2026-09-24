@@ -10,10 +10,14 @@
 // CSV export sanitization.
 //
 // Scenarios covered (for manual QA of the organizer view):
-// - Interest only in mentors still scheduling (Ron, Vik): Daniel Reyes (twice), Ethan Brooks, the
-//   formula-test applicant. Review them as Under review / Selected / Waitlisted; confirming is
-//   blocked until those mentors have confirmed slots.
+// - All six mentors are requested somewhere (Patrick, Arnav, Vik, Elliott, Ron, Rishab).
+// - Interest only in mentors still scheduling (Ron, Vik, Elliott): Daniel Reyes (twice), Ethan
+//   Brooks, Aisha Rahman (broad availability in her notes), the formula-test applicant. Review them
+//   as Under review / Selected / Waitlisted; confirming is blocked until those mentors have
+//   confirmed slots.
 // - Windows (Patrick, Arnav) without slots: Maya, Priya, Marcus, Hannah.
+// - Rishab's date-only Thu, Oct 1 window (exact time to be confirmed), with the broad-availability
+//   note it requires: Nadia Brooks.
 // - Slot capacity with SHOW_DEMO_CONTENT=true: demo-avery-slot-1430 seats 2 (Sofia, Noah x2, Grace
 //   can compete for it); demo-avery-slot-1400 seats 1; demo-jordan-slot-1500 is only *proposed*.
 // - Student conflict: Noah Williams applied twice (same email) for demo-avery-slot-1430.
@@ -110,7 +114,7 @@ const applicants = [
     stage: "exploring",
     working_on: "Curious about startups. I want to learn how founders decide what problem to work on.",
     question: "How did you know your first idea was worth pursuing?",
-    mentors: ["vikram-lakhwara"],
+    mentors: ["vikram-lakhwara", "elliott-notrica"],
     availability: [],
     referrer: "vikram-lakhwara",
     status: "submitted",
@@ -224,6 +228,24 @@ const applicants = [
     status: "submitted",
     hours: 3,
   },
+  // Elliott is still scheduling: interest only, with broad availability in the notes instead.
+  {
+    full_name: "Aisha Rahman",
+    email: "arahman4@illinois.edu",
+    year: "senior",
+    major: "Food Science",
+    participation: "team",
+    team_name: "Fermented Futures",
+    teammates: "Leo Park (Chemical Engineering)",
+    stage: "building",
+    working_on: "Shelf-stable plant-based protein made with precision fermentation; pilot batches in the campus pilot plant.",
+    question: "How do we plan manufacturing scale-up before we have a signed customer?",
+    availability_notes: "Free most afternoons Wed–Fri after 2 PM.",
+    mentors: ["elliott-notrica", "patrick-haddox"],
+    availability: [],
+    status: "under_review",
+    hours: 40,
+  },
   {
     full_name: "Hannah Cole",
     email: "hcole9@illinois.edu",
@@ -238,12 +260,30 @@ const applicants = [
     status: "canceled",
     hours: 60,
   },
+  {
+    full_name: "Nadia Brooks",
+    email: "nbrooks4@illinois.edu",
+    year: "senior",
+    major: "Bioengineering",
+    participation: "team",
+    team_name: "PulseFit",
+    teammates: "Omar Haddad (Electrical Engineering)",
+    stage: "idea",
+    working_on: "A class project on low-cost wearable sensors that we'd like to turn into a medtech startup.",
+    question: "What should a student team do first when a hardware project might become a healthcare company?",
+    availability_notes: "Thursday Oct 1: free before 11 AM and after 3 PM.",
+    mentors: ["rishab-veldur", "patrick-haddox"],
+    availability: ["window:rishab-veldur-2026-10-01"],
+    status: "submitted",
+    hours: 1,
+  },
 ];
 
 /** Which mentor each window/slot id belongs to (ids come from content/mentors.ts and content/demo.ts). */
 const OPTION_OWNERS = [
   ["patrick-haddox-", "patrick-haddox"],
   ["arnav-mishra-", "arnav-mishra"],
+  ["rishab-veldur-", "rishab-veldur"],
   ["demo-avery-", "demo-avery-sample"],
   ["demo-jordan-", "demo-jordan-placeholder"],
 ];

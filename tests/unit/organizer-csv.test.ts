@@ -3,6 +3,7 @@ import { demoMentors } from "@/content/demo";
 import { mentors } from "@/content/mentors";
 import {
   APPLICATION_CSV_COLUMNS,
+  applicationCsvRow,
   applicationsToCsv,
   csvField,
   exportFilename,
@@ -121,5 +122,74 @@ describe("application CSV rows", () => {
     for (const cell of csv.split(/,|\r\n/)) {
       expect(cell).not.toMatch(/^\s*[=+@]/);
     }
+  });
+
+  it("labels an application with no time picked as interest only", () => {
+    const row = applicationCsvRow({ ...app, availability: [], appointments: [] }, directory);
+    expect(row[APPLICATION_CSV_COLUMNS.indexOf("availability")]).toBe("Interest only (no time selected)");
+    expect(row[APPLICATION_CSV_COLUMNS.indexOf("appointments")]).toBe("");
+  });
+
+  it("exports an application listing Rishab with his Oct 1 window (time to be confirmed)", () => {
+    const rishabApp: ApplicationRecord = {
+      ...app,
+      status: "submitted",
+      fullName: "Nadia Brooks",
+      email: "nbrooks4@illinois.edu",
+      emailNormalized: "nbrooks4@illinois.edu",
+      major: "Bioengineering",
+      teamName: "PulseFit",
+      teammates: "Omar Haddad (Electrical Engineering)",
+      workingOn: "Low-cost wearable sensors",
+      question: "What should a student team do first?",
+      availabilityNotes: "Thursday Oct 1: free before 11 AM and after 3 PM.",
+      firstChoiceMentorId: "rishab-veldur",
+      mentors: [
+        { mentorId: "rishab-veldur", rank: 1 },
+        { mentorId: "patrick-haddox", rank: 2 },
+      ],
+      availability: [
+        { mentorId: "patrick-haddox", kind: "window", optionId: "patrick-haddox-2026-10-01-am" },
+        { mentorId: "rishab-veldur", kind: "window", optionId: "rishab-veldur-2026-10-01" },
+      ],
+      appointments: [],
+      duplicateCount: 1,
+    };
+    const row = applicationCsvRow(rishabApp, directory);
+    const cell = (column: (typeof APPLICATION_CSV_COLUMNS)[number]) => row[APPLICATION_CSV_COLUMNS.indexOf(column)];
+    expect(row).toHaveLength(APPLICATION_CSV_COLUMNS.length);
+    expect(cell("status")).toBe("Submitted");
+    expect(cell("first_choice")).toBe("Rishab Veldur");
+    expect(cell("preferred_mentors")).toBe("1. Rishab Veldur; 2. Patrick Haddox");
+    expect(cell("availability")).toBe(
+      "Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window); Rishab Veldur: Thu, Oct 1 · Exact time to be confirmed (window)",
+    );
+    expect(cell("availability_notes")).toBe("Thursday Oct 1: free before 11 AM and after 3 PM.");
+    expect(cell("appointments")).toBe("");
+    expect(cell("duplicate_count")).toBe("1");
+
+    const csv = applicationsToCsv([rishabApp], directory);
+    expect(csv.split("\r\n")).toHaveLength(3); // header, one row, trailing newline
+    expect(csv).toContain(
+      '"Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window); Rishab Veldur: Thu, Oct 1 · Exact time to be confirmed (window)"',
+    );
+    expect(csv).toContain(",Rishab Veldur,1. Rishab Veldur; 2. Patrick Haddox,");
+    expect(csv).not.toMatch(/Oct 2|no longer listed|Time TBA/);
+  });
+
+  it("still labels a Rishab window that disappeared from content instead of dropping it", () => {
+    const row = applicationCsvRow(
+      {
+        ...app,
+        mentors: [{ mentorId: "rishab-veldur", rank: 1 }],
+        firstChoiceMentorId: "rishab-veldur",
+        availability: [{ mentorId: "rishab-veldur", kind: "window", optionId: "rishab-veldur-2026-10-02" }],
+        appointments: [],
+      },
+      directory,
+    );
+    expect(row[APPLICATION_CSV_COLUMNS.indexOf("availability")]).toBe(
+      "Rishab Veldur: Window rishab-veldur-2026-10-02 (no longer listed) (window)",
+    );
   });
 });

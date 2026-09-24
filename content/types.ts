@@ -81,10 +81,12 @@ export interface Speaker {
   title?: string;
   /** Speakers are only shown publicly when verified against a source. */
   verified: boolean;
-  /** e.g. "moderator" when the source says "moderated by". */
-  role?: "moderator";
+  /** "moderator" when the source says "moderated by"; "host" for the person hosting the event. */
+  role?: "moderator" | "host";
   /** Links the speaker to an office-hours mentor profile (content/mentors.ts id). */
   mentorId?: string;
+  /** Public profile supplied by organizers (e.g. LinkedIn); the name links to it. */
+  profileUrl?: string;
 }
 
 /**
@@ -165,7 +167,7 @@ export interface AvailabilityWindow {
   id: string;
   date: ISODate;
   time: TimeSpec;
-  /** Optional display override, e.g. "Friday morning · Exact times forthcoming". */
+  /** Optional display override, e.g. "Friday morning · Exact times TBA". */
   label?: string;
   /** Public note shown under the window. */
   note?: string;
@@ -208,6 +210,11 @@ export interface Mentor {
    * Distinct from `askMeAbout`, which must be confirmed by the mentor.
    */
   expertise: Draftable<{ label: string; basis: string }[]> | null;
+  /**
+   * Short public tags describing the mentor's background (e.g. "Medtech"), shown under
+   * "Background". Areas the mentor knows from experience, not topics they agreed to cover.
+   */
+  backgroundTags?: string[];
   /** "Ask me about" topics — must come from the mentor, not be inferred. */
   askMeAbout: Draftable<string[]> | null;
   /** Who the conversation would be useful for. */

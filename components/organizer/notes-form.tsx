@@ -39,12 +39,12 @@ export function NotesForm({ applicationId, notes }: { applicationId: string; not
         }}
         rows={5}
         maxLength={MAX}
-        placeholder="Private notes for the organizer team — fit, follow-ups, who emailed whom…"
+        placeholder="Private notes for the organizer team: fit, follow-ups, who emailed whom…"
         aria-describedby={`${id}-hint`}
         className="field-control min-h-32 resize-y text-[0.9375rem] leading-relaxed"
       />
       <div className="mt-2 flex items-center justify-between gap-3">
-        <p id={`${id}-hint`} aria-live="polite" className="text-xs text-paper-subtle">
+        <p id={`${id}-hint`} aria-live="polite" className="text-xs text-text-subtle">
           {error ? (
             <span role="alert" className="inline-flex items-start gap-1.5 text-sm text-danger">
               <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
@@ -59,7 +59,7 @@ export function NotesForm({ applicationId, notes }: { applicationId: string; not
           )}
         </p>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[0.6875rem] text-paper-subtle tabular">
+          <span className="text-xs text-text-subtle tabular">
             {value.length}/{MAX}
           </span>
           <Button type="submit" size="sm" variant={dirty ? "primary" : "secondary"} disabled={!dirty || pending} className="max-sm:h-11">

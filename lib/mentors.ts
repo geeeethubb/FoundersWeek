@@ -17,9 +17,16 @@ export function schedulingStatus(mentor: Pick<Mentor, "availability" | "slots">)
 
 export const SCHEDULING_IN_PROGRESS_LABEL = "Scheduling in progress";
 
+/**
+ * How a mentor's date-only window (a date is set, the time isn't) reads everywhere students see
+ * it: "Thu, Oct 1 · Exact time to be confirmed". Events and calendar entries without a time keep
+ * "Time to be announced".
+ */
+export const EXACT_TIME_TO_BE_CONFIRMED = "Exact time to be confirmed";
+
 export const INTEREST_COPY = {
   followUp: "Founders will follow up once availability is finalized.",
-  noReservation: "Expressing interest does not reserve an appointment.",
+  noReservation: "Expressing interest doesn’t reserve an appointment.",
 } as const;
 
 /** Call-to-action label for a mentor. */

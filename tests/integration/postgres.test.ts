@@ -7,6 +7,7 @@
 import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 import { connectPostgresForTests, DatabaseUnavailableError, type Database } from "@/lib/db/client";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
 const ADMIN_URL = process.env.TEST_POSTGRES_URL;
 const suite = ADMIN_URL ? describe : describe.skip;
@@ -122,5 +123,17 @@ suite("postgres (production driver)", () => {
       ).rejects.toThrow(/permission denied/);
     }
     await raw.end();
+  });
+
+  it("rate limits hold under a parallel burst (no count-then-insert race)", async () => {
+    const db = await connect(await freshDatabase("ratelimit"), { autoMigrate: true });
+    // A small pool on purpose: parallel requests really do run on separate connections.
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () =>
+        consumeRateLimit(db, { bucket: "it-burst", key: "203.0.113.9", limit: 5, windowSeconds: 900 }),
+      ),
+    );
+    expect(results.filter((r) => r.allowed)).toHaveLength(5);
+    expect(results.filter((r) => !r.allowed).every((r) => r.retryAfterSeconds > 0)).toBe(true);
   });
 });

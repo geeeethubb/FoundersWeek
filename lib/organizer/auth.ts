@@ -6,7 +6,7 @@
  * exercised in unit tests with plain `Request` objects.
  */
 import "server-only";
-import { getOrganizerPassword } from "@/lib/config";
+import { getAppSecret, getOrganizerPassword } from "@/lib/config";
 import { DatabaseUnavailableError } from "@/lib/db/client";
 import { isSameOriginRequest, jsonError } from "@/lib/security/request";
 import { OrganizerActionError } from "./errors";
@@ -17,7 +17,7 @@ export const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
 export type AuthorizationResult = { ok: true; session: OrganizerSession } | { ok: false; response: Response };
 
 /**
- * - Sign-in disabled (no ORGANIZER_PASSWORD) → 503
+ * - Sign-in disabled (no ORGANIZER_PASSWORD, or no APP_SECRET to verify sessions with) → 503
  * - Mutation from another origin → 403 (checked before the session: CSRF never reaches data)
  * - Missing/invalid/expired session → 401
  */
@@ -29,6 +29,12 @@ export function authorizeOrganizerRequest(
     return {
       ok: false,
       response: jsonError(503, "organizer_disabled", "Organizer sign-in is disabled. Set ORGANIZER_PASSWORD."),
+    };
+  }
+  if (!getAppSecret()) {
+    return {
+      ok: false,
+      response: jsonError(503, "organizer_disabled", "Organizer sign-in is disabled. Set APP_SECRET."),
     };
   }
   if (options.mutation && !isSameOriginRequest(request)) {
@@ -65,6 +71,8 @@ export function errorResponse(error: unknown): Response {
   if (error instanceof DatabaseUnavailableError) {
     return jsonError(503, "database_unavailable", "The application database isn’t available right now.");
   }
-  console.error("[organizer] unexpected error", error);
+  // Class and driver code only: Postgres error messages and details can contain row values.
+  const e = error as { name?: string; code?: string };
+  console.error(`[organizer] unexpected error: ${e?.name ?? "Error"}${e?.code ? ` code=${e.code}` : ""}`);
   return jsonError(500, "server_error", "Something went wrong. Try again.");
 }

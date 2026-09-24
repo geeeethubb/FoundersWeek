@@ -174,7 +174,7 @@ export async function updateApplication(
           throw new OrganizerActionError(
             409,
             "needs_confirmed_appointment",
-            `“${APPLICATION_STATUS_LABELS[input.status]}” requires at least one confirmed appointment. Confirm an appointment first.`,
+            `“${APPLICATION_STATUS_LABELS[input.status]}” needs at least one confirmed appointment. Confirm an appointment first.`,
           );
         }
       }
@@ -224,7 +224,7 @@ export async function assignAppointment(
 ): Promise<{ appointment: AppointmentRecord; applicationStatus: ApplicationStatus }> {
   const slot = ctx.slots.get(input.slotId);
   if (!slot) {
-    throw new OrganizerActionError(404, "slot_not_found", "That appointment slot isn’t in the schedule content.");
+    throw new OrganizerActionError(404, "slot_not_found", "That appointment slot isn’t in the schedule.");
   }
   const { startsAt, endsAt } = slotInterval(slot);
 
@@ -325,13 +325,13 @@ export async function updateAppointment(
       }
       const slot = ctx.slots.get(found.slot_id);
       if (!slot) {
-        throw new OrganizerActionError(409, "slot_missing", "This slot is no longer in the schedule content.");
+        throw new OrganizerActionError(409, "slot_missing", "This slot isn’t in the schedule anymore.");
       }
       if (slot.status !== "confirmed") {
         throw new OrganizerActionError(
           409,
           "slot_not_confirmed",
-          `This time is not yet confirmed with the mentor (${slot.mentorName}). Mark the slot confirmed in content before confirming appointments.`,
+          `This time isn’t confirmed with the mentor (${slot.mentorName}) yet. Mark the slot as confirmed in content before confirming appointments.`,
         );
       }
       // Re-snapshot the time from content in case it was edited after the proposal.

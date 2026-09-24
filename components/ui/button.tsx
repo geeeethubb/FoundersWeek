@@ -9,7 +9,7 @@ const base =
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm font-medium select-none " +
   "transition-[background-color,border-color,color,transform] duration-150 ease-out " +
   "active:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong";
 
 const variants: Record<ButtonVariant, string> = {
   primary: "bg-accent text-accent-ink hover:bg-accent-hover",

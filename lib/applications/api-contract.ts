@@ -42,13 +42,13 @@ export type SubmitResponse = SubmitSuccess | SubmitFailure;
 
 /** Student-facing copy for failures. The server's `message` is preferred when present. */
 export const SUBMIT_COPY = {
-  networkOrServer: "We couldn’t submit your application. Your answers are still here — please try again.",
+  networkOrServer: "We couldn’t submit your application. Your answers are still here, so please try again.",
   validationTitle: "Please fix the highlighted answers",
-  rejected: "We couldn’t accept this submission. Please review your answers and try again in a moment.",
+  rejected: "We couldn’t accept this submission. Check your answers and try again in a moment.",
   forbidden: "This submission was blocked for security reasons. Reload the page and try again.",
-  tooLarge: "Your answers are too long to submit. Please shorten them and try again.",
-  unavailable: "Applications are temporarily unavailable. Your answers are still here — please try again later.",
-  closed: "The office-hours application isn’t accepting submissions right now.",
+  tooLarge: "Your answers are too long to send. Shorten them a bit and try again.",
+  unavailable: "We can’t save applications right now. Your answers are still here, so try again in a little while.",
+  closed: "We aren’t taking office-hours applications right now.",
 } as const;
 
 /** "about 20 minutes", "about 3 hours" — for rate-limit messages. */
@@ -60,8 +60,15 @@ export function describeWait(seconds: number): string {
   return `about ${hours} hour${hours === 1 ? "" : "s"}`;
 }
 
-export function rateLimitMessage(retryAfterSeconds: number): string {
-  return `You’ve sent several applications in a short time. Please wait ${describeWait(retryAfterSeconds)} and try again — your answers are still here.`;
+/**
+ * `email`: this student already has several saved applications today. `network`: many
+ * applications came from the same network (e.g. campus Wi-Fi) in the last hour.
+ */
+export function rateLimitMessage(retryAfterSeconds: number, kind: "email" | "network" = "email"): string {
+  const wait = describeWait(retryAfterSeconds);
+  return kind === "network"
+    ? `A lot of applications just came from your network. Please wait ${wait} and try again. Your answers are still here.`
+    : `You’ve already sent several applications today. Please wait ${wait} and try again. Your answers are still here.`;
 }
 
 /** Narrow an unknown JSON body to a success response (must carry an id and a status link). */

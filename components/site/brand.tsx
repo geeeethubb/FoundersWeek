@@ -3,34 +3,45 @@ import { getSite } from "@/content";
 import { cn } from "@/lib/cn";
 
 /**
- * "Founders × Founders Week" lockup. If an approved Founders logo is configured in
- * content/site.ts (brand.foundersLogo), it is rendered at its intrinsic aspect ratio;
- * otherwise a typographic lockup is used. No logo is ever synthesized.
+ * Founders logo + a small "Founders Week 2026" label.
+ *
+ * The logo is public/brand/founders-logo.png: a tight crop of the supplied artwork
+ * (public/brand/founders-logo-original.png, kept intact) with only the foreground mark and
+ * wordmark — the white background and pale background emblem removed, original colors and
+ * proportions unchanged. Rendered by height with auto width, so it is never distorted.
  */
-export function BrandLockup({ className, compact = false }: { className?: string; compact?: boolean }) {
-  const { brand } = getSite();
+export function BrandLockup({
+  className,
+  size = "md",
+  showWeek = true,
+}: {
+  className?: string;
+  size?: "md" | "lg";
+  showWeek?: boolean;
+}) {
+  const { brand, week } = getSite();
   const logo = brand.foundersLogo;
   return (
-    <span className={cn("inline-flex items-center gap-2.5 text-paper", className)}>
+    <span className={cn("inline-flex items-center gap-3", className)}>
       {logo ? (
         <Image
           src={logo.src}
           alt={logo.alt}
           width={logo.width}
           height={logo.height}
-          className="h-6 w-auto"
+          className={cn("w-auto", size === "lg" ? "h-12" : "h-9 md:h-10")}
           priority
         />
       ) : (
-        <span className="font-wide text-[0.9375rem] font-extrabold tracking-[-0.01em]">Founders</span>
+        <span className="text-lg font-extrabold tracking-tight text-charcoal">Founders</span>
       )}
-      <span aria-hidden className="font-serif text-lg italic leading-none text-accent">
-        ×
-      </span>
-      <span className={cn("text-[0.9375rem] font-medium tracking-[-0.005em] text-paper-muted", compact && "max-[359px]:sr-only")}>
-        Founders Week
-      </span>
-      {logo ? null : <span className="sr-only">(Founders – Illinois Entrepreneurs)</span>}
+      {showWeek ? (
+        <span className="border-l border-line-strong pl-3 text-[0.8125rem] font-medium leading-tight text-text-muted max-[359px]:sr-only">
+          {week.name}
+          <br className="sm:hidden" />
+          <span className="sm:ml-1">{week.year}</span>
+        </span>
+      ) : null}
     </span>
   );
 }

@@ -1,24 +1,30 @@
 "use client";
 
 /**
- * The office-hours application, embedded at /office-hours#apply: six numbered steps, one
- * submission for every mentor a student picks.
+ * The office-hours application, embedded at /office-hours#apply: one short form in three groups
+ * (About you · Your interests · Submit), one submission for every mentor a student picks.
  *
  * - Validation uses the SAME zod schema as the API (createApplicationSchema). A field shows its
- *   error once the student has changed it and moved on, then live; everything shows on submit.
- * - Submission is idempotent: one key per form session, reused across retries. Success is shown
- *   ONLY when the server answers ok with an application id; after any failure the answers stay.
- * - Mentor CTAs elsewhere on the page link to `/office-hours?mentor=<id>[&window|slot=<id>]#apply`.
- *   The first render is prefilled on the server; when those parameters change while the form is
- *   open, the selection is MERGED into the current answers (nothing is cleared), announced in a
- *   live region, and the mentor's card is brought into view.
+ *   error once the student has changed it and moved on, then live; everything shows on submit,
+ *   with a focused error summary. Validation never clears an answer.
+ * - Submission is idempotent: one key per form session, reused across retries (and kept with the
+ *   draft). Success is shown ONLY when the server answers ok with an application id; after any
+ *   failure every answer stays.
+ * - Drafts: the in-progress answers (everything except the honeypot) are kept in sessionStorage,
+ *   restored on mount — before the URL's mentor preselection is merged in — and cleared after a
+ *   successful submission. So a student can open a mentor's profile and come back.
+ * - Mentor CTAs link to `/office-hours?mentor=<id>[&window|slot=<id>]#apply`. The first render is
+ *   prefilled on the server; when those parameters change while the form is open, the selection is
+ *   MERGED into the current answers (nothing is cleared), announced, and the mentor brought into view.
+ *   Back/Forward never merge, and a plain "#apply" link only scrolls.
+ * - Removing the mentor (or time) the URL preselected drops those parameters from the address bar,
+ *   so a reload doesn't add the mentor back; notices about a removed mentor go away.
  */
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldError } from "@/components/ui/field";
-import { AlertIcon, ArrowRightIcon, InfoIcon, LockIcon } from "@/components/ui/icons";
-import { MentorPortrait } from "@/components/ui/portrait";
+import { FieldError, errorId } from "@/components/ui/field";
+import { AlertIcon, ArrowRightIcon, InfoIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/primitives";
 import {
   APPLICATIONS_ENDPOINT,
@@ -28,97 +34,115 @@ import {
   type SubmitFailure,
 } from "@/lib/applications/api-contract";
 import type { ApplicationCatalog } from "@/lib/applications/catalog";
+import { LIMITS, PARTICIPATION_OPTIONS, STAGE_OPTIONS, YEAR_OPTIONS } from "@/lib/applications/constants";
+import { isBlankDraft, parseDraft, serializeDraft, toDraftValues } from "@/lib/applications/draft";
 import {
-  APPLICATION_COPY,
-  LIMITS,
-  PARTICIPATION_OPTIONS,
-  STAGE_OPTIONS,
-  YEAR_OPTIONS,
-} from "@/lib/applications/constants";
-import {
+  mergePrefill,
   mergeSearchParams,
   prefillParamsFrom,
   prefillParamsKey,
+  resolvePrefill,
   type ApplicationPrefill,
   type ApplySearchParams,
 } from "@/lib/applications/prefill";
-import { emptyApplicationValues, normalizeLink } from "@/lib/applications/schema";
+import { normalizeLink } from "@/lib/applications/schema";
 import { cn } from "@/lib/cn";
-import { APPLY_ANCHOR, APPLY_PATH } from "@/lib/schedule/entries";
-import { Confirmation, type ConfirmedMentor } from "./confirmation";
-import {
-  CheckboxRow,
-  ChoiceIndicator,
-  Legend,
-  SelectField,
-  TextAreaField,
-  TextField,
-  WordCountTextarea,
-  WRAPPED_FOCUS,
-} from "./controls";
+import { APPLY_ANCHOR } from "@/lib/schedule/entries";
+import { Confirmation } from "./confirmation";
+import { CheckboxRow, Label, RadioChip, SelectField, TextField, WordCountTextarea } from "./controls";
 import { ErrorSummary, type SummaryItem } from "./error-summary";
 import {
+  CROSS_FIELD_KEYS,
+  FORM_GROUPS,
   PLACEHOLDER_KEY,
-  SECTIONS,
-  SECTION_COUNT,
-  SUBMIT_BLOCK_ID,
+  applyLinkAction,
   createValidator,
-  effectiveAvailability,
   effectiveFirstChoice,
+  emptyFormState,
   fieldId,
   focusTargetId,
-  mentorCheckboxId,
-  mentorRowId,
+  groupDomId,
   mergeAnnouncement,
   newIdempotencyKey,
+  noticeAfterRemoval,
   orderErrors,
-  prefillNote,
-  sectionDomId,
-  sectionProgress,
+  prefillNotice,
+  removesUrlSelection,
+  samePrefill,
   toSubmissionValues,
+  withoutPrefillParams,
   type FieldErrors,
+  type FormGroupId,
   type FormState,
-  type SectionDef,
-  type SectionId,
+  type SelectionNotice,
 } from "./form-model";
-import { FirstChoiceTag, MentorSection, present, type ApplyMentorProfiles, type OptionPresentations } from "./mentor-section";
-import { ProgressPanel, ReviewChecklist, type PanelMentor } from "./progress-panel";
+import {
+  AvailabilityFields,
+  FirstChoicePicker,
+  MentorPicker,
+  type ApplyMentorProfiles,
+  type OptionPresentations,
+} from "./mentor-section";
 
 export interface ApplicationFormProps {
   catalog: ApplicationCatalog;
   emailDomains: string[];
-  /** Server-computed label/detail/line style per option key. */
+  /** Server-computed label/phrase per option key. */
   presentations: OptionPresentations;
-  /** Verified role/company/headshot per mentor id, for the portraits. */
+  /** Verified role/company/headshot per mentor id, for the mentor rows. */
   profiles: ApplyMentorProfiles;
   /** Selection resolved on the server from the URL of the first render. */
   prefill: ApplicationPrefill;
+  /** sessionStorage key for the in-progress draft (scoped to this site). */
+  draftKey: string;
   /** Set when submissions are closed: the form is shown for preview but disabled. */
   closed: { title: string; message: string } | null;
-  deadlineLabel: string | null;
 }
 
 type Banner = { tone: "danger" | "warning"; title: string; message: string; retry: boolean };
 
-type SuccessResult = { statusUrl: string; submittedAt: string; snapshot: FormState };
-
-type SelectionNotice = { id: number; kind: "prefill" | "merge"; message: string; mentorId: string };
-
-const MENTOR_ERROR_KEYS = (key: string) =>
-  key === "mentorIds" || key === "firstChoiceMentorId" || key === "availability" || key.startsWith("availability.");
-
-function initialState(prefill: ApplicationPrefill): FormState {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { idempotencyKey, elapsedMs, ...empty } = emptyApplicationValues("");
-  return { ...empty, ...prefill };
-}
-
-function sectionDef(id: SectionId): SectionDef {
-  return SECTIONS.find((s) => s.id === id)!;
-}
+/** `replay`: the server already had this form session's submission and kept the original. */
+type SuccessResult = { statusUrl: string; snapshot: FormState; replay: boolean };
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Bring the application's heading into view, just below the sticky header (html scroll-padding-top). */
+function scrollToApplication() {
+  document
+    .getElementById(APPLY_ANCHOR)
+    ?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
+/** Drop ?mentor/window/slot from the address bar (hash and other parameters kept), without navigating. */
+function dropUrlSelection() {
+  try {
+    window.history.replaceState(null, "", withoutPrefillParams(window.location.href));
+  } catch {
+    // Some browsers throttle history updates; the selection itself is already saved in the draft.
+  }
+}
+
+const subscribeNothing = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
+
+function readDraft(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(key: string, value: string | null) {
+  try {
+    if (value === null) window.sessionStorage.removeItem(key);
+    else window.sessionStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable (private mode, quota): the form still works, it just won't remember.
+  }
 }
 
 export function ApplicationForm({
@@ -127,13 +151,12 @@ export function ApplicationForm({
   presentations,
   profiles,
   prefill,
+  draftKey,
   closed,
-  deadlineLabel,
 }: ApplicationFormProps) {
   const validate = useMemo(() => createValidator(catalog, emailDomains), [catalog, emailDomains]);
-  const byId = useMemo(() => new Map(catalog.mentors.map((m) => [m.id, m])), [catalog]);
 
-  const [state, setState] = useState<FormState>(() => initialState(prefill));
+  const [state, setState] = useState<FormState>(() => ({ ...emptyFormState(), ...prefill }));
   const [touched, setTouched] = useState<ReadonlySet<string>>(() => new Set());
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [serverErrors, setServerErrors] = useState<FieldErrors>({});
@@ -141,16 +164,15 @@ export function ApplicationForm({
   const [banner, setBanner] = useState<Banner | null>(null);
   const [result, setResult] = useState<SuccessResult | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
   const [summaryFocusToken, setSummaryFocusToken] = useState(0);
   const [bannerFocusToken, setBannerFocusToken] = useState(0);
-  const [notice, setNotice] = useState<SelectionNotice | null>(() => {
-    const message = prefillNote(catalog, prefill, presentations);
-    return message && prefill.mentorIds[0] ? { id: 0, kind: "prefill", message, mentorId: prefill.mentorIds[0] } : null;
-  });
+  const [notice, setNotice] = useState<SelectionNotice | null>(() => prefillNotice(catalog, prefill, presentations, 0));
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const idempotencyKeyRef = useRef<string | null>(null);
-  const mountedAtRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const restoredRef = useRef(false);
   const submittingRef = useRef(false);
   const changedRef = useRef(new Set<string>());
   const summaryRef = useRef<HTMLDivElement>(null);
@@ -160,13 +182,80 @@ export function ApplicationForm({
   const formRef = useRef<HTMLFormElement>(null);
 
   // ---------------------------------------------------------------------------
-  // Prefill merges: the URL's mentor/window/slot changed while the form is open
+  // Draft: restore once on mount (then merge the URL's preselection), save on every change
   // ---------------------------------------------------------------------------
 
+  // The URL's preselection as the router has it now (during a client navigation `window.location`
+  // still shows the previous page while this renders).
   const searchParams = useSearchParams();
   const urlParams = prefillParamsFrom(searchParams);
   const urlParamsKey = prefillParamsKey(urlParams);
+
+  // The server (and the hydration pass) can't see sessionStorage: restore right after hydration,
+  // during render (React's "adjust state" pattern), so nothing else runs with the blank answers.
+  const hydrated = useSyncExternalStore(subscribeNothing, clientSnapshot, serverSnapshot);
+  if (hydrated && !draftReady) {
+    setDraftReady(true);
+    // Follow the URL, not the `prefill` prop: Back to this page can re-render it from the router
+    // cache as first rendered, after the student removed that mentor (which also dropped the
+    // parameters from the URL) — and that mentor must not come back.
+    const live = resolvePrefill(catalog, urlParams);
+    const stale = !samePrefill(live, prefill);
+    const draft = parseDraft(readDraft(draftKey), catalog);
+    if (draft) {
+      // The draft first, then whatever the URL preselects on top of it (merge only ever adds).
+      const merged = mergePrefill({ ...draft.values, nickname: "" }, live);
+      const outcome = merged.outcome;
+      setState(merged.state);
+      setDirty(true);
+      // Say what the link added; if it added nothing new, the server-rendered note still holds.
+      if (outcome && (outcome.mentorAdded || outcome.optionAdded)) {
+        setNotice({
+          id: 1,
+          kind: "top",
+          message: mergeAnnouncement(catalog, outcome, presentations),
+          mentorId: outcome.mentorId,
+          optionKey: outcome.optionAdded,
+        });
+      } else if (stale) {
+        setNotice(prefillNotice(catalog, live, presentations, 1));
+      }
+    } else if (stale) {
+      setState((prev) => ({ ...prev, ...live }));
+      setNotice(prefillNotice(catalog, live, presentations, 1));
+    }
+  }
+
+  // One idempotency key per form session — a restored draft continues its session (so a retry
+  // after navigating away is still the same submission), and its fill time keeps counting.
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const draft = parseDraft(readDraft(draftKey), catalog);
+    idempotencyKeyRef.current = draft?.key ?? newIdempotencyKey();
+    startedAtRef.current = draft?.startedAt ?? Date.now();
+  }, [catalog, draftKey]);
+
+  useEffect(() => {
+    if (!draftReady || phase === "success") return;
+    const values = toDraftValues(state);
+    writeDraft(
+      draftKey,
+      isBlankDraft(values)
+        ? null
+        : serializeDraft({ key: idempotencyKeyRef.current, startedAt: startedAtRef.current, values }),
+    );
+  }, [draftReady, draftKey, phase, state]);
+
+  // ---------------------------------------------------------------------------
+  // Prefill merges: the URL's mentor/window/slot changed while the form is open
+  // ---------------------------------------------------------------------------
+
   const [seenParamsKey, setSeenParamsKey] = useState(urlParamsKey);
+  // Set by Back/Forward: the parameters of the entry being restored. They were merged when that
+  // entry was first visited, and the answers since (including any mentor the student removed) are
+  // what counts — a traversal never merges.
+  const [traversedParamsKey, setTraversedParamsKey] = useState<string | null>(null);
   // A CTA whose URL equals the current one doesn't change the URL; the click listener queues it.
   const [queuedParams, setQueuedParams] = useState<ApplySearchParams | null>(null);
 
@@ -177,86 +266,86 @@ export function ApplicationForm({
     if (!merged.outcome) return;
     if (merged.changed) {
       setState(merged.state);
+      setDirty(true);
       setServerErrors((prev) => {
-        const keys = Object.keys(prev).filter(MENTOR_ERROR_KEYS);
+        const keys = Object.keys(prev).filter((k) => CROSS_FIELD_KEYS.has(k));
         if (!keys.length) return prev;
         const next = { ...prev };
         for (const key of keys) delete next[key];
         return next;
       });
     }
+    const outcome = merged.outcome;
     setNotice((prev) => ({
-      id: (prev?.id ?? 0) + 1,
+      id: (prev?.id ?? 1) + 1,
       kind: "merge",
-      message: mergeAnnouncement(catalog, merged.outcome!, presentations),
-      mentorId: merged.outcome!.mentorId,
+      message: mergeAnnouncement(catalog, outcome, presentations),
+      mentorId: outcome.mentorId,
+      optionKey: outcome.optionAdded,
     }));
-    setHighlightId(merged.outcome.mentorId);
+    setHighlightId(outcome.mentorId);
   }
 
   if (urlParamsKey !== seenParamsKey) {
     setSeenParamsKey(urlParamsKey);
-    mergeFrom(urlParams);
+    const traversal = urlParamsKey === traversedParamsKey;
+    if (traversedParamsKey !== null) setTraversedParamsKey(null);
+    if (!traversal) mergeFrom(urlParams);
   }
   if (queuedParams) {
     setQueuedParams(null);
     mergeFrom(queuedParams);
   }
 
+  // Back/Forward: remember which parameters are being restored, so they aren't merged again.
+  useEffect(() => {
+    function onPopState() {
+      setTraversedParamsKey(prefillParamsKey(prefillParamsFrom(new URLSearchParams(window.location.search))));
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   // Same-page CTAs pointing at the URL we're already on: handle them here (Next wouldn't
-  // navigate, so the URL — and useSearchParams — wouldn't change).
+  // navigate, so the URL — and useSearchParams — wouldn't change). Fragment-only links ("#apply"),
+  // unknown mentors and a submitted application only scroll (see `applyLinkAction`).
+  const canMerge = phase !== "success";
   useEffect(() => {
     function onClick(event: MouseEvent) {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = (event.target as Element | null)?.closest?.("a[href]");
       if (!(anchor instanceof HTMLAnchorElement)) return;
       if ((anchor.target && anchor.target !== "_self") || anchor.hasAttribute("download")) return;
-      const url = new URL(anchor.href, window.location.href);
-      if (url.origin !== window.location.origin || url.pathname !== APPLY_PATH) return;
-      if (window.location.pathname !== APPLY_PATH || url.hash !== `#${APPLY_ANCHOR}`) return;
-      if (url.search !== window.location.search) return; // a real navigation — merged when the URL changes
-      const params = prefillParamsFrom(url.searchParams);
-      if (!prefillParamsKey(params).replace(/\|/g, "")) return;
+      const action = applyLinkAction(anchor.getAttribute("href") ?? "", window.location.href, catalog, { canMerge });
+      if (action.kind === "navigate") return;
       event.preventDefault();
-      setQueuedParams(params);
+      if (action.kind === "merge") setQueuedParams(action.params);
+      else scrollToApplication();
     }
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
-  }, []);
+  }, [catalog, canMerge]);
 
-  // After a merge: bring the mentor's card into view and put focus on its checkbox.
+  // After a merge (any Select/Apply action while the form is open): every Apply action lands on
+  // the section heading, just below the sticky header (html scroll-padding-top), with the
+  // "added" message directly beneath it. The mentor's row stays highlighted further down.
   const mergedNoticeId = notice?.kind === "merge" ? notice.id : 0;
   const mergedMentorId = notice?.kind === "merge" ? notice.mentorId : null;
   useEffect(() => {
     if (!mergedNoticeId || !mergedMentorId) return;
     // Next.js applies its own #apply scroll in the same commit; run after it.
     const frame = requestAnimationFrame(() => {
-      const row = document.getElementById(mentorRowId(mergedMentorId));
-      const note = document.getElementById("apply-selection-notice");
       const behavior = prefersReducedMotion() ? "auto" : "smooth";
-      if (row && note) {
-        // Keep the "added" message AND the mentor's card on screen together when they fit;
-        // otherwise center the card (the live region still announces the message).
-        const headerOffset = 96;
-        const noteTop = note.getBoundingClientRect().top;
-        const span = row.getBoundingClientRect().bottom - noteTop;
-        if (span < window.innerHeight - headerOffset - 24) {
-          window.scrollTo({ top: window.scrollY + noteTop - headerOffset, behavior });
-        } else {
-          row.scrollIntoView({ block: "center", behavior });
-        }
-      } else {
-        row?.scrollIntoView({ block: "center", behavior });
-      }
-      document.getElementById(mentorCheckboxId(mergedMentorId))?.focus({ preventScroll: true });
+      document.getElementById("apply-heading")?.scrollIntoView({ block: "start", behavior });
+      document.getElementById("apply-merge-notice")?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [mergedNoticeId, mergedMentorId]);
 
-  // The outline on a just-added mentor fades after a moment.
+  // The highlight on a just-added mentor fades after a moment.
   useEffect(() => {
     if (!highlightId) return;
-    const timer = window.setTimeout(() => setHighlightId(null), 2600);
+    const timer = window.setTimeout(() => setHighlightId(null), 2400);
     return () => window.clearTimeout(timer);
   }, [highlightId, mergedNoticeId]);
 
@@ -264,13 +353,7 @@ export function ApplicationForm({
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  // One idempotency key per form session, kept across retries.
-  useEffect(() => {
-    idempotencyKeyRef.current ??= newIdempotencyKey();
-    mountedAtRef.current = Date.now();
-  }, []);
-
-  // Warn before leaving with unsaved answers.
+  // Warn before closing the tab with unsaved answers (the draft survives in-site navigation).
   useEffect(() => {
     if (!dirty || phase === "success") return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -315,18 +398,13 @@ export function ApplicationForm({
 
   const summaryItems: SummaryItem[] = useMemo(
     () =>
-      orderErrors(
-        visibleErrors,
-        catalog.mentors.map((m) => m.id),
-      ).map(([key, message]) => ({
+      orderErrors(visibleErrors).map(([key, message]) => ({
         key,
         message,
         targetId: focusTargetId(key, state, catalog),
       })),
     [visibleErrors, state, catalog],
   );
-
-  const progress = useMemo(() => sectionProgress(state, allErrors), [state, allErrors]);
 
   // ---------------------------------------------------------------------------
   // Updates
@@ -361,14 +439,11 @@ export function ApplicationForm({
         : prev.mentorIds.filter((id) => id !== mentorId);
       // Keep an explicit first choice while it's still selected; one mentor is automatically first.
       const current = effectiveFirstChoice(prev);
-      const firstChoiceMentorId = mentorIds.includes(current)
-        ? current
-        : mentorIds.length === 1
-          ? mentorIds[0]
-          : "";
+      const firstChoiceMentorId = mentorIds.includes(current) ? current : mentorIds.length === 1 ? mentorIds[0] : "";
       return { ...prev, mentorIds, firstChoiceMentorId };
     });
-    markChanged("mentorIds", "firstChoiceMentorId", "availability", `availability.${mentorId}`);
+    markChanged("mentorIds", "firstChoiceMentorId", "availability", "availabilityNotes");
+    if (!checked) forget({ mentorId });
   }
 
   function toggleOption(key: string, checked: boolean) {
@@ -376,16 +451,25 @@ export function ApplicationForm({
       ...prev,
       availability: checked ? [...prev.availability.filter((k) => k !== key), key] : prev.availability.filter((k) => k !== key),
     }));
-    const owner = catalog.mentors.find((m) => m.options.some((o) => o.key === key));
-    markChanged("availability", ...(owner ? [`availability.${owner.id}`] : []));
+    markChanged("availability", "availabilityNotes");
+    if (!checked) forget({ optionKey: key });
+  }
+
+  /**
+   * The student removed a mentor or a time: notices about it are stale, and if a link preselected
+   * it, its parameters leave the address bar — so a reload doesn't add it back.
+   */
+  function forget(removed: { mentorId?: string; optionKey?: string }) {
+    setNotice((prev) => noticeAfterRemoval(prev, removed));
+    if (removed.mentorId) setHighlightId((prev) => (prev === removed.mentorId ? null : prev));
+    if (removesUrlSelection(catalog, window.location.search, removed)) dropUrlSelection();
   }
 
   function jumpTo(id: string) {
     const el = document.getElementById(id);
     if (!el) return;
-    const block = el.tagName === "SECTION" || id === SUBMIT_BLOCK_ID ? "start" : "center";
-    const anchor = block === "start" ? el : (el.closest("label") ?? el);
-    anchor.scrollIntoView({ block, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    const anchor = el.closest("label") ?? el;
+    anchor.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
     el.focus({ preventScroll: true });
   }
 
@@ -403,12 +487,7 @@ export function ApplicationForm({
     let next: Banner;
     if (status === 429) {
       const retry = body?.retryAfterSeconds ?? Number(retryAfterHeader ?? 0);
-      next = {
-        tone: "warning",
-        title: "Too many attempts",
-        message: body?.message ?? rateLimitMessage(retry || 600),
-        retry: false,
-      };
+      next = { tone: "warning", title: "Too many attempts", message: body?.message ?? rateLimitMessage(retry || 600), retry: false };
     } else if (status === 403 && body?.error === "closed") {
       next = {
         tone: "warning",
@@ -446,7 +525,8 @@ export function ApplicationForm({
     if (submittingRef.current || closed || phase === "success") return;
 
     const idempotencyKey = (idempotencyKeyRef.current ??= newIdempotencyKey());
-    const elapsedMs = Math.max(0, Math.round(Date.now() - (mountedAtRef.current || Date.now())));
+    const startedAt = startedAtRef.current || Date.now();
+    const elapsedMs = Math.max(0, Math.round(Date.now() - startedAt));
     const values = toSubmissionValues(state, catalog, { idempotencyKey, elapsedMs });
 
     setSubmitAttempted(true);
@@ -469,11 +549,12 @@ export function ApplicationForm({
       const body: unknown = await res.json().catch(() => null);
       if (res.ok && isSubmitSuccess(body)) {
         succeeded = true;
+        writeDraft(draftKey, null);
         setServerErrors({});
         setResult({
           statusUrl: new URL(body.statusUrl, window.location.origin).href,
-          submittedAt: new Date().toISOString(),
           snapshot: state,
+          replay: body.replay === true,
         });
         setPhase("success");
         return;
@@ -494,28 +575,8 @@ export function ApplicationForm({
   if (phase === "success" && result) {
     const snap = result.snapshot;
     const first = effectiveFirstChoice(snap);
-    const picked = new Set(effectiveAvailability(snap, catalog));
     const ordered = [first, ...catalog.mentors.map((m) => m.id).filter((id) => id !== first && snap.mentorIds.includes(id))];
-    const mentors: ConfirmedMentor[] = ordered.flatMap((id) => {
-      const m = byId.get(id);
-      if (!m) return [];
-      const profile = profiles[m.id];
-      const identity = profile ? [profile.role, profile.company].filter(Boolean).join(" · ") || null : m.affiliation;
-      return [
-        {
-          id: m.id,
-          name: m.name,
-          identity,
-          headshot: profile?.headshot ?? null,
-          demo: m.demo,
-          firstChoice: m.id === first,
-          interestOnly: m.options.length === 0,
-          options: m.options
-            .filter((o) => picked.has(o.key))
-            .map((o) => ({ key: o.key, ...present(o, presentations) })),
-        },
-      ];
-    });
+    const names = ordered.flatMap((id) => catalog.mentors.find((m) => m.id === id)?.name ?? []);
     return (
       <div ref={topRef}>
         <Confirmation
@@ -523,8 +584,8 @@ export function ApplicationForm({
           firstName={snap.fullName.trim().split(/\s+/u)[0] ?? ""}
           email={snap.email.trim().toLowerCase()}
           statusUrl={result.statusUrl}
-          submittedAt={result.submittedAt}
-          mentors={mentors}
+          mentorNames={names}
+          replay={result.replay}
         />
       </div>
     );
@@ -537,370 +598,257 @@ export function ApplicationForm({
   const disabled = Boolean(closed);
   const submitting = phase === "submitting";
   const err = (key: string) => visibleErrors[key];
-  const first = effectiveFirstChoice(state);
-  const chosen = new Set(state.availability);
-  const panelMentors: PanelMentor[] = catalog.mentors
-    .filter((m) => state.mentorIds.includes(m.id))
-    .map((m) => ({
-      id: m.id,
-      name: m.name,
-      headshot: profiles[m.id]?.headshot ?? null,
-      firstChoice: first === m.id,
-      interestOnly: m.options.length === 0,
-      times: m.options.filter((o) => chosen.has(o.key)).length,
-    }))
-    .sort((a, b) => Number(b.firstChoice) - Number(a.firstChoice));
-  const domainHint = emailDomains.map((d) => `@${d}`).join(" or ");
+  const team = state.participation === "team";
+  const domain = emailDomains[0] ?? "illinois.edu";
 
   return (
-    <div
-      ref={topRef}
-      className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_15.5rem] xl:grid-cols-[minmax(0,1fr)_17rem] xl:gap-16"
-    >
-      <div className="min-w-0">
-        {submitAttempted && summaryItems.length > 0 ? (
-          <div className="mb-10">
-            <ErrorSummary ref={summaryRef} title={SUBMIT_COPY.validationTitle} items={summaryItems} onJump={jumpTo} />
-          </div>
-        ) : null}
+    <div ref={topRef}>
+      {submitAttempted && summaryItems.length > 0 ? (
+        <div className="mb-10 max-w-2xl">
+          <ErrorSummary ref={summaryRef} title={SUBMIT_COPY.validationTitle} items={summaryItems} onJump={jumpTo} />
+        </div>
+      ) : null}
 
-        <form
-          ref={formRef}
-          noValidate
-          onSubmit={onSubmit}
-          aria-labelledby="apply-heading"
-          aria-describedby={disabled ? "apply-closed-notice" : undefined}
-          aria-busy={submitting || undefined}
-          className="relative"
-        >
-          <fieldset disabled={disabled} className={cn("min-w-0", disabled && "opacity-60")}>
-            <legend className="sr-only">Office Hours application</legend>
-
-            {/* 01 Mentors & times ----------------------------------------------------- */}
-            <FormSection
-              def={sectionDef("mentors")}
-              description="Choose who you’d like to meet — one application covers every mentor — then the times that work for you."
-            >
-              <div aria-live="polite" aria-atomic="true">
-                {notice ? (
-                  <p
-                    key={notice.id}
-                    id="apply-selection-notice"
-                    className="animate-fade-up mb-6 flex items-start gap-3 border-l-2 border-accent bg-accent-soft/60 py-3 pl-4 pr-4 text-sm leading-relaxed text-paper"
-                  >
-                    <InfoIcon className="mt-0.5 size-4 shrink-0 text-accent" />
-                    <span>{notice.message}</span>
-                  </p>
-                ) : null}
-              </div>
-              <MentorSection
-                catalog={catalog}
-                presentations={presentations}
-                profiles={profiles}
-                state={state}
-                errors={visibleErrors}
-                highlightId={highlightId}
-                onToggleMentor={toggleMentor}
-                onFirstChoice={(id) => update("firstChoiceMentorId", id)}
-                onToggleOption={toggleOption}
-                onGroupLeave={touch}
-              />
-              <TextAreaField
-                className="mt-8"
-                id={fieldId("availabilityNotes")}
-                label="Anything about your schedule?"
-                optional
-                placeholder="e.g. Class until 10:50 on Thursday"
-                value={state.availabilityNotes}
-                maxLength={LIMITS.availabilityNotes}
-                onChange={(e) => update("availabilityNotes", e.target.value)}
-                onBlur={() => touch("availabilityNotes")}
-                hint="Conflicts, a preferred time, travel — anything that helps Founders schedule you."
-                error={err("availabilityNotes")}
-              />
-            </FormSection>
-
-            {/* 02 About you ------------------------------------------------------------ */}
-            <FormSection def={sectionDef("about")} description="So Founders knows who’s applying and how to reach you.">
-              <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2">
-                <TextField
-                  id={fieldId("fullName")}
-                  label="Full name"
-                  autoComplete="name"
-                  value={state.fullName}
-                  maxLength={LIMITS.fullName}
-                  onChange={(e) => update("fullName", e.target.value)}
-                  onBlur={() => touch("fullName")}
-                  error={err("fullName")}
-                />
-                <TextField
-                  id={fieldId("email")}
-                  label="Illinois email"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  spellCheck={false}
-                  placeholder={`netid${domainHint.split(" ")[0]}`}
-                  value={state.email}
-                  onChange={(e) => update("email", e.target.value)}
-                  onBlur={() => touch("email")}
-                  hint={`Your ${domainHint} address — that’s where Founders will reach you.`}
-                  error={err("email")}
-                />
-                <SelectField
-                  id={fieldId("year")}
-                  label="Year"
-                  placeholder="Choose your year"
-                  options={YEAR_OPTIONS}
-                  value={state.year}
-                  onChange={(e) => {
-                    update("year", e.target.value);
-                    setTouched((prev) => new Set(prev).add("year"));
-                  }}
-                  onBlur={() => touch("year")}
-                  error={err("year")}
-                />
-                <TextField
-                  id={fieldId("major")}
-                  label="Major"
-                  placeholder="e.g. Computer Engineering, or Undeclared"
-                  value={state.major}
-                  maxLength={LIMITS.major}
-                  onChange={(e) => update("major", e.target.value)}
-                  onBlur={() => touch("major")}
-                  error={err("major")}
-                />
-              </div>
-            </FormSection>
-
-            {/* 03 Solo or team ------------------------------------------------------------ */}
-            <FormSection def={sectionDef("team")} description="Office hours are open to solo founders and teams alike.">
-              <fieldset>
-                <Legend>Are you applying individually or with a team?</Legend>
-                <div className="grid gap-2 sm:max-w-md sm:grid-cols-2">
-                  {PARTICIPATION_OPTIONS.map((option) => {
-                    const id = fieldId(`participation-${option.value}`);
-                    return (
-                      <label
-                        key={option.value}
-                        htmlFor={id}
-                        className={cn(
-                          "relative flex min-h-12 cursor-pointer items-center gap-3 rounded-sm border border-line-strong px-4 py-3 transition-colors duration-150 hover:border-paper/30",
-                          "has-[input:checked]:border-accent has-[input:checked]:bg-ink-850",
-                          WRAPPED_FOCUS,
-                        )}
-                      >
-                        <input
-                          id={id}
-                          type="radio"
-                          name="participation"
-                          value={option.value}
-                          className="peer sr-only"
-                          checked={state.participation === option.value}
-                          onChange={() => update("participation", option.value)}
-                        />
-                        <ChoiceIndicator type="radio" />
-                        <span className="text-[0.9375rem] text-paper">{option.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
-              {state.participation === "team" ? (
-                <div className="animate-fade-up mt-7 grid gap-x-6 gap-y-7 border-l border-line-strong pl-5 sm:grid-cols-2 sm:pl-6">
-                  <TextField
-                    id={fieldId("teamName")}
-                    label="Team name"
-                    optional
-                    value={state.teamName}
-                    maxLength={LIMITS.teamName}
-                    onChange={(e) => update("teamName", e.target.value)}
-                    onBlur={() => touch("teamName")}
-                    error={err("teamName")}
-                  />
-                  <TextField
-                    id={fieldId("teammates")}
-                    label="Teammates"
-                    optional
-                    placeholder="e.g. Priya Shah, Jordan Lee"
-                    value={state.teammates}
-                    maxLength={LIMITS.teammates}
-                    onChange={(e) => update("teammates", e.target.value)}
-                    onBlur={() => touch("teammates")}
-                    hint="Names only."
-                    error={err("teammates")}
-                  />
-                </div>
-              ) : null}
-            </FormSection>
-
-            {/* 04 Your project ---------------------------------------------------------- */}
-            <FormSection
-              def={sectionDef("project")}
-              description="A few sentences is plenty. The mentor you’re matched with reads this to prepare."
-            >
-              <fieldset
-                onBlur={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) touch("stage");
-                }}
-                aria-describedby={err("stage") ? `${fieldId("stage")}-error` : undefined}
-              >
-                <Legend>Where are you right now?</Legend>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {STAGE_OPTIONS.map((option, i) => {
-                    const id = fieldId(`stage-${option.value}`);
-                    return (
-                      <label
-                        key={option.value}
-                        htmlFor={id}
-                        className={cn(
-                          "relative flex min-h-11 cursor-pointer items-start gap-3 rounded-sm border px-4 py-3.5 transition-colors duration-150",
-                          err("stage") ? "border-danger/60" : "border-line-strong hover:border-paper/30",
-                          "has-[input:checked]:border-accent has-[input:checked]:bg-ink-850",
-                          WRAPPED_FOCUS,
-                        )}
-                      >
-                        <input
-                          id={id}
-                          type="radio"
-                          name="stage"
-                          value={option.value}
-                          className="peer sr-only"
-                          checked={state.stage === option.value}
-                          onChange={() => update("stage", option.value)}
-                        />
-                        <ChoiceIndicator type="radio" className="mt-0.5" />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-baseline justify-between gap-3">
-                            <span className="text-[0.9375rem] font-medium text-paper">{option.label}</span>
-                            <span aria-hidden className="font-mono text-[0.625rem] text-paper-subtle tabular">
-                              {String(i + 1).padStart(2, "0")}
-                            </span>
-                          </span>
-                          <span className="mt-0.5 block text-sm leading-snug text-paper-subtle">{option.description}</span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <FieldError id={fieldId("stage")}>{err("stage")}</FieldError>
-              </fieldset>
-
-              <div className="mt-10 space-y-9">
-                <WordCountTextarea
-                  id={fieldId("workingOn")}
-                  label="What are you working on or interested in exploring?"
-                  hint={
-                    <>
-                      For example: “An app that helps student orgs split costs” or “Nothing yet — I’m curious about
-                      climate tech.”
-                    </>
-                  }
-                  wordLimit={LIMITS.longAnswerWords}
-                  value={state.workingOn}
-                  onChange={(e) => update("workingOn", e.target.value)}
-                  onBlur={() => touch("workingOn")}
-                  error={err("workingOn")}
-                />
-                <WordCountTextarea
-                  id={fieldId("question")}
-                  label="What specific question or challenge would you like help with?"
-                  hint={
-                    <>
-                      For example: “How do I know if anyone will pay for this?” or “How did you find your first
-                      co-founder?”
-                    </>
-                  }
-                  wordLimit={LIMITS.longAnswerWords}
-                  value={state.question}
-                  onChange={(e) => update("question", e.target.value)}
-                  onBlur={() => touch("question")}
-                  error={err("question")}
-                />
-              </div>
-            </FormSection>
-
-            {/* 05 Link ---------------------------------------------------------------- */}
-            <FormSection
-              def={sectionDef("links")}
-              description="A website, demo or pitch deck gives a mentor context quickly. No deck? Skip this — it’s optional."
-            >
-              <TextField
-                id={fieldId("link")}
-                label="Website, demo or deck link"
-                optional
-                inputMode="url"
-                autoComplete="url"
-                spellCheck={false}
-                placeholder="https://"
-                value={state.link}
-                maxLength={LIMITS.link}
-                onChange={(e) => update("link", e.target.value)}
-                onBlur={() => {
-                  const normalized = normalizeLink(state.link);
-                  if (normalized !== state.link) setState((prev) => ({ ...prev, link: normalized }));
-                  touch("link");
-                }}
-                hint="Make sure anyone with the link can view it."
-                error={err("link")}
-                className="sm:max-w-xl"
-              />
-            </FormSection>
-
-            {/* 06 Confirm -------------------------------------------------------------- */}
-            <FormSection def={sectionDef("confirm")} description="Two quick confirmations and you’re done.">
-              <div className="space-y-3">
-                <CheckboxRow
-                  id={fieldId("acknowledgeNoGuarantee")}
-                  checked={state.acknowledgeNoGuarantee}
-                  onChange={(e) => update("acknowledgeNoGuarantee", e.target.checked)}
-                  onBlur={() => touch("acknowledgeNoGuarantee")}
-                  error={err("acknowledgeNoGuarantee")}
-                  description={APPLICATION_COPY.limited}
-                >
-                  I understand that applying doesn’t guarantee an appointment.
-                </CheckboxRow>
-                <CheckboxRow
-                  id={fieldId("consentToShare")}
-                  checked={state.consentToShare}
-                  onChange={(e) => update("consentToShare", e.target.checked)}
-                  onBlur={() => touch("consentToShare")}
-                  error={err("consentToShare")}
-                  description="Founders organizers review every application. Relevant answers go only to the mentor(s) you’re matched with."
-                >
-                  I agree that Founders may share my relevant answers with the mentor(s) I’m matched with so they can
-                  prepare.
-                </CheckboxRow>
-              </div>
-
-              {/* Honeypot: invisible to people and assistive tech; bots fill it in. */}
-              <div aria-hidden="true" className="absolute -left-[10000px] top-auto size-px overflow-hidden">
-                <label htmlFor="apply-nickname">Nickname</label>
-                <input
-                  id="apply-nickname"
-                  name="nickname"
-                  type="text"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  value={state.nickname}
-                  onChange={(e) => setState((prev) => ({ ...prev, nickname: e.target.value }))}
-                />
-              </div>
-            </FormSection>
-          </fieldset>
-
-          {/* Review & submit ------------------------------------------------------------ */}
-          <div
-            id={SUBMIT_BLOCK_ID}
-            tabIndex={-1}
-            className="border-t border-line pt-10 focus:outline-none md:grid md:grid-cols-[4.5rem_minmax(0,1fr)]"
+      <div role="status">
+        {notice?.kind === "top" || notice?.kind === "merge" ? (
+          <p
+            key={notice.id}
+            id={notice.kind === "merge" ? "apply-merge-notice" : undefined}
+            tabIndex={notice.kind === "merge" ? -1 : undefined}
+            className="animate-fade-up mb-10 flex max-w-2xl items-start gap-3 rounded-md bg-accent-soft px-4 py-3 text-[0.9375rem] leading-relaxed text-text focus:outline-none"
           >
-            <p aria-hidden className="hidden font-mono text-sm text-accent md:block md:pt-1">
-              →
-            </p>
-            <div className="min-w-0 space-y-6">
-              <ReviewChecklist progress={progress} onJump={jumpTo} />
+            <InfoIcon className="mt-0.5 size-4 shrink-0 text-accent-strong" />
+            <span>{notice.message}</span>
+          </p>
+        ) : null}
+      </div>
 
+      <form
+        ref={formRef}
+        noValidate
+        onSubmit={onSubmit}
+        aria-labelledby="apply-heading"
+        aria-describedby={disabled ? "apply-closed-notice" : undefined}
+        aria-busy={submitting || undefined}
+      >
+        <fieldset disabled={disabled} className={cn("min-w-0", disabled && "opacity-60")}>
+          {/* About you ------------------------------------------------------------------ */}
+          <FormGroup id="about" description="So we know who you are and how to reach you.">
+            <TextField
+              id={fieldId("fullName")}
+              label="Full name"
+              autoComplete="name"
+              value={state.fullName}
+              maxLength={LIMITS.fullName}
+              onChange={(e) => update("fullName", e.target.value)}
+              onBlur={() => touch("fullName")}
+              error={err("fullName")}
+            />
+            <TextField
+              id={fieldId("email")}
+              label="Illinois email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              spellCheck={false}
+              placeholder={`netid@${domain}`}
+              value={state.email}
+              onChange={(e) => update("email", e.target.value)}
+              onBlur={() => touch("email")}
+              error={err("email")}
+            />
+            <div className="grid gap-x-5 gap-y-7 sm:grid-cols-2">
+              <SelectField
+                id={fieldId("year")}
+                label="Year"
+                placeholder="Choose your year"
+                options={YEAR_OPTIONS}
+                value={state.year}
+                onChange={(e) => {
+                  update("year", e.target.value);
+                  setTouched((prev) => new Set(prev).add("year"));
+                }}
+                onBlur={() => touch("year")}
+                error={err("year")}
+              />
+              <TextField
+                id={fieldId("major")}
+                label="Major"
+                placeholder="e.g. Computer Engineering"
+                value={state.major}
+                maxLength={LIMITS.major}
+                onChange={(e) => update("major", e.target.value)}
+                onBlur={() => touch("major")}
+                error={err("major")}
+              />
+            </div>
+            <fieldset aria-describedby={err("participation") ? errorId(fieldId("participation")) : undefined}>
+              <Label as="legend">Are you applying individually or with a team?</Label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {PARTICIPATION_OPTIONS.map((option) => (
+                  <RadioChip
+                    key={option.value}
+                    id={fieldId(`participation-${option.value}`)}
+                    name="participation"
+                    value={option.value}
+                    checked={state.participation === option.value}
+                    onChange={() => update("participation", option.value)}
+                    invalid={Boolean(err("participation"))}
+                    errorMessageId={errorId(fieldId("participation"))}
+                  >
+                    {option.label}
+                  </RadioChip>
+                ))}
+              </div>
+              <FieldError id={fieldId("participation")}>{err("participation")}</FieldError>
+            </fieldset>
+            {team ? (
+              <div className="animate-fade-up grid gap-x-5 gap-y-7 sm:grid-cols-2">
+                <TextField
+                  id={fieldId("teamName")}
+                  label="Team name"
+                  optional
+                  value={state.teamName}
+                  maxLength={LIMITS.teamName}
+                  onChange={(e) => update("teamName", e.target.value)}
+                  onBlur={() => touch("teamName")}
+                  error={err("teamName")}
+                />
+                <TextField
+                  id={fieldId("teammates")}
+                  label="Teammates"
+                  optional
+                  placeholder="e.g. Priya Shah, Jordan Lee"
+                  value={state.teammates}
+                  maxLength={LIMITS.teammates}
+                  onChange={(e) => update("teammates", e.target.value)}
+                  onBlur={() => touch("teammates")}
+                  error={err("teammates")}
+                />
+              </div>
+            ) : null}
+          </FormGroup>
+
+          {/* Your interests -------------------------------------------------------------- */}
+          <FormGroup id="interests" description="Who you’d like to meet, when you’re free and what you’d like to talk about.">
+            <MentorPicker
+              catalog={catalog}
+              profiles={profiles}
+              state={state}
+              error={err("mentorIds")}
+              highlightId={highlightId}
+              onToggle={toggleMentor}
+              onLeave={() => touch("mentorIds")}
+            />
+            <FirstChoicePicker
+              catalog={catalog}
+              state={state}
+              error={err("firstChoiceMentorId")}
+              onChoose={(id) => update("firstChoiceMentorId", id)}
+              onLeave={() => touch("firstChoiceMentorId")}
+            />
+            <AvailabilityFields
+              catalog={catalog}
+              presentations={presentations}
+              state={state}
+              errors={visibleErrors}
+              onToggleOption={toggleOption}
+              onNotesChange={(value) => {
+                setState((prev) => ({ ...prev, availabilityNotes: value }));
+                markChanged("availabilityNotes", "availability");
+              }}
+              onLeave={(key) => touch(key)}
+            />
+            <fieldset
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) touch("stage");
+              }}
+              aria-describedby={err("stage") ? errorId(fieldId("stage")) : undefined}
+            >
+              <Label as="legend">Where is your idea or startup right now?</Label>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {STAGE_OPTIONS.map((option) => (
+                  <RadioChip
+                    key={option.value}
+                    id={fieldId(`stage-${option.value}`)}
+                    name="stage"
+                    value={option.value}
+                    checked={state.stage === option.value}
+                    onChange={() => update("stage", option.value)}
+                    invalid={Boolean(err("stage"))}
+                    errorMessageId={errorId(fieldId("stage"))}
+                    description={option.description}
+                  >
+                    {option.label}
+                  </RadioChip>
+                ))}
+              </div>
+              <FieldError id={fieldId("stage")}>{err("stage")}</FieldError>
+            </fieldset>
+            <WordCountTextarea
+              id={fieldId("workingOn")}
+              label="What are you working on or exploring?"
+              hint="A few sentences is enough (100 words max)."
+              wordLimit={LIMITS.longAnswerWords}
+              value={state.workingOn}
+              onChange={(e) => update("workingOn", e.target.value)}
+              onBlur={() => touch("workingOn")}
+              error={err("workingOn")}
+            />
+            <WordCountTextarea
+              id={fieldId("question")}
+              label="What question would you like help with?"
+              hint="A few sentences is enough (100 words max)."
+              wordLimit={LIMITS.longAnswerWords}
+              value={state.question}
+              onChange={(e) => update("question", e.target.value)}
+              onBlur={() => touch("question")}
+              error={err("question")}
+            />
+            <TextField
+              id={fieldId("link")}
+              label="Website or demo link"
+              optional
+              inputMode="url"
+              autoComplete="url"
+              spellCheck={false}
+              placeholder="https://"
+              value={state.link}
+              maxLength={LIMITS.link}
+              onChange={(e) => update("link", e.target.value)}
+              onBlur={() => {
+                const normalized = normalizeLink(state.link);
+                if (normalized !== state.link) setState((prev) => ({ ...prev, link: normalized }));
+                touch("link");
+              }}
+              error={err("link")}
+            />
+          </FormGroup>
+
+          {/* Submit ---------------------------------------------------------------------- */}
+          <FormGroup id="submit" description="Two quick confirmations, then you’re done.">
+            <div className="space-y-1">
+              <CheckboxRow
+                id={fieldId("acknowledgeNoGuarantee")}
+                checked={state.acknowledgeNoGuarantee}
+                onChange={(e) => update("acknowledgeNoGuarantee", e.target.checked)}
+                onBlur={() => touch("acknowledgeNoGuarantee")}
+                error={err("acknowledgeNoGuarantee")}
+              >
+                I understand that applying doesn’t guarantee an appointment.
+              </CheckboxRow>
+              <CheckboxRow
+                id={fieldId("consentToShare")}
+                checked={state.consentToShare}
+                onChange={(e) => update("consentToShare", e.target.checked)}
+                onBlur={() => touch("consentToShare")}
+                error={err("consentToShare")}
+              >
+                I agree that Founders may share my relevant answers with the mentor(s) I’m matched with.
+              </CheckboxRow>
+            </div>
+
+            <div className="space-y-5 pt-1">
               {banner ? (
                 <div ref={bannerRef} tabIndex={-1} className="focus:outline-none">
                   <Notice tone={banner.tone} title={banner.title} role="alert">
@@ -908,8 +856,7 @@ export function ApplicationForm({
                     {banner.retry && !disabled ? (
                       <Button
                         variant="secondary"
-                        size="sm"
-                        className="mt-3 h-10"
+                        className="mt-3 h-11 bg-surface"
                         disabled={submitting}
                         onClick={() => formRef.current?.requestSubmit()}
                       >
@@ -919,88 +866,51 @@ export function ApplicationForm({
                   </Notice>
                 </div>
               ) : null}
-              <div className="overflow-hidden rounded-sm border border-line-strong bg-ink-850">
-                {panelMentors.length ? (
-                  <div className="border-b border-line px-5 py-4 sm:px-6">
-                    <p className="mono-label text-paper-subtle">You’re applying to meet</p>
-                    <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-3">
-                      {panelMentors.map((m) => (
-                        <li key={m.id} className="flex min-w-0 items-center gap-2.5">
-                          <MentorPortrait id={m.id} name={m.name} headshot={m.headshot} size="xs" />
-                          <span className="text-sm text-paper">{m.name}</span>
-                          {m.firstChoice ? <FirstChoiceTag className="h-5 px-1.5 text-[0.625rem]" /> : null}
-                          {m.interestOnly ? (
-                            <span className="font-mono text-[0.625rem] uppercase tracking-[0.1em] text-paper-subtle">
-                              Interest
-                            </span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:p-6">
-                  {closed ? (
-                    <div className="min-w-0">
-                      <p className="flex items-center gap-2 text-[0.9375rem] font-medium text-paper">
-                        <AlertIcon className="size-3.5 shrink-0 text-warning" />
-                        {closed.title}
-                      </p>
-                      <p className="mt-1.5 max-w-md text-sm leading-relaxed text-paper-muted">{closed.message}</p>
-                    </div>
-                  ) : (
-                    <div className="min-w-0">
-                      <p className="flex items-center gap-2 text-[0.9375rem] font-medium text-paper">
-                        <LockIcon className="size-3.5 shrink-0 text-accent" />
-                        One application, every mentor you chose
-                      </p>
-                      <p className="mt-1.5 max-w-md text-sm leading-relaxed text-paper-muted">
-                        You’ll get a private link to check your status. {APPLICATION_COPY.noReservation}
-                      </p>
-                    </div>
-                  )}
-                  <Button
-                    type="submit"
-                    size="lg"
-                    variant={disabled ? "secondary" : "primary"}
-                    disabled={disabled || submitting}
-                    className={cn(
-                      "h-13 w-full shrink-0 px-6 text-[1.0625rem] sm:w-auto sm:min-w-56",
-                      disabled && "border-dashed",
-                    )}
-                  >
-                    {submitting ? (
-                      <>
-                        <Spinner />
-                        Submitting…
-                      </>
-                    ) : disabled ? (
-                      <>
-                        <AlertIcon className="size-4" />
-                        Submissions unavailable
-                      </>
-                    ) : (
-                      <>
-                        Submit application
-                        <ArrowRightIcon className="size-4" />
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
+              <Button
+                type="submit"
+                size="lg"
+                variant={disabled ? "secondary" : "primary"}
+                disabled={disabled || submitting}
+                className="w-full px-6 font-semibold sm:w-auto sm:min-w-56"
+              >
+                {submitting ? (
+                  <>
+                    <Spinner />
+                    Submitting…
+                  </>
+                ) : disabled ? (
+                  <>
+                    <AlertIcon className="size-4" />
+                    Submissions unavailable
+                  </>
+                ) : (
+                  <>
+                    Submit application
+                    <ArrowRightIcon className="size-4" />
+                  </>
+                )}
+              </Button>
               <p className="sr-only" aria-live="polite">
                 {submitting ? "Submitting your application…" : ""}
               </p>
             </div>
-          </div>
-        </form>
-      </div>
+          </FormGroup>
+        </fieldset>
 
-      <aside aria-label="Application progress" className="hidden lg:block">
-        <div className="sticky top-24">
-          <ProgressPanel progress={progress} mentors={panelMentors} deadlineLabel={deadlineLabel} onJump={jumpTo} />
+        {/* Honeypot: invisible to people and assistive tech; bots fill it in. Never saved. */}
+        <div aria-hidden="true" className="absolute -left-[10000px] top-auto size-px overflow-hidden">
+          <label htmlFor="apply-nickname">Nickname</label>
+          <input
+            id="apply-nickname"
+            name="nickname"
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={state.nickname}
+            onChange={(e) => setState((prev) => ({ ...prev, nickname: e.target.value }))}
+          />
         </div>
-      </aside>
+      </form>
     </div>
   );
 }
@@ -1009,36 +919,23 @@ export function ApplicationForm({
 // Pieces
 // ---------------------------------------------------------------------------
 
-function FormSection({ def, description, children }: { def: SectionDef; description?: ReactNode; children: ReactNode }) {
-  const id = sectionDomId(def.id);
+/** One of the three groups: heading on the left from lg, fields in a comfortable column. */
+function FormGroup({ id, description, children }: { id: FormGroupId; description?: ReactNode; children: ReactNode }) {
+  const group = FORM_GROUPS.find((g) => g.id === id)!;
+  const domId = groupDomId(id);
   return (
-    <section
-      id={id}
-      tabIndex={-1}
-      aria-labelledby={`${id}-title`}
-      className="border-t border-line py-10 first-of-type:border-t-0 first-of-type:pt-0 focus:outline-none md:grid md:grid-cols-[4.5rem_minmax(0,1fr)] md:py-14 md:first-of-type:pt-2"
+    <div
+      id={domId}
+      className="border-t border-line py-10 first:border-t-0 first:pt-0 last:pb-0 md:py-12 md:first:pt-0 md:last:pb-0 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-x-16"
     >
-      <p aria-hidden className="mb-3 flex items-baseline gap-1.5 font-mono tabular md:mb-0 md:block md:pt-1.5">
-        <span className="text-sm text-accent">{def.index}</span>
-        <span className="text-xs text-paper-subtle md:mt-1 md:block">/ {SECTION_COUNT}</span>
-      </p>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3
-            id={`${id}-title`}
-            className="font-wide text-[1.625rem] font-bold leading-tight tracking-[-0.025em] text-paper sm:text-[1.875rem]"
-          >
-            <span className="sr-only">
-              Step {def.index} of {SECTION_COUNT}:{" "}
-            </span>
-            {def.title}
-          </h3>
-          {def.optional ? <span className="mono-label text-paper-subtle">Optional</span> : null}
-        </div>
-        {description ? <p className="mt-2 max-w-xl text-[0.9375rem] leading-relaxed text-paper-muted">{description}</p> : null}
-        <div className="mt-8">{children}</div>
+      <div className="mb-7 lg:mb-0">
+        <h3 id={`${domId}-title`} className="text-lg font-semibold tracking-tight text-text">
+          {group.title}
+        </h3>
+        {description ? <p className="mt-1 text-sm leading-relaxed text-text-subtle">{description}</p> : null}
       </div>
-    </section>
+      <div className="min-w-0 max-w-2xl space-y-8">{children}</div>
+    </div>
   );
 }
 
@@ -1046,7 +943,7 @@ function Spinner() {
   return (
     <span
       aria-hidden
-      className="size-4 animate-spin rounded-full border-2 border-accent-ink/30 border-t-accent-ink motion-reduce:animate-none"
+      className="size-4 animate-spin rounded-full border-2 border-text/25 border-t-text motion-reduce:animate-none"
     />
   );
 }

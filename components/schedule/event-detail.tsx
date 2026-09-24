@@ -1,167 +1,122 @@
 /**
- * Building blocks for /schedule/[id]: key facts, the primary call to action (register / apply —
- * office hours only ever get "Apply"; no other event gets an application or booking CTA),
- * informational callouts, the program timeline, calendar export, and sources.
+ * Building blocks for /schedule/[id]: key facts (when, where, organizer), the primary action
+ * (register / RSVP; office hours only ever get "Apply" — no other event gets an application or
+ * booking CTA), informational callouts, speakers/hosts, the program, and calendar export.
  * Server components; content comes in as props.
  */
 import Link from "next/link";
-import type { Mentor, SourceRef } from "@/content/types";
-import { StatusBadge } from "@/components/ui/badge";
+import type { Mentor, Speaker } from "@/content/types";
 import { buttonClasses, ButtonLink } from "@/components/ui/button";
 import {
   ArrowRightIcon,
   ArrowUpRightIcon,
   CalendarIcon,
+  ClockIcon,
   DownloadIcon,
-  InfoIcon,
+  MapPinIcon,
+  UsersIcon,
 } from "@/components/ui/icons";
 import { MentorPortrait } from "@/components/ui/portrait";
-import { AvailabilityBadge } from "@/components/ui/status";
 import { APPLICATION_COPY } from "@/lib/applications/constants";
-import { mentorApplyHref, mentorCtaLabel, PRIMARY_CTA_LABEL } from "@/lib/mentors";
-import { applyHref, mentorAffiliation, type ScheduleEntry } from "@/lib/schedule/entries";
-import {
-  entryAvailabilityKind,
-  entryTimeText,
-  LOCATION_FORTHCOMING,
-  referenceTime,
-  timeZoneNote,
-} from "@/lib/schedule/format";
+import { mentorApplyHref, mentorCtaLabel } from "@/lib/mentors";
+import { mentorAffiliation, type ScheduleEntry } from "@/lib/schedule/entries";
+import { entryTimeText, LOCATION_FORTHCOMING, locationLines, TIME_FORTHCOMING } from "@/lib/schedule/format";
+import type { MentorHeadshots } from "@/lib/schedule/headshots";
 import { mentorProfileHref, programMentors, sessionCountLabel, sessionTimeLabel } from "@/lib/schedule/program";
-import { formatDate, formatTimeRange } from "@/lib/time";
+import { formatDate, formatTimeRange, TZ_LABEL } from "@/lib/time";
 import { cn } from "@/lib/cn";
-import { SessionList } from "./program-sessions";
+import { numberWord } from "@/lib/words";
+import { MentorMarker, SessionList } from "./program-sessions";
 
-function ExternalLink({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        "inline-flex items-center gap-1 text-paper underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-paper",
-        className,
-      )}
-    >
-      {children}
-      <ArrowUpRightIcon className="size-3.5 shrink-0" />
-      <span className="sr-only">(opens in new tab)</span>
-    </a>
-  );
+function sameText(a: string, b: string) {
+  const norm = (s: string) => s.replace(/\.$/, "").trim().toLowerCase();
+  return norm(a) === norm(b);
 }
 
 // ---------------------------------------------------------------------------
 // Key facts
 // ---------------------------------------------------------------------------
 
-/** Label/value row sized for the narrow detail rail (MetaRow's label column is wider). */
-function FactRow({ label, children }: { label: string; children: React.ReactNode }) {
+function Fact({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: (p: { className?: string }) => React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-4 border-t border-line py-3.5 text-sm">
-      <dt className="mono-label pt-0.5 text-paper-subtle">{label}</dt>
-      <dd className="min-w-0 text-paper">{children}</dd>
+    <div className="flex gap-3">
+      <Icon className="mt-0.5 size-5 shrink-0 text-text-subtle" />
+      <div className="min-w-0">
+        <dt className="text-sm font-medium text-text-subtle">{label}</dt>
+        <dd className="mt-1 leading-snug text-text">{children}</dd>
+      </div>
     </div>
   );
 }
 
-function sameText(a: string, b: string) {
-  return a.replace(/\.$/, "").trim().toLowerCase() === b.replace(/\.$/, "").trim().toLowerCase();
+/** The organizer line, unless it only repeats a host listed on the page (e.g. Arnav's happy hour). */
+export function organizerText(entry: Pick<ScheduleEntry, "organizer" | "speakers" | "kind">): string | null {
+  if (!entry.organizer) return null;
+  const hosts = entry.speakers.filter((s) => s.role === "host");
+  if (hosts.some((h) => entry.organizer!.startsWith(h.name))) return null;
+  return entry.organizer;
 }
 
-export function EventFacts({ entry }: { entry: ScheduleEntry }) {
-  const loc = entry.location;
+/** When · Where · Organizer ("Hosted by" for office hours), with honest notes for anything pending. */
+export function EventFacts({ entry, className }: { entry: ScheduleEntry; className?: string }) {
   const isOfficeHours = entry.kind === "office-hours";
+  const time = entryTimeText(entry);
+  const lines = locationLines(entry.location);
+  const loc = entry.location;
+  const locationNote =
+    loc.kind === "tba" && loc.note && !sameText(loc.note, LOCATION_FORTHCOMING) ? loc.note : null;
+  const timeNote = isOfficeHours
+    ? entry.time.kind === "exact"
+      ? "Availability window, not a booked appointment."
+      : "Exact window to be confirmed."
+    : entry.status !== "canceled" && entry.statusNote && !sameText(entry.statusNote, TIME_FORTHCOMING)
+      ? entry.statusNote
+      : null;
+  const organizer = organizerText(entry);
 
   return (
-    <dl className="border-b border-line">
-      <FactRow label="When">
-        <p>
-          <time dateTime={entry.date}>{formatDate(entry.date, "full")}</time>
-        </p>
-        <p className="mt-0.5 font-mono text-[0.875rem] tabular text-paper">{entryTimeText(entry)}</p>
-        {entry.sessions.length ? (
-          <p className="mt-0.5 text-[0.8125rem] text-paper-muted">{sessionCountLabel(entry.sessions.length)} inside</p>
+    <dl className={cn("grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3", className)}>
+      <Fact icon={ClockIcon} label="When">
+        <time dateTime={entry.date} className="block">
+          {formatDate(entry.date, "long")}
+        </time>
+        <span className="block tabular">{time}</span>
+        {timeNote ? <span className="mt-1 block text-sm text-text-muted">{timeNote}</span> : null}
+      </Fact>
+
+      <Fact icon={MapPinIcon} label="Where">
+        {lines.map((line, i) => (
+          <span key={line} className={cn("block", i > 0 && "text-text-muted")}>
+            {line}
+          </span>
+        ))}
+        {loc.kind === "in-person" && loc.mapUrl ? (
+          <a
+            href={loc.mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-1 text-sm font-medium underline decoration-line-strong underline-offset-4 hover:decoration-accent"
+          >
+            Map
+            <ArrowUpRightIcon className="size-3.5" />
+            <span className="sr-only">(opens in new tab)</span>
+          </a>
         ) : null}
-        <p className="mt-1 text-[0.8125rem] text-paper-muted">{timeZoneNote(entry.date, referenceTime(entry))}</p>
-      </FactRow>
+        {locationNote ? <span className="mt-1 block text-sm text-text-muted">{locationNote}</span> : null}
+      </Fact>
 
-      <FactRow label="Where">
-        {loc.kind === "in-person" || loc.kind === "hybrid" ? (
-          <>
-            <p>{loc.venue}</p>
-            {loc.room ? <p className="text-paper-muted">{loc.room}</p> : null}
-            {loc.address ? <p className="text-paper-muted">{loc.address}</p> : null}
-            {loc.kind === "in-person" && loc.mapUrl ? (
-              <ExternalLink href={loc.mapUrl} className="mt-1.5 text-[0.8125rem]">
-                Map
-              </ExternalLink>
-            ) : null}
-            {loc.kind === "hybrid" ? (
-              <p className="mt-1.5 text-[0.8125rem] text-paper-muted">
-                Also online
-                {loc.url ? (
-                  <>
-                    {" · "}
-                    <ExternalLink href={loc.url}>Online link</ExternalLink>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-          </>
-        ) : loc.kind === "virtual" ? (
-          <>
-            <p>Virtual{loc.platform ? ` · ${loc.platform}` : ""}</p>
-            {loc.url ? (
-              <ExternalLink href={loc.url} className="mt-1 text-[0.8125rem]">
-                Join link
-              </ExternalLink>
-            ) : (
-              <p className="text-[0.8125rem] text-paper-muted">Join link not published yet.</p>
-            )}
-          </>
-        ) : (
-          <>
-            <p>{LOCATION_FORTHCOMING}</p>
-            {loc.note && !sameText(loc.note, LOCATION_FORTHCOMING) ? (
-              <p className="mt-0.5 text-[0.8125rem] text-paper-muted">{loc.note}</p>
-            ) : null}
-          </>
-        )}
-      </FactRow>
-
-      {isOfficeHours && entry.mentor ? (
-        <FactRow label="Mentor">
-          <p>{entry.mentor.name}</p>
-          {mentorAffiliation(entry.mentor) ? (
-            <p className="text-paper-muted">{mentorAffiliation(entry.mentor)}</p>
-          ) : null}
-        </FactRow>
-      ) : null}
-
-      {entry.organizer ? <FactRow label={isOfficeHours ? "Run by" : "Organizer"}>{entry.organizer}</FactRow> : null}
-
-      <FactRow label="Status">
-        <div className="flex flex-wrap gap-2">
-          {isOfficeHours ? <AvailabilityBadge kind={entryAvailabilityKind(entry)} /> : null}
-          {!isOfficeHours || entry.status === "confirmed" ? <StatusBadge status={entry.status} /> : null}
-        </div>
-        {entry.statusNote ? <p className="mt-2 text-[0.8125rem] leading-relaxed text-paper-muted">{entry.statusNote}</p> : null}
-      </FactRow>
-
-      {/* Only show a registration row when there's something to act on — information-only
-          events (e.g. Dan Caruso) must not suggest a sign-up is coming. */}
-      {isOfficeHours ? (
-        <FactRow label="How to join">
-          <p>By application</p>
-        </FactRow>
-      ) : entry.status === "canceled" ? null : entry.registration ? (
-        <FactRow label="Registration">
-          <ExternalLink href={entry.registration.url}>{entry.registration.label}</ExternalLink>
-        </FactRow>
-      ) : entry.links.length ? (
-        <FactRow label="More info">
-          <ExternalLink href={entry.links[0].url}>{entry.links[0].label}</ExternalLink>
-        </FactRow>
+      {organizer ? (
+        <Fact icon={UsersIcon} label={isOfficeHours ? "Hosted by" : "Organizer"}>
+          {organizer}
+        </Fact>
       ) : null}
     </dl>
   );
@@ -171,31 +126,26 @@ export function EventFacts({ entry }: { entry: ScheduleEntry }) {
 // Primary action
 // ---------------------------------------------------------------------------
 
+/**
+ * Register / RSVP (external), "Apply to meet <mentor>" for office hours, or the canceled notice.
+ * Information-only events (e.g. Dan Caruso) render nothing — their official links are "More info".
+ */
 export function EventPrimaryAction({ entry }: { entry: ScheduleEntry }) {
   if (entry.status === "canceled") {
     return (
-      <div className="rounded-sm border border-danger/40 bg-danger-soft px-4 py-3 text-sm text-paper">
-        <p className="font-semibold">This event was canceled.</p>
-        {entry.statusNote ? <p className="mt-1 text-paper-muted">{entry.statusNote}</p> : null}
+      <div role="note" className="rounded-md bg-danger-soft px-4 py-3 text-sm text-text">
+        <p className="font-semibold text-danger">This event was canceled.</p>
+        {entry.statusNote ? <p className="mt-1 text-text-muted">{entry.statusNote}</p> : null}
       </div>
     );
   }
 
   if (entry.kind === "office-hours" && entry.registration) {
     return (
-      <div className="space-y-4">
-        <ButtonLink href={entry.registration.url} size="lg" className="w-full">
-          {entry.registration.label}
-          <ArrowRightIcon className="size-4" />
-        </ButtonLink>
-        <div className="space-y-2 border-l-2 border-dashed border-paper/35 pl-4 text-[0.8125rem] leading-relaxed text-paper-muted">
-          <p>
-            <span className="text-paper">This is an availability window, not an appointment.</span>{" "}
-            {APPLICATION_COPY.noReservation}
-          </p>
-          <p>{APPLICATION_COPY.limited}</p>
-        </div>
-      </div>
+      <ButtonLink href={entry.registration.url} size="lg" className="w-full sm:w-auto">
+        {entry.registration.label}
+        <ArrowRightIcon className="size-4" />
+      </ButtonLink>
     );
   }
 
@@ -205,7 +155,7 @@ export function EventPrimaryAction({ entry }: { entry: ScheduleEntry }) {
         href={entry.registration.url}
         target="_blank"
         rel="noopener noreferrer"
-        className={buttonClasses({ variant: "primary", size: "lg", className: "w-full" })}
+        className={buttonClasses({ variant: "primary", size: "lg", className: "w-full sm:w-auto" })}
       >
         {entry.registration.label}
         <ArrowUpRightIcon className="size-4" />
@@ -214,7 +164,6 @@ export function EventPrimaryAction({ entry }: { entry: ScheduleEntry }) {
     );
   }
 
-  // No registration link: nothing to act on (information-only events show no sign-up UI).
   return null;
 }
 
@@ -238,79 +187,25 @@ export function CalendarActions({
 }) {
   if (!entry.calendar.available || !googleHref) {
     const reason = entry.calendar.available ? "Calendar export isn’t available for this event." : entry.calendar.reason;
-    return (
-      <div className="flex gap-3 rounded-sm border border-dotted border-line-strong px-4 py-3.5">
-        <CalendarIcon className="mt-0.5 size-4 shrink-0 text-paper-subtle" />
-        <div className="text-sm">
-          <p className="font-medium text-paper-muted">Add to calendar — not available yet</p>
-          <p className="mt-1 leading-relaxed text-paper-muted">{reason}</p>
-        </div>
-      </div>
-    );
+    return <p className="text-sm leading-relaxed text-text-muted">{reason}</p>;
   }
   return (
-    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">
-      <a href={icsHref} download className={buttonClasses({ variant: "secondary", className: "w-full" })}>
+    <div className="grid gap-2">
+      <a href={icsHref} download className={buttonClasses({ variant: "secondary", className: "min-h-11 w-full" })}>
         <DownloadIcon className="size-4" />
-        Download .ics
-        <span className="sr-only">(Apple Calendar, Outlook)</span>
+        Apple Calendar or Outlook (.ics)
       </a>
       <a
         href={googleHref}
         target="_blank"
         rel="noopener noreferrer"
-        className={buttonClasses({ variant: "secondary", className: "w-full" })}
+        className={buttonClasses({ variant: "secondary", className: "min-h-11 w-full" })}
       >
         <CalendarIcon className="size-4" />
         Google Calendar
         <span className="sr-only">(opens in new tab)</span>
       </a>
-      <p className="text-[0.8125rem] text-paper-subtle sm:col-span-2 md:col-span-1 xl:col-span-2">
-        .ics works with Apple Calendar and Outlook. Times stay in Central Time.
-      </p>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sources
-// ---------------------------------------------------------------------------
-
-export function SourcesList({ sources }: { sources: SourceRef[] }) {
-  if (!sources.length) {
-    return <p className="text-sm text-paper-muted">No public source has been listed for this entry yet.</p>;
-  }
-  return (
-    <ul className="divide-y divide-line border-y border-line">
-      {sources.map((s, i) => (
-        <li key={`${s.label}-${i}`} className="py-3.5 text-sm">
-          <p className="font-medium text-paper">
-            {s.url ? <ExternalLink href={s.url}>{s.label}</ExternalLink> : s.label}
-          </p>
-          {s.note ? <p className="mt-1 leading-relaxed text-paper-muted">{s.note}</p> : null}
-          {s.checked ? (
-            <p className="mt-1.5 font-mono text-[0.75rem] tabular text-paper-subtle">
-              Checked <time dateTime={s.checked}>{formatDate(s.checked, "month-day")}, {s.checked.slice(0, 4)}</time>
-            </p>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** Topic chips (hairline). */
-export function TopicList({ topics }: { topics: string[] }) {
-  return (
-    <ul className="flex flex-wrap gap-2">
-      {topics.map((t) => (
-        <li key={t}>
-          <span className="inline-flex min-h-8 items-center rounded-xs border border-line-strong px-2.5 text-[0.8125rem] text-paper">
-            {t}
-          </span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -326,32 +221,136 @@ export function EventCallout({ callout, className }: { callout: { title: string;
   return (
     <aside
       aria-label={callout.title}
-      className={cn("relative rounded-sm border border-dashed border-line-strong bg-ink-850 px-5 py-5 md:px-6", className)}
+      className={cn("rounded-md border-l-2 border-accent bg-surface-subtle px-5 py-4 md:px-6 md:py-5", className)}
     >
-      <p className="mono-label flex items-center gap-2 text-paper-subtle">
-        <InfoIcon className="size-3.5 text-info" />
-        For your information
-      </p>
-      <p className="mt-3 font-wide text-lg font-semibold tracking-[-0.015em] text-paper">{callout.title}</p>
-      <p className="mt-2 max-w-[62ch] text-[0.9375rem] leading-relaxed text-paper-muted">{callout.body}</p>
+      <p className="font-semibold text-text">{callout.title}</p>
+      <p className="mt-1.5 max-w-[62ch] leading-relaxed text-text-muted">{callout.body}</p>
     </aside>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Program timeline
+// Speakers and hosts
+// ---------------------------------------------------------------------------
+
+/** "Host" when everyone listed hosts the event (Arnav's happy hour), otherwise "Speaker(s)". */
+export function speakersHeading(speakers: Pick<Speaker, "role">[]): string {
+  const many = speakers.length > 1;
+  if (speakers.length && speakers.every((s) => s.role === "host")) return many ? "Hosts" : "Host";
+  return many ? "Speakers" : "Speaker";
+}
+
+const ROLE_LABELS: Record<NonNullable<Speaker["role"]>, string> = { host: "Host", moderator: "Moderator" };
+
+/** Screen-reader label for a speaker's profile link: "on LinkedIn" or "profile". */
+function profileLabel(url: string): string {
+  return /(^|\.)linkedin\.com$/i.test(new URL(url).hostname) ? "on LinkedIn" : "profile";
+}
+
+export function SpeakerList({
+  speakers,
+  headingId,
+  headshots = {},
+}: {
+  speakers: Speaker[];
+  headingId: string;
+  headshots?: MentorHeadshots;
+}) {
+  if (!speakers.length) return null;
+  const heading = speakersHeading(speakers);
+  const uniform = heading.startsWith("Host");
+  return (
+    <section aria-labelledby={headingId}>
+      <h2 id={headingId} className="text-xl font-semibold tracking-tight text-text">
+        {heading}
+      </h2>
+      <ul className="mt-4 space-y-4">
+        {speakers.map((s) => (
+          <li key={s.name} className="flex items-center gap-4">
+            {s.mentorId ? <MentorPortrait id={s.mentorId} name={s.name} headshot={headshots[s.mentorId]} size="sm" /> : null}
+            <div className="min-w-0 leading-snug">
+              <p className="font-medium text-text">
+                {s.mentorId ? (
+                  <Link
+                    href={mentorProfileHref(s.mentorId)}
+                    className="underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
+                  >
+                    {s.name}
+                  </Link>
+                ) : s.profileUrl ? (
+                  <a
+                    href={s.profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
+                  >
+                    {s.name}
+                    <ArrowUpRightIcon className="size-3.5 text-text-subtle" />
+                    <span className="sr-only">{profileLabel(s.profileUrl)} (opens in new tab)</span>
+                  </a>
+                ) : (
+                  s.name
+                )}
+                {s.role && !uniform ? <span className="ml-2 text-sm font-normal text-text-subtle">{ROLE_LABELS[s.role]}</span> : null}
+                {s.mentorId ? <MentorMarker /> : null}
+              </p>
+              {s.title ? <p className="mt-0.5 text-sm text-text-muted">{s.title}</p> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Office hours: who you'd meet
+// ---------------------------------------------------------------------------
+
+/** Mentor photo, name (→ profile) and verified affiliation, for an office-hours event page. */
+export function OfficeHoursMentor({
+  mentor,
+  headshot,
+}: {
+  mentor: NonNullable<ScheduleEntry["mentor"]>;
+  headshot?: MentorHeadshots[string];
+}) {
+  const affiliation = mentorAffiliation(mentor);
+  return (
+    <div className="flex items-center gap-4">
+      <MentorPortrait id={mentor.id} name={mentor.name} headshot={headshot} size="md" />
+      <div className="min-w-0 leading-snug">
+        <p className="text-lg font-semibold text-text">{mentor.name}</p>
+        {affiliation ? <p className="text-text-muted">{affiliation}</p> : null}
+        <Link
+          href={mentorProfileHref(mentor.id)}
+          className="mt-1 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-text underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent md:min-h-8"
+        >
+          More about {mentor.firstName}
+          <ArrowRightIcon className="size-3.5" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** "Appointments are limited…" plus the no-reservation note, for office-hours pages. */
+export const OFFICE_HOURS_NOTES = [APPLICATION_COPY.limited, APPLICATION_COPY.noReservation] as const;
+
+// ---------------------------------------------------------------------------
+// Program
 // ---------------------------------------------------------------------------
 
 /**
- * The full sub-session timeline of a program block, plus — when office-hours mentors speak in
- * it — a "Founders Office Hours" panel: each mentor's portrait, name (→ profile), verified
- * affiliation, their session (→ its anchor on this page) and a CTA that opens the application with
- * that mentor preselected ("Apply to meet Arnav", or "Express interest" while scheduling).
+ * The full sub-session program of a block, plus — when office-hours mentors speak in it — each
+ * mentor's photo, name (→ profile), verified affiliation, their session (→ its anchor on this page)
+ * and a CTA that opens the application with that mentor preselected ("Apply to meet Arnav", or
+ * "Express interest" while scheduling).
  *
  * Props
  * - `entry`: the program-block ScheduleEntry (renders nothing without sessions).
  * - `headingId`: id for the section heading.
- * - `mentors`: public mentors (`getMentors()`), used for names, affiliations and CTA labels.
+ * - `mentors`: public mentors (`getMentors()`), used for photos, affiliations and CTA labels.
  */
 export function ProgramTimeline({
   entry,
@@ -365,95 +364,72 @@ export function ProgramTimeline({
   if (!entry.sessions.length) return null;
   const onStage = programMentors(entry).map((pm) => ({ ...pm, mentor: mentors.find((m) => m.id === pm.mentorId) ?? null }));
   const span =
-    entry.time.kind === "exact" && entry.time.end ? `${formatTimeRange(entry.time.start, entry.time.end)} CT` : null;
+    entry.time.kind === "exact" && entry.time.end ? `${formatTimeRange(entry.time.start, entry.time.end)} ${TZ_LABEL}` : null;
   return (
     <section aria-labelledby={headingId}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <h2 id={headingId} className="mono-label text-paper-subtle">
-          Program
-        </h2>
-        <p className="font-mono text-[0.75rem] tabular text-paper-muted">
-          {sessionCountLabel(entry.sessions.length)}
-          {span ? ` · ${span}` : null}
-        </p>
-      </div>
-      <SessionList sessions={entry.sessions} date={entry.date} variant="detail" className="mt-3 border-y border-line" />
+      <h2 id={headingId} className="text-xl font-semibold tracking-tight text-text">
+        Program
+      </h2>
+      <p className="mt-1 text-sm text-text-muted tabular">
+        {sessionCountLabel(entry.sessions.length)}
+        {span ? ` · ${span}` : null}
+      </p>
+      <SessionList sessions={entry.sessions} date={entry.date} variant="detail" className="mt-4 border-t border-line-strong" />
 
       {onStage.length ? (
-        <section
-          aria-labelledby={`${headingId}-mentors`}
-          className="relative mt-8 rounded-sm border border-line-accent bg-ink-850 px-5 py-5 md:px-6 md:py-6"
-        >
-          <span aria-hidden className="absolute left-1.5 top-1.5 size-2 border-l border-t border-accent/70" />
-          <span aria-hidden className="absolute bottom-1.5 right-1.5 size-2 border-b border-r border-accent/70" />
-          <h3 id={`${headingId}-mentors`} className="mono-label flex items-center gap-2 text-accent">
-            <span aria-hidden className="size-1.5 rotate-45 bg-accent" />
-            Founders Office Hours
+        <section aria-labelledby={`${headingId}-mentors`} className="mt-10 rounded-md bg-surface-subtle p-5 md:p-6">
+          <h3 id={`${headingId}-mentors`} className="text-lg font-semibold tracking-tight text-text">
+            Office-hours mentors in this program
           </h3>
-          <p className="mt-3 max-w-[60ch] text-[0.9375rem] leading-relaxed text-paper">
+          <p className="mt-1.5 max-w-[60ch] leading-relaxed text-text-muted">
             {onStage.length === 1
-              ? "One speaker in this program is also an office-hours mentor this week."
-              : `${onStage.length === 2 ? "Two" : onStage.length === 3 ? "Three" : onStage.length} speakers in this program are also office-hours mentors this week.`}{" "}
-            <span className="text-paper-muted">Apply to meet one-on-one — appointments are limited.</span>
+              ? "One speaker here is also holding Founders Office Hours this week."
+              : `${numberWord(onStage.length, { capitalize: true })} speakers here are also holding Founders Office Hours this week.`}{" "}
+            Appointments are limited.
           </p>
 
-          <ul className="mt-5 divide-y divide-line border-y border-line">
+          <ul className="mt-5 space-y-5">
             {onStage.map((m) => {
               const name = m.mentor?.name ?? m.name;
               const affiliation = m.mentor ? mentorAffiliation(m.mentor) : null;
+              const cta = m.mentor ? mentorCtaLabel(m.mentor) : null;
               return (
-                <li key={m.mentorId} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-                  <div className="flex min-w-0 items-start gap-4">
+                <li key={m.mentorId} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                  <div className="flex min-w-0 items-center gap-4">
                     <MentorPortrait id={m.mentorId} name={name} headshot={m.mentor?.headshot} size="sm" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 leading-snug">
                       <p>
                         <Link
                           href={mentorProfileHref(m.mentorId)}
-                          className="font-medium text-paper underline decoration-accent/60 underline-offset-4 transition-colors hover:decoration-accent"
+                          className="font-medium text-text underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
                         >
                           {name}
                         </Link>
                       </p>
-                      {affiliation ? <p className="text-sm text-paper-muted">{affiliation}</p> : null}
-                      <p className="mt-1 font-mono text-[0.75rem] leading-snug tabular text-paper-muted">
-                        <a href={`#${m.anchor}`} className="underline decoration-line-strong underline-offset-4 hover:text-paper">
+                      {affiliation ? <p className="text-sm text-text-muted">{affiliation}</p> : null}
+                      <p className="mt-0.5 text-sm text-text-subtle tabular">
+                        <a href={`#${m.anchor}`} className="underline decoration-line-strong underline-offset-4 hover:text-text">
                           {sessionTimeLabel(m)}
                         </a>
                         {m.role === "moderator" ? " · Moderator" : null}
                       </p>
                     </div>
                   </div>
-                  {m.mentor?.acceptingApplications ? (
+                  {m.mentor?.acceptingApplications && cta ? (
                     <ButtonLink
                       href={mentorApplyHref(m.mentorId)}
                       variant="secondary"
-                      className="w-full shrink-0 sm:w-auto"
+                      className="min-h-11 w-full shrink-0 bg-surface sm:w-auto"
                     >
-                      {mentorCtaLabel(m.mentor)}
+                      {cta}
                       <ArrowRightIcon className="size-4" />
-                      {mentorCtaLabel(m.mentor) === "Express interest" ? (
-                        <span className="sr-only"> in office hours with {name}</span>
-                      ) : null}
+                      {cta === "Express interest" ? <span className="sr-only"> in office hours with {name}</span> : null}
                     </ButtonLink>
                   ) : null}
                 </li>
               );
             })}
           </ul>
-
-          <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <ButtonLink href={applyHref()} className="w-full sm:w-auto">
-              {PRIMARY_CTA_LABEL}
-              <ArrowRightIcon className="size-4" />
-            </ButtonLink>
-            <Link
-              href="/office-hours"
-              className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-paper-muted transition-colors hover:text-paper"
-            >
-              Meet all the mentors
-              <ArrowRightIcon className="size-4" />
-            </Link>
-          </div>
         </section>
       ) : null}
     </section>

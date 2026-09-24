@@ -6,8 +6,8 @@ export function PreviewBanner() {
   const drafts = isDraftPreviewEnabled();
   if (!demo && !drafts) return null;
   const parts = [
-    demo ? "Demo content is visible — fictional items are marked DEMO and never ship to production." : null,
-    drafts ? "Draft mentor copy is visible — marked DRAFT, hidden on the public site." : null,
+    demo ? "Demo content is on. Fictional items are marked DEMO and never ship to production." : null,
+    drafts ? "Draft mentor copy is on. It’s marked DRAFT and stays off the public site." : null,
   ].filter(Boolean);
   return (
     <div role="note" className="border-b border-dashed border-info/40 bg-info-soft">

@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/organizer/login-form";
-import { LockIcon } from "@/components/ui/icons";
-import { Container, Eyebrow, Notice } from "@/components/ui/primitives";
-import { getOrganizerPassword, isNonProductionDeploy } from "@/lib/config";
-import { getPersistenceStatus, type PersistenceStatus } from "@/lib/db/client";
+import { SetupChecklist, SignInUnavailable, signInBlockers } from "@/components/organizer/setup-checklist";
+import { AlertIcon, LockIcon } from "@/components/ui/icons";
+import { Container } from "@/components/ui/primitives";
+import { isNonProductionDeploy } from "@/lib/config";
+import { getPersistenceStatus } from "@/lib/db/client";
 import { redactSecrets } from "@/lib/organizer/data-store-view";
 import { getOrganizerPageSession } from "@/lib/organizer/page-auth";
 import { safeReturnPath } from "@/lib/organizer/paths";
+import { getSetupStatus } from "@/lib/setup-status";
 
 export const dynamic = "force-dynamic";
 
@@ -21,105 +23,86 @@ type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+const NOTES = [
+  "Applicant answers are private. Only open this view on devices you trust.",
+  "Sessions last 12 hours. Changing the organizer password signs everyone out.",
+  "Every status change and appointment is logged under your name.",
+];
+
 export default async function OrganizerLoginPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const next = safeReturnPath(typeof sp.next === "string" ? sp.next : null);
   if (await getOrganizerPageSession()) redirect(next);
 
-  const passwordConfigured = Boolean(getOrganizerPassword());
-  const persistence = passwordConfigured ? await getPersistenceStatus() : null;
-  const showSetupHints = isNonProductionDeploy();
+  // Non-secret readiness (setting names, ok/not ok, fixes) — the same data as GET /api/health.
+  const setup = await getSetupStatus();
+  const blockers = signInBlockers(setup);
 
   return (
-    <Container className="pt-10 pb-16 md:pt-16 md:pb-24">
-      {/* Phones: heading → form → notes, so the form is reachable without scrolling past the notes.
-          Desktop: heading and notes on the left, the form spanning both rows on the right. */}
-      <div className="grid gap-10 lg:grid-cols-12 lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-8">
+    <Container className="pt-12 pb-20 md:pt-16 md:pb-24">
+      {/* Phones: intro → sign-in → notes → setup, so the form is reachable without scrolling.
+          Desktop: intro, notes and setup on the left; the sign-in card on the right. */}
+      <div className="grid gap-10 lg:grid-cols-12 lg:grid-rows-[auto_1fr] lg:gap-x-16 lg:gap-y-10">
         <header className="lg:col-span-6">
-          <Eyebrow>
-            <span className="inline-flex items-center gap-2">
-              <LockIcon className="size-3.5" />
-              Organizers · Private
-            </span>
-          </Eyebrow>
-          <h1 className="mt-5 font-wide text-4xl font-bold leading-[0.95] tracking-[-0.035em] text-paper sm:text-5xl md:text-6xl">
-            Organizer sign-in
-          </h1>
-          <p className="mt-5 max-w-xl text-lg text-paper-muted">
-            Review office-hours applications, assign appointment slots and keep every student’s status current.
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-text-muted">
+            <LockIcon className="size-3.5" />
+            Founders Week organizers
+          </p>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight text-text sm:text-5xl">Organizer sign-in</h1>
+          <p className="mt-4 max-w-xl text-lg leading-relaxed text-text-muted">
+            Review office-hours applications, propose times and keep each student’s status up to date.
           </p>
         </header>
 
-        <section aria-labelledby="signin-heading" className="lg:col-span-5 lg:col-start-8 lg:row-span-2 lg:row-start-1">
-          <div className="rounded-sm border border-line-strong bg-ink-850 p-6 sm:p-8">
-            <h2 id="signin-heading" className="mono-label text-paper-subtle">
-              Sign in
-            </h2>
-            <div className="mt-6">
-              <SignInBody
-                next={next}
-                passwordConfigured={passwordConfigured}
-                persistence={persistence}
-                showSetupHints={showSetupHints}
-              />
-            </div>
+        <section
+          aria-labelledby="signin-heading"
+          className="self-start rounded-md border border-line bg-surface p-6 shadow-sm sm:p-8 lg:col-span-5 lg:col-start-8 lg:row-span-2 lg:row-start-1"
+        >
+          <h2 id="signin-heading" className="text-xl font-semibold text-text">
+            Sign in
+          </h2>
+          <div className="mt-6">
+            {blockers.length ? <SignInUnavailable blockers={blockers} /> : <SignInBody next={next} />}
           </div>
         </section>
 
-        <ul className="max-w-xl divide-y divide-line self-start border-y border-line text-sm text-paper-muted lg:col-span-6 lg:row-start-2">
-          <li className="flex gap-4 py-3">
-            <span className="mono-label w-6 shrink-0 pt-0.5 text-accent tabular">01</span>
-            <span>Applicant answers are private. Only open this view on devices you trust.</span>
-          </li>
-          <li className="flex gap-4 py-3">
-            <span className="mono-label w-6 shrink-0 pt-0.5 text-accent tabular">02</span>
-            <span>Sessions last 12 hours. Changing the organizer password signs everyone out.</span>
-          </li>
-          <li className="flex gap-4 py-3">
-            <span className="mono-label w-6 shrink-0 pt-0.5 text-accent tabular">03</span>
-            <span>Every status change and appointment is recorded with your name.</span>
-          </li>
-        </ul>
+        <div className="space-y-8 self-start lg:col-span-6 lg:row-start-2">
+          <ul className="max-w-xl divide-y divide-line border-y border-line text-sm leading-relaxed text-text-muted">
+            {NOTES.map((note) => (
+              <li key={note} className="py-3">
+                {note}
+              </li>
+            ))}
+          </ul>
+          <SetupChecklist status={setup} className="max-w-xl" />
+        </div>
       </div>
     </Container>
   );
 }
 
-function SignInBody({
-  next,
-  passwordConfigured,
-  persistence,
-  showSetupHints,
-}: {
-  next: string;
-  passwordConfigured: boolean;
-  persistence: PersistenceStatus | null;
-  showSetupHints: boolean;
-}) {
-  if (!passwordConfigured) {
+async function SignInBody({ next }: { next: string }) {
+  // Sign-in limits password attempts in the database, so it needs the database too.
+  const persistence = await getPersistenceStatus();
+  if (!persistence.ready) {
     return (
-      <Notice tone="warning" title="Organizer sign-in is disabled">
-        <p>No organizer password is configured for this deployment, so the organizer view is locked for everyone.</p>
-        {showSetupHints ? (
-          <p className="mt-2">
-            Set <code className="font-mono text-paper">ORGANIZER_PASSWORD</code> (12+ characters) in the environment
-            and restart the server. See README → Configuration.
-          </p>
-        ) : null}
-      </Notice>
-    );
-  }
-  if (persistence && !persistence.ready) {
-    return (
-      <Notice tone="danger" title="The application database isn’t ready">
-        <p>
-          Sign-in needs the database (it limits password attempts), and applications can’t be reviewed until it’s
-          available.
+      <div role="status" className="rounded-md bg-danger-soft px-4 py-4 text-sm leading-relaxed">
+        <p className="flex items-center gap-2 font-semibold text-text">
+          <AlertIcon className="size-4 shrink-0 text-danger" />
+          The application database isn’t ready
         </p>
-        {showSetupHints ? (
-          <p className="mt-2 font-mono text-xs text-paper-muted">{redactSecrets(persistence.detail)} See README → Database.</p>
+        <p className="mt-1.5 text-text-muted">
+          Sign-in needs the database (it’s used to limit password attempts), and you can’t review applications
+          until it’s connected.{" "}
+          <a href="#setup" className="font-medium text-text underline underline-offset-4">
+            See Setup for the fix
+          </a>
+          .
+        </p>
+        {isNonProductionDeploy() ? (
+          <p className="mt-2 break-words text-xs text-text-subtle">{redactSecrets(persistence.detail)}</p>
         ) : null}
-      </Notice>
+      </div>
     );
   }
   return <LoginForm next={next} />;

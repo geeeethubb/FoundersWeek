@@ -27,10 +27,10 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
 /** Student-facing explanation of each status (status page, emails). */
 export const APPLICATION_STATUS_DESCRIPTIONS: Record<ApplicationStatus, string> = {
   submitted:
-    "Your application was received. Founders will match applicants based on interests and availability, then email selected students to confirm.",
-  under_review: "Founders is reviewing applications and mentor availability.",
+    "Your application is in. Founders will match applicants by interests and availability, then email selected students to confirm.",
+  under_review: "Founders is reviewing applications and checking mentor availability.",
   selected:
-    "You’ve been selected for an appointment. Check your Illinois email and reply to confirm your time — it isn’t final until you do.",
+    "You’ve been selected for an appointment. Check your Illinois email and reply to confirm your time. It isn’t final until you do.",
   waitlisted: "Appointments are full for now. Founders will email you if a spot opens up.",
   confirmed: "Your appointment is confirmed. The details are below and in your email.",
   canceled: "This application is no longer active.",
@@ -41,7 +41,7 @@ export const APPOINTMENT_STATUSES = ["proposed", "confirmed", "canceled"] as con
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 
 export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
-  proposed: "Proposed — awaiting confirmation",
+  proposed: "Proposed, awaiting confirmation",
   confirmed: "Confirmed",
   canceled: "Canceled",
 };
@@ -59,7 +59,7 @@ export const YEAR_OPTIONS = [
 export type YearValue = (typeof YEAR_OPTIONS)[number]["value"];
 
 export const STAGE_OPTIONS = [
-  { value: "exploring", label: "Exploring", description: "Curious about startups — no specific idea yet." },
+  { value: "exploring", label: "Exploring", description: "Curious about startups, but no specific idea yet." },
   { value: "idea", label: "Have an idea", description: "An idea you want to pressure-test." },
   { value: "building", label: "Building", description: "Working on a prototype, MVP or early version." },
   { value: "launched", label: "Launched", description: "Live with users or customers." },
@@ -88,6 +88,6 @@ export const LIMITS = {
 /** Copy used wherever the application is described. Keep consistent. */
 export const APPLICATION_COPY = {
   limited:
-    "Appointments are limited. Founders will match applicants based on interests and availability, then email selected students to confirm.",
-  noReservation: "Submitting an application does not reserve a time slot.",
+    "Appointments are limited. Founders will match applicants by interests and availability, then email selected students to confirm.",
+  noReservation: "Submitting an application doesn’t reserve a time slot.",
 } as const;

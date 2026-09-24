@@ -1,14 +1,14 @@
 /**
  * Official information links for an entry (`entry.links`, e.g. "Event information" for the
- * Sep 29 panel). External, open in a new tab, marked with ↗ and announced as such.
+ * Sep 29 panel, "Dan Caruso on LinkedIn"). External: open in a new tab, marked ↗ and announced.
  *
  * Props
  * - `links`: `{ label, url }[]` (renders nothing when empty).
  * - `variant`: "inline" (small underlined links, default) or "button" (full-width secondary buttons).
  * - `className`: extra classes for the wrapper.
  *
- * Inside a row whose title link is stretched over the row, give the wrapper `relative z-10`
- * (the inline variant does this itself) so these links stay clickable.
+ * The inline variant is `relative z-10`, so it stays clickable inside a row whose title link is
+ * stretched over the row.
  */
 import { buttonClasses } from "@/components/ui/button";
 import { ArrowUpRightIcon } from "@/components/ui/icons";
@@ -33,7 +33,7 @@ export function EntryLinks({
             href={l.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={buttonClasses({ variant: "secondary", className: "w-full" })}
+            className={buttonClasses({ variant: "secondary", size: "lg", className: "w-full" })}
           >
             {l.label}
             <ArrowUpRightIcon className="size-4" />
@@ -51,10 +51,10 @@ export function EntryLinks({
             href={l.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-paper underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent md:min-h-8"
+            className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-text underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent md:min-h-8"
           >
             {l.label}
-            <ArrowUpRightIcon className="size-3.5 text-accent" />
+            <ArrowUpRightIcon className="size-3.5 text-text-subtle" />
             <span className="sr-only">(opens in new tab)</span>
           </a>
         </li>

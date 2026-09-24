@@ -1,6 +1,7 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { getMentors } from "@/content";
 import { demoEvents, demoMentors } from "@/content/demo";
 import { events } from "@/content/events";
 import { mentors } from "@/content/mentors";
@@ -8,7 +9,62 @@ import { site } from "@/content/site";
 import { ContentValidationError, validateContent } from "@/content/validate";
 import { LATEST_MIGRATION } from "@/lib/db/client";
 import { mentorCtaLabel, schedulingStatus } from "@/lib/mentors";
-import { buildScheduleEntries, featuredEntries, mentorAppearances } from "@/lib/schedule/entries";
+import { applyHref, buildScheduleEntries, featuredEntries, mentorAppearances } from "@/lib/schedule/entries";
+
+const HAPPY_HOUR = "happy-hour-at-legends-with-arnav-mishra";
+const HAPPY_HOUR_TITLE = "Happy Hour with Arnav Mishra at Legends";
+const DAN = "dan-caruso-fireside-chat";
+const TECHRISE = "techrise-pitch-competition";
+const COHORT_PANEL = "TechRise × University of Illinois Founders Week Cohort 2: Where Are They Now?";
+const SHOWCASE = "founders-showcase-day-sessions";
+const HEALTH_PANEL = "Health Innovation: From Therapeutics to Devices";
+const RISHAB = "rishab-veldur";
+const RISHAB_WINDOW = "rishab-veldur-2026-10-01";
+const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
+/** The organizers' approved bio, verbatim. */
+const RISHAB_BIO =
+  "Rishab is the co-founder and CEO of Auvi Labs, a UIUC spinout developing wearable ultrasound technology to help detect problems with dialysis access earlier. With a background in engineering at Illinois, he helped build a company that placed second in the 2024 Cozad New Venture Challenge.";
+/** The organizers' suggested fit: one sentence-style item (renders as prose under "Good fit for"). */
+const RISHAB_GOOD_FIT =
+  "Interested in turning a technical project into a healthcare startup? Rishab’s experience spans engineering, medical-device development, and building a company through Illinois’ entrepreneurship ecosystem.";
+/** Claims never made about Auvi's investigational device, and meetings never promised. */
+const UNAPPROVED_CLAIMS = /FDA|\bcleared\b|commercially available|clinically (proven|validated)|one-on-one|1:1/i;
+
+/** The LinkedIn profiles the organizers supplied, in display order. */
+const LINKEDIN: Record<string, string> = {
+  "patrick-haddox": "https://www.linkedin.com/in/patrick-haddox/",
+  "arnav-mishra": "https://www.linkedin.com/in/arnav-mishra/",
+  "vikram-lakhwara": "https://www.linkedin.com/in/viklakhwara/",
+  "elliott-notrica": "https://www.linkedin.com/in/elliottnotrica/",
+  "ron-lewis": "https://www.linkedin.com/in/ronlewis20/",
+  "rishab-veldur": "https://www.linkedin.com/in/rishab-veldur",
+};
+
+/** Sentences in a bio ("St. Louis" is not a sentence break). */
+function sentences(text: string): string[] {
+  return text
+    .replace(/\bSt\. /g, "St ")
+    .split(/(?<=[.!?])\s+/)
+    .filter(Boolean);
+}
+
+/** Pixel size from a baseline/progressive JPEG's SOF segment. */
+function jpegSize(file: string): { width: number; height: number } {
+  const buf = readFileSync(file);
+  expect(buf.subarray(0, 3).toString("hex")).toBe("ffd8ff");
+  for (let i = 2; i < buf.length; ) {
+    if (buf[i] !== 0xff) {
+      i++;
+      continue;
+    }
+    const marker = buf[i + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+    }
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  throw new Error(`no SOF marker in ${file}`);
+}
 
 describe("content", () => {
   it("production content is valid and contains no demo items", () => {
@@ -42,6 +98,211 @@ describe("content", () => {
     expect(() => validateContent({ events: [badEvent], mentors: [], forbidDemo: true })).toThrow(/End time/);
   });
 
+  it("lists six mentors in display order, Elliott Notrica fourth and Rishab Veldur sixth", () => {
+    expect(mentors.map((m) => m.name)).toEqual([
+      "Patrick Haddox",
+      "Arnav Mishra",
+      "Vikram “Vik” Lakhwara",
+      "Elliott Notrica",
+      "Ron Lewis",
+      "Rishab Veldur",
+    ]);
+    expect(mentors.map((m) => m.id)).toEqual(Object.keys(LINKEDIN));
+    expect(mentors.every((m) => m.acceptingApplications)).toBe(true);
+    expect(mentors.map((m) => m.firstName)).toEqual(["Patrick", "Arnav", "Vik", "Elliott", "Ron", "Rishab"]);
+  });
+
+  it("gives every mentor a headshot file, their LinkedIn first and an approved bio", () => {
+    for (const m of mentors) {
+      // Headshot: /public/mentors/<id>.jpg, alt text = the mentor's name, declared size = file size.
+      expect(m.headshot, m.id).toMatchObject({ src: `/mentors/${m.id}.jpg`, alt: m.name });
+      const file = path.join(process.cwd(), "public", m.headshot!.src);
+      expect(existsSync(file), file).toBe(true);
+      const size = jpegSize(file);
+      expect(size, m.id).toEqual({ width: m.headshot!.width, height: m.headshot!.height });
+
+      expect(m.links[0], m.id).toEqual({ label: "LinkedIn", url: LINKEDIN[m.id] });
+      expect(m.bio?.status, m.id).toBe("approved");
+
+      // Nothing organizer-only leaks into the public copy.
+      const publicCopy = JSON.stringify([
+        m.bio,
+        m.expertise,
+        m.goodFitFor,
+        m.backgroundTags,
+        m.session.note,
+        m.availability,
+      ]);
+      expect(publicCopy, m.id).not.toMatch(/commitment|Wednesday through Saturday|much more available|extra sessions/i);
+      expect(publicCopy, m.id).not.toMatch(/student teams|phone/i);
+    }
+  });
+
+  it("gives the five original mentors LinkedIn only, a 3-sentence bio and approved highlights", () => {
+    const original = mentors.filter((m) => m.id !== RISHAB);
+    expect(original).toHaveLength(5);
+    for (const m of original) {
+      expect(m.links, m.id).toEqual([{ label: "LinkedIn", url: LINKEDIN[m.id] }]);
+      expect(sentences(m.bio!.value), m.id).toHaveLength(3);
+      expect(m.backgroundTags, m.id).toBeUndefined();
+
+      // "Can help most with": 3–5 approved phrases, each grounded in a stated basis.
+      expect(m.expertise?.status, m.id).toBe("approved");
+      expect(m.expertise!.value.length, m.id).toBeGreaterThanOrEqual(3);
+      expect(m.expertise!.value.length, m.id).toBeLessThanOrEqual(5);
+      for (const item of m.expertise!.value) {
+        expect(item.label.trim(), m.id).not.toBe("");
+        expect(item.basis.trim(), m.id).not.toBe("");
+      }
+    }
+  });
+
+  it("adds Rishab Veldur of Auvi Labs exactly as the organizers supplied", () => {
+    const rishab = mentors.find((m) => m.id === RISHAB)!;
+    expect(rishab).toMatchObject({
+      name: "Rishab Veldur",
+      firstName: "Rishab",
+      role: "Co-Founder & CEO",
+      company: "Auvi Labs",
+      headshot: { src: "/mentors/rishab-veldur.jpg", alt: "Rishab Veldur", width: 800, height: 800 },
+      acceptingApplications: true,
+      slots: [],
+    });
+    expect(rishab.links).toEqual([
+      { label: "LinkedIn", url: "https://www.linkedin.com/in/rishab-veldur" },
+      { label: "Auvi Labs", url: "https://www.auvilabs.com/" },
+    ]);
+    // Approved bio, verbatim (two sentences).
+    expect(rishab.bio).toMatchObject({ status: "approved", value: RISHAB_BIO });
+    expect(sentences(rishab.bio!.value)).toHaveLength(2);
+    // Background chips, not a list of topics he agreed to cover.
+    expect(rishab.backgroundTags).toEqual(["Medtech", "Hardware and software", "University spinouts"]);
+    // No approved topic list ("Can help with" is skipped); one sentence-style "Good fit for" item.
+    expect(rishab.expertise).toBeNull();
+    expect(rishab.askMeAbout).toBeNull();
+    expect(rishab.goodFitFor).toMatchObject({ status: "approved", value: [RISHAB_GOOD_FIT] });
+    expect(rishab.goodFitFor!.value[0]).toMatch(/^[A-Z].*\.$/);
+    // Session details aren't set yet: nothing is invented.
+    expect(rishab.session).toMatchObject({
+      format: null,
+      durationMinutes: null,
+      location: null,
+      sessionCount: null,
+      confirmed: false,
+    });
+  });
+
+  it("gives Rishab one date-only office-hours window on Thu Oct 1 (never Oct 2)", () => {
+    const rishab = mentors.find((m) => m.id === RISHAB)!;
+    expect(rishab.availability).toHaveLength(1);
+    expect(rishab.availability[0]).toMatchObject({
+      id: RISHAB_WINDOW,
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      label: "Exact time to be confirmed",
+    });
+    expect(rishab.availability.some((w) => w.date === "2026-10-02")).toBe(false);
+    expect(rishab.slots).toEqual([]);
+    // A published window: he's "available", so the CTA applies with his window preselected.
+    expect(schedulingStatus(rishab)).toBe("available");
+    expect(mentorCtaLabel(rishab)).toBe("Apply to meet Rishab");
+    expect(applyHref({ mentorId: RISHAB, optionKind: "window", optionId: RISHAB_WINDOW })).toBe(
+      "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
+    );
+    // Public availability copy never mentions Oct 2 / Friday.
+    const publicCopy = JSON.stringify([rishab.availability, rishab.session.note]);
+    expect(publicCopy).not.toMatch(/October 2|Oct 2\b|Friday/i);
+    expect(publicCopy).toContain("Thursday, October 1");
+  });
+
+  it("cites a source for every public fact about Rishab", () => {
+    const rishab = mentors.find((m) => m.id === RISHAB)!;
+    expect(rishab.sources.map((s) => s.label)).toEqual([
+      "Founders organizer update: Rishab Veldur profile and his email about availability",
+      "Founders Week agenda",
+      "Carle Illinois College of Medicine: U of I innovation detects dialysis access failure (Aug 17, 2026)",
+      "Auvi Labs: About (founders)",
+      "Technology Entrepreneur Center: 2024 Cozad New Venture Challenge winners",
+    ]);
+    expect(rishab.sources.map((s) => s.url ?? null)).toEqual([
+      null,
+      null,
+      "https://medicine.illinois.edu/news/u-of-i-innovation-detects-dialysis-access-failure",
+      "https://www.auvilabs.com/about",
+      "https://tec.illinois.edu/news/66233",
+    ]);
+    expect(rishab.sources.every((s) => Boolean(s.checked))).toBe(true);
+    // Each bio claim is grounded: spinout, wearable ultrasound and dialysis (Carle), CEO (Auvi),
+    // Cozad second place (TEC). Auvi's own site says the device is investigational.
+    const note = (i: number) => rishab.sources[i].note ?? "";
+    expect(note(2)).toMatch(/UIUC spinout; wearable ultrasound/);
+    expect(note(3)).toMatch(/Rishab Veldur as CEO/);
+    expect(note(3)).toMatch(/investigational and not cleared for sale by the FDA/);
+    expect(note(4)).toBe("AUVI placed second.");
+  });
+
+  describe("Rishab's public profile data", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("keeps his email details organizer-only and makes no unapproved claims", () => {
+      vi.stubEnv("SHOW_DEMO_CONTENT", "");
+      vi.stubEnv("SHOW_DRAFT_CONTENT", "");
+      const raw = mentors.find((m) => m.id === RISHAB)!;
+      // His preference to meet student teams is organizer context, not an eligibility rule.
+      expect(raw.organizerNotes).toMatch(/student teams \(a preference, not an eligibility rule; individuals can apply\)/);
+      expect(raw.organizerNotes).toMatch(/only has time for office hours on Thu Oct 1/);
+
+      const pub = getMentors().find((m) => m.id === RISHAB)!;
+      expect(pub.organizerNotes).toBeUndefined();
+      expect(pub).toMatchObject({
+        bio: { status: "approved", value: RISHAB_BIO },
+        goodFitFor: { status: "approved", value: [RISHAB_GOOD_FIT] },
+        backgroundTags: ["Medtech", "Hardware and software", "University spinouts"],
+        expertise: null,
+        askMeAbout: null,
+      });
+      const publicCopy = JSON.stringify([
+        pub.bio!.value,
+        pub.goodFitFor!.value,
+        pub.backgroundTags,
+        pub.session.note,
+        pub.availability,
+      ]);
+      expect(publicCopy).not.toMatch(/team|phone|eligib/i);
+      expect(publicCopy).not.toMatch(UNAPPROVED_CLAIMS);
+      expect(publicCopy).not.toContain("—");
+    });
+  });
+
+  it("validates background tags and date-only windows", () => {
+    const rishab = mentors.find((m) => m.id === RISHAB)!;
+    const check = (m: typeof rishab) => () => validateContent({ events: [], mentors: [m], forbidDemo: true });
+    expect(check(rishab)).not.toThrow();
+
+    const noTags = structuredClone(rishab);
+    delete noTags.backgroundTags;
+    expect(check(noTags)).not.toThrow(); // optional
+
+    const tooMany = structuredClone(rishab);
+    tooMany.backgroundTags = ["A", "B", "C", "D", "E", "F", "G"];
+    expect(check(tooMany)).toThrow(/\(rishab-veldur\)\.backgroundTags:/);
+
+    const tooLong = structuredClone(rishab);
+    tooLong.backgroundTags = ["x".repeat(41)];
+    expect(check(tooLong)).toThrow(/\(rishab-veldur\)\.backgroundTags\.0:/);
+
+    const blank = structuredClone(rishab);
+    blank.backgroundTags = [""];
+    expect(check(blank)).toThrow(/\(rishab-veldur\)\.backgroundTags\.0:/);
+
+    // Window ids are stored with applications: they must be unique across mentors.
+    const clash = structuredClone(rishab);
+    clash.availability[0].id = "patrick-haddox-2026-10-01-am";
+    expect(() => validateContent({ events: [], mentors: [mentors[0], clash], forbidDemo: true })).toThrow(
+      /availability\/slot id "patrick-haddox-2026-10-01-am" is not unique/,
+    );
+  });
+
   it("keeps the seed facts exactly as supplied", () => {
     const patrick = mentors.find((m) => m.id === "patrick-haddox")!;
     expect(patrick.role).toBe("CEO & Co-Founder");
@@ -65,30 +326,86 @@ describe("content", () => {
 
     const ron = mentors.find((m) => m.id === "ron-lewis")!;
     expect(ron).toMatchObject({ role: "Co-Founder", company: "Auctus Advisory", availability: [], slots: [] });
-    expect(ron.links).toEqual([{ label: "LinkedIn", url: "https://www.linkedin.com/in/ronlewis20/" }]);
-    expect(ron.askMeAbout?.status).toBe("draft"); // pending Ron's confirmation
+    // Ron's suggested topics are still a draft pending his confirmation (never public).
+    expect(ron.askMeAbout).toMatchObject({ status: "draft" });
+    expect(ron.askMeAbout?.value).toEqual([
+      "Revenue strategy",
+      "Startup financial planning",
+      "Communicating business progress to stakeholders",
+    ]);
     expect(schedulingStatus(ron)).toBe("in-progress");
     expect(mentorCtaLabel(ron)).toBe("Express interest");
 
     const vikram = mentors.find((m) => m.id === "vikram-lakhwara")!;
-    expect(vikram).toMatchObject({ role: null, askMeAbout: null, company: "Stakehouse", firstName: "Vik" });
+    // Title verified against Stakehouse's own team page.
+    expect(vikram).toMatchObject({
+      role: "Founder & Managing Member",
+      company: "Stakehouse",
+      askMeAbout: null,
+      firstName: "Vik",
+    });
+    expect(vikram.sources.map((s) => s.url)).toContain("https://www.stakehouse.fund/team");
     expect(vikram.name).toBe("Vikram “Vik” Lakhwara");
-    expect(vikram.availability).toEqual([]); // commitments Wed–Sat morning are not available slots
-    expect(vikram.bio?.value).not.toMatch(/Wednesday|commitment/i);
+    // Commitments Wed–Sat morning are organizer-only context, not available slots.
+    expect(vikram.availability).toEqual([]);
+    expect(vikram.slots).toEqual([]);
+    expect(vikram.organizerNotes).toMatch(/Wednesday through Saturday/);
+    expect(vikram.bio?.value).not.toMatch(/Wednesday|Saturday|commitment/i);
     expect(mentorCtaLabel(vikram)).toBe("Express interest");
     expect(mentorCtaLabel(patrick)).toBe("Apply to meet Patrick");
 
-    // The Founders afterparty was canceled: it must not exist anywhere in the data.
-    expect(events.some((e) => /afterparty|HERE Apartments/i.test(JSON.stringify(e)))).toBe(false);
-    // …but the university's Friday evening showcase and reception stays.
+    // Elliott: scheduling in progress — no invented windows or slots, "Express interest".
+    const elliott = mentors.find((m) => m.id === "elliott-notrica")!;
+    expect(elliott).toMatchObject({
+      name: "Elliott Notrica",
+      firstName: "Elliott",
+      role: "Founder & CEO",
+      company: "Symbio Bioculinary",
+      availability: [],
+      slots: [],
+      askMeAbout: null,
+      goodFitFor: null,
+    });
+    expect(schedulingStatus(elliott)).toBe("in-progress");
+    expect(mentorCtaLabel(elliott)).toBe("Express interest");
+
+    // The Founders Week Afterparty (Sat Oct 3, HERE Apartments) was canceled: it must not exist
+    // anywhere in the data. (Arnav's Wednesday happy hour at Legends is a separate, real event.)
+    expect(events.some((e) => e.id === "founders-week-afterparty")).toBe(false);
+    const allData = JSON.stringify([events, mentors]);
+    expect(allData).not.toMatch(/HERE Apartments/i);
+    expect(allData).not.toMatch(/Founders Week Afterparty/i);
+    expect(allData).not.toContain("founders-week-afterparty");
+    // No Saturday afterparty: Saturday is the tailgate and the game only.
+    expect(events.filter((e) => e.date === "2026-10-03").map((e) => e.id)).toEqual([
+      "tailgate-and-enterpriseworks-tour",
+      "illinois-football-vs-purdue",
+    ]);
+    // …and the university's Friday evening showcase and reception stays.
     expect(events.find((e) => e.id === "founders-evening-showcase-and-reception")).toMatchObject({
       date: "2026-10-02",
       time: { kind: "exact", start: "18:00", end: "20:30" },
       involvement: "week",
     });
 
-    const dan = events.find((e) => e.id === "dan-caruso-fireside-chat")!;
-    expect(dan).toMatchObject({ date: "2026-09-28", involvement: "supported", registration: null, time: { kind: "tba" } });
+    const dan = events.find((e) => e.id === DAN)!;
+    expect(dan).toMatchObject({
+      title: "Fireside Chat with Dan Caruso",
+      date: "2026-09-28",
+      // 4 p.m. start; no end time was supplied, so none is invented.
+      time: { kind: "exact", start: "16:00" },
+      status: "confirmed",
+      involvement: "supported",
+      related: true,
+      registration: null,
+      location: {
+        kind: "in-person",
+        venue: "Beckman Institute",
+        room: "Auditorium (Room 1025)",
+        address: "405 N. Mathews Ave., Urbana, IL 61801",
+      },
+    });
+    expect(dan.time.kind === "exact" && dan.time.end).toBeFalsy();
     expect(dan.featured?.rank).toBe(2);
 
     const panel = events.find((e) => e.id === "how-to-make-10k-a-month-in-college")!;
@@ -97,42 +414,200 @@ describe("content", () => {
       date: "2026-09-29",
       time: { kind: "exact", start: "18:00", end: "20:00" },
       involvement: "cohosted",
-      location: { kind: "in-person", venue: "100 MSEB" },
+      location: {
+        kind: "in-person",
+        venue: "Materials Science and Engineering Building",
+        room: "Room 100",
+        address: "1304 W. Green St., Urbana, IL 61801",
+      },
     });
     expect(panel.featured?.rank).toBe(3);
     expect(site.applications.deadline).toBeNull();
   });
 
+  it("keeps em dashes out of every public event string (production and demo)", () => {
+    for (const e of [...events, ...demoEvents]) {
+      const copy = JSON.stringify([
+        e.title,
+        e.summary,
+        e.description,
+        e.statusNote,
+        e.organizer,
+        e.location,
+        e.speakers,
+        e.sessions,
+        e.links,
+        e.registration,
+        e.callout,
+      ]);
+      expect(copy, e.id).not.toContain("—");
+    }
+  });
+
+  it("lists Arnav's Wednesday happy hour at Legends: confirmed, related, hosted by Arnav, RSVP on Partiful", () => {
+    const hh = events.find((e) => e.id === HAPPY_HOUR)!;
+    expect(hh).toMatchObject({
+      title: HAPPY_HOUR_TITLE,
+      date: "2026-09-30",
+      time: { kind: "exact", start: "17:00", end: "19:00" },
+      status: "confirmed",
+      types: ["social", "networking"],
+      involvement: "supported", // Arnav's event, supported by Founders
+      related: true,
+      foundersPick: true,
+      location: { kind: "in-person", venue: "Legends", address: "6th & Green" },
+      registration: { label: "RSVP on Partiful", url: "https://partiful.com/e/bUDJZTuCJyBqSeXAsfrN" },
+    });
+    expect(hh.featured?.rank).toBe(4); // featured after Dan Caruso and the Sept 29 panel
+    expect(hh.speakers).toEqual([
+      expect.objectContaining({ name: "Arnav Mishra", verified: true, role: "host", mentorId: "arnav-mishra" }),
+    ]);
+    expect(hh.sources.map((s) => s.url)).toContain("https://partiful.com/e/bUDJZTuCJyBqSeXAsfrN");
+  });
+
+  it("keeps Dan Caruso's fireside chat information-only: blurb, LinkedIn, private-session note, no sign-up", () => {
+    const dan = events.find((e) => e.id === DAN)!;
+    const [blurb, ...rest] = dan.description.split(/\n\s*\n/);
+    expect(sentences(blurb)).toHaveLength(4);
+    expect(blurb).toMatch(/^Dan Caruso is one of the most successful entrepreneurs among Illinois alumni\./);
+    expect(rest.join(" ")).toContain("supported by Founders");
+    expect(dan.links).toEqual([{ label: "Dan Caruso on LinkedIn", url: "https://www.linkedin.com/in/danielpcaruso" }]);
+    expect(dan.speakers).toEqual([expect.objectContaining({ name: "Dan Caruso", verified: true })]);
+    expect(dan.callout?.title).toBe("Private session with Dan Caruso");
+    // Information only: no registration, and nothing in the copy invites an application or booking.
+    expect(dan.registration).toBeNull();
+    expect(JSON.stringify([dan.summary, dan.description, dan.callout, dan.links])).not.toMatch(
+      /apply|application|express interest|waitlist|book(ing)?\b|reserve|sign up|register/i,
+    );
+  });
+
+  it("links Elliott as a speaker on the TechRise Cohort 2 panel", () => {
+    const techrise = events.find((e) => e.id === TECHRISE)!;
+    const session = techrise.sessions!.find((s) => s.title === COHORT_PANEL)!;
+    expect(session).toMatchObject({ start: "18:30", end: "18:50" });
+    expect(session.people).toContainEqual({ name: "Elliott Notrica", verified: true, mentorId: "elliott-notrica" });
+  });
+
+  it("links Rishab as a speaker on the Friday Showcase's Health Innovation session", () => {
+    const showcase = events.find((e) => e.id === SHOWCASE)!;
+    expect(showcase).toMatchObject({
+      date: "2026-10-02",
+      location: { kind: "in-person", venue: "Illinois Conference Center" },
+    });
+    const session = showcase.sessions!.find((s) => s.title === HEALTH_PANEL)!;
+    expect(session).toMatchObject({ start: "13:20", end: "13:55" });
+    expect(session.people.map((p) => p.name)).toEqual([
+      "Marty Burke",
+      "Carol Curtis",
+      "Steve Boppart",
+      "Rishab Veldur",
+      "Rohit Bhargava",
+    ]);
+    expect(session.people).toContainEqual({ name: "Rishab Veldur", verified: true, mentorId: RISHAB });
+    expect(session.people.filter((p) => p.mentorId).map((p) => p.mentorId)).toEqual([RISHAB]);
+    // It's his only linked appearance on the calendar.
+    const linked = events.flatMap((e) => [...e.speakers, ...(e.sessions ?? []).flatMap((s) => s.people)]);
+    expect(linked.filter((p) => p.mentorId === RISHAB)).toHaveLength(1);
+    // The link is checked: without Rishab in the mentor list, validation fails loudly.
+    expect(() =>
+      validateContent({ events, mentors: mentors.filter((m) => m.id !== RISHAB), forbidDemo: true }),
+    ).toThrow(/\(founders-showcase-day-sessions\): speaker "Rishab Veldur" links to unknown mentor "rishab-veldur"/);
+  });
+
+  it("the Showcase blurb names every office-hours mentor on its stage, Rishab included", () => {
+    const showcase = events.find((e) => e.id === SHOWCASE)!;
+    const onStage = showcase.sessions!.flatMap((s) => s.people).filter((p) => p.mentorId);
+    expect(onStage.map((p) => p.name)).toEqual(["Rishab Veldur", "Arnav Mishra", "Patrick Haddox", "Vik Lakhwara"]);
+    for (const { name } of onStage) {
+      expect(showcase.summary, `summary names ${name}`).toContain(name);
+      expect(showcase.description, `description names ${name}`).toContain(name);
+    }
+    // No stale head count ("Three of this week’s office-hours mentors…") when four are speaking.
+    expect(showcase.description).not.toMatch(/\b(One|Two|Three) of this week’s office-hours mentors\b/);
+  });
+
   it("builds office-hours entries from mentor windows", () => {
     const entries = buildScheduleEntries({ events, mentors, site });
+    expect(entries).toHaveLength(15);
     const oh = entries.filter((e) => e.kind === "office-hours");
+    // Only mentors with published windows get entries (Vik, Elliott and Ron are still scheduling).
+    // Rishab's Oct 1 window has no time yet, so it sorts after Thursday's timed entries.
     expect(oh.map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
+      RISHAB_OH,
       "office-hours-arnav-mishra-2026-10-02-am",
     ]);
     expect(oh.every((e) => !e.calendar.available)).toBe(true);
-    expect(oh[0].startsAt).toBe("2026-10-01T15:00:00.000Z");
-    expect(oh[1].startsAt).toBeNull();
+    expect(oh.map((e) => e.startsAt)).toEqual(["2026-10-01T15:00:00.000Z", null, null]);
+    expect(oh.map((e) => e.endsAt)).toEqual(["2026-10-01T16:30:00.000Z", null, null]);
     expect(oh.every((e) => e.featuredRank === 1 && e.registration?.url.startsWith("/office-hours?"))).toBe(true);
+    expect(oh[1]).toMatchObject({
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      timeLabel: "Exact time to be confirmed",
+      status: "planned",
+      registration: {
+        url: "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
+        label: "Apply to meet Rishab",
+        internal: true,
+      },
+    });
 
-    // Featured order: office hours, then Dan Caruso, then the Sep 29 panel.
+    // Featured order: office hours, then Dan Caruso, the Sep 29 panel, Arnav's happy hour and
+    // Founder Failure Lab.
     expect(featuredEntries(entries).map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
+      RISHAB_OH,
       "office-hours-arnav-mishra-2026-10-02-am",
-      "dan-caruso-fireside-chat",
+      DAN,
       "how-to-make-10k-a-month-in-college",
+      HAPPY_HOUR,
+      "founder-failure-lab",
     ]);
-    // Calendar export: confirmed exact events only.
+    // Calendar export: confirmed exact events only — the happy hour included.
     expect(entries.find((e) => e.id === "how-to-make-10k-a-month-in-college")!.calendar.available).toBe(true);
-    expect(entries.find((e) => e.id === "dan-caruso-fireside-chat")!.calendar.available).toBe(false);
+    expect(entries.find((e) => e.id === HAPPY_HOUR)!.calendar.available).toBe(true);
+    // Dan's chat has a start time but no announced end, so it can't be exported yet.
+    expect(entries.find((e) => e.id === DAN)!.calendar).toEqual({
+      available: false,
+      reason: "Calendar export opens once an end time is announced.",
+    });
 
-    // Mentors on stage are linked from the agenda.
-    expect(mentorAppearances(entries, "arnav-mishra").map((a) => a.start)).toEqual(["13:55"]);
+    // Mentors on stage (or hosting) are linked from the agenda, chronologically.
+    expect(mentorAppearances(entries, "arnav-mishra")).toEqual([
+      expect.objectContaining({ entryId: HAPPY_HOUR, sessionTitle: null, start: "17:00", end: "19:00", role: "host", venue: "Legends" }),
+      expect.objectContaining({ entryId: "founders-showcase-day-sessions", start: "13:55", role: "speaker" }),
+    ]);
     expect(mentorAppearances(entries, "patrick-haddox").map((a) => a.sessionTitle)).toEqual([
       "Next Generation Industrial, Manufacturing and Space Tech",
     ]);
     expect(mentorAppearances(entries, "vikram-lakhwara")).toHaveLength(1);
+    expect(mentorAppearances(entries, "elliott-notrica")).toEqual([
+      {
+        entryId: TECHRISE,
+        entryTitle: "TechRise Pitch Competition and Panel Discussion",
+        date: "2026-10-01",
+        sessionTitle: COHORT_PANEL,
+        start: "18:30",
+        end: "18:50",
+        role: "speaker",
+        venue: "EnterpriseWorks",
+      },
+    ]);
     expect(mentorAppearances(entries, "ron-lewis")).toHaveLength(0);
+    // Rishab speaks Friday at the Showcase: a separate appearance, not his Thursday office hours.
+    expect(mentorAppearances(entries, RISHAB)).toEqual([
+      {
+        entryId: SHOWCASE,
+        entryTitle: "Founders Showcase Day Sessions",
+        date: "2026-10-02",
+        sessionTitle: HEALTH_PANEL,
+        start: "13:20",
+        end: "13:55",
+        role: "speaker",
+        venue: "Illinois Conference Center",
+      },
+    ]);
     // Chronological order
     expect(entries.map((e) => e.date)).toEqual([...entries.map((e) => e.date)].sort());
   });

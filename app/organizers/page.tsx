@@ -3,15 +3,15 @@ import { redirect } from "next/navigation";
 import { getMentorsForOrganizers, isDemoContentEnabled } from "@/content";
 import { ApplicationFiltersForm } from "@/components/organizer/application-filters";
 import { ApplicationResults } from "@/components/organizer/application-results";
-import { DataStoreIndicator } from "@/components/organizer/data-store-indicator";
 import { MentorLineup } from "@/components/organizer/mentor-lineup";
 import { MentorNotes } from "@/components/organizer/mentor-notes";
 import { OrganizerBar } from "@/components/organizer/organizer-bar";
+import { SetupChecklist } from "@/components/organizer/setup-checklist";
 import { SlotBoard } from "@/components/organizer/slot-board";
 import { StatusStrip } from "@/components/organizer/status-strip";
 import { buttonClasses } from "@/components/ui/button";
-import { ArrowUpRightIcon, DownloadIcon } from "@/components/ui/icons";
-import { Container, Eyebrow, Notice, SectionHeading } from "@/components/ui/primitives";
+import { AlertIcon, ArrowUpRightIcon, DownloadIcon } from "@/components/ui/icons";
+import { Container } from "@/components/ui/primitives";
 import { APPLY_ANCHOR, APPLY_PATH } from "@/lib/schedule/entries";
 import { getDb, type Database } from "@/lib/db/client";
 import { getDataStoreStatus } from "@/lib/organizer/data-store";
@@ -26,6 +26,7 @@ import {
 } from "@/lib/organizer/filters";
 import { requireOrganizerPage } from "@/lib/organizer/page-auth";
 import { getMentorInterest, getSlotUsage, getStatusCounts, listApplications } from "@/lib/organizer/queries";
+import { getSetupStatus } from "@/lib/setup-status";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,17 @@ function rawQuery(sp: Record<string, string | string[] | undefined>): string {
   return q.toString();
 }
 
+function SectionHeader({ id, title, lede }: { id: string; title: string; lede?: string }) {
+  return (
+    <div className="mb-6 max-w-2xl">
+      <h2 id={id} className="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+        {title}
+      </h2>
+      {lede ? <p className="mt-2 text-base leading-relaxed text-text-muted">{lede}</p> : null}
+    </div>
+  );
+}
+
 export default async function OrganizersDashboardPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const session = await requireOrganizerPage(`/organizers${rawQuery(sp) ? `?${rawQuery(sp)}` : ""}`);
@@ -61,36 +73,31 @@ export default async function OrganizersDashboardPage({ searchParams }: PageProp
   // The GET form submits empty fields; keep URLs canonical and shareable.
   if (rawQuery(sp) !== applicationFiltersQuery(filters)) redirect(organizersHref(filters));
 
-  const dataStore = await getDataStoreStatus();
+  const [dataStore, setup] = await Promise.all([getDataStoreStatus(), getSetupStatus()]);
 
   const header = (
     <>
       <OrganizerBar name={session.name} demo={isDemoContentEnabled()} />
-      <header className="relative isolate overflow-hidden border-b border-line">
-        <div aria-hidden className="absolute inset-0 -z-10 bg-blueprint opacity-70" />
-        <Container className="grid gap-8 pt-10 pb-9 md:pt-14 md:pb-11 lg:grid-cols-12 lg:items-end lg:gap-10">
-          <div className="lg:col-span-8">
-            <Eyebrow index="01">Organizers · Office hours</Eyebrow>
-            <h1 className="mt-5 font-wide text-[2.75rem] font-bold leading-[0.95] tracking-[-0.035em] text-paper sm:text-6xl">
-              Applications
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-relaxed text-paper-muted sm:text-lg">
-              Review office-hours applications, assign appointment slots and keep each student’s status current.
-              Applicant answers are private to the organizer team.
+      <header className="border-b border-line">
+        <Container className="grid gap-8 pt-10 pb-12 md:pt-14 lg:grid-cols-12 lg:items-start lg:gap-12">
+          <div className="lg:col-span-7">
+            <h1 className="text-4xl font-bold tracking-tight text-text sm:text-5xl">Applications</h1>
+            <p className="mt-4 max-w-2xl text-lg leading-relaxed text-text-muted">
+              Review office-hours applications, propose times and keep each student’s status up to date. Only the
+              organizer team can see what applicants wrote.
             </p>
             <a
               href={PUBLIC_APPLICATION_HREF}
               target="_blank"
               rel="noopener"
-              className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm text-paper-muted underline-offset-4 transition-colors hover:text-accent hover:underline sm:min-h-8"
+              className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-text underline-offset-4 hover:underline sm:min-h-9"
             >
-              Public application form
-              <span className="font-mono text-xs text-paper-subtle">{PUBLIC_APPLICATION_HREF}</span>
+              Open the public application
               <ArrowUpRightIcon className="size-3.5" />
               <span className="sr-only">(opens in new tab)</span>
             </a>
           </div>
-          <DataStoreIndicator status={dataStore} className="lg:col-span-4" />
+          <SetupChecklist status={setup} dataStore={dataStore} className="lg:col-span-5" />
         </Container>
       </header>
     </>
@@ -109,12 +116,16 @@ export default async function OrganizersDashboardPage({ searchParams }: PageProp
       <>
         {header}
         <Container className="pt-10 pb-6">
-          <Notice tone="danger" title="Applications can’t be loaded right now" role="alert">
-            <p>
-              The application database isn’t available, so nothing can be reviewed or changed. Nothing has been lost —
-              reload this page once the data store shows as connected.
+          <div role="alert" className="max-w-3xl rounded-md bg-danger-soft px-5 py-4 text-sm leading-relaxed">
+            <p className="flex items-center gap-2 font-semibold text-text">
+              <AlertIcon className="size-4 shrink-0 text-danger" />
+              Applications can’t be loaded right now
             </p>
-          </Notice>
+            <p className="mt-1.5 text-text-muted">
+              The application database isn’t available, so you can’t review or change anything right now. Nothing has
+              been lost. Reload this page once Setup shows the database as connected.
+            </p>
+          </div>
         </Container>
       </>
     );
@@ -132,98 +143,99 @@ export default async function OrganizersDashboardPage({ searchParams }: PageProp
     <>
       {header}
 
-      <Container as="section" className="space-y-6 pt-8 md:pt-10">
-        <h2 className="sr-only">Overview</h2>
-        <div>
-          <p aria-hidden className="mono-label mb-2.5 text-paper-subtle">
-            By status
-          </p>
-          <StatusStrip counts={counts} filters={filters} />
-        </div>
-        <div>
-          <p aria-hidden className="mono-label mb-2.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-paper-subtle">
-            <span>By mentor · active applications</span>
-            <span className="normal-case tracking-normal font-sans text-xs">Select a mentor to filter</span>
-          </p>
-          <MentorLineup directory={directory} interest={interest} usage={usage} filters={filters} />
-        </div>
-      </Container>
-
-      <Container as="section" className="pt-6">
-        <h2 className="sr-only">Filters</h2>
-        <ApplicationFiltersForm filters={filters} directory={directory} />
-      </Container>
-
-      <Container as="section" className="pt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
+      <Container className="pt-10 md:pt-12">
+        <section aria-labelledby="overview-heading" className="space-y-8">
+          <h2 id="overview-heading" className="sr-only">
+            Overview
+          </h2>
           <div>
-            <h2 id="results-heading" className="font-wide text-2xl font-bold tracking-[-0.02em] text-paper">
-              {filtered ? "Matching applications" : "All applications"}
-            </h2>
-            <p role="status" aria-live="polite" className="mt-1 font-mono text-xs text-paper-muted tabular">
-              {applications.length} of {counts.total} application{counts.total === 1 ? "" : "s"}
-              {filters.sort === "oldest" ? " · oldest first" : " · newest first"}
-            </p>
+            <h3 className="mb-3 text-sm font-medium text-text-muted">By status</h3>
+            <StatusStrip counts={counts} filters={filters} />
           </div>
-          {/* Plain link (not next/link): it's a file download from a route handler. */}
-          <a
-            href={exportHref(filters)}
-            download
-            className={buttonClasses({ variant: "secondary", size: "md", className: "max-sm:h-11 max-sm:w-full" })}
-          >
-            <DownloadIcon className="size-4" />
-            Export CSV{filtered ? " (filtered)" : ""}
-          </a>
-        </div>
+          <div>
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h3 className="text-sm font-medium text-text-muted">By mentor · active applications</h3>
+              <p className="text-xs text-text-subtle">Select a mentor to filter</p>
+            </div>
+            <MentorLineup directory={directory} interest={interest} usage={usage} filters={filters} />
+          </div>
+        </section>
+      </Container>
 
-        {applications.length ? (
-          <div className="pt-2">
+      <Container className="pt-8">
+        <section aria-label="Filters">
+          <ApplicationFiltersForm filters={filters} directory={directory} />
+        </section>
+      </Container>
+
+      <Container className="pt-12">
+        <section aria-labelledby="results-heading">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 id="results-heading" className="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+                {filtered ? "Matching applications" : "All applications"}
+              </h2>
+              <p role="status" aria-live="polite" className="mt-1 text-sm text-text-muted tabular">
+                {applications.length} of {counts.total} application{counts.total === 1 ? "" : "s"}
+                {filters.sort === "oldest" ? " · oldest first" : " · newest first"}
+              </p>
+            </div>
+            {/* Plain link (not next/link): it's a file download from a route handler. */}
+            <a
+              href={exportHref(filters)}
+              download
+              className={buttonClasses({ variant: "secondary", size: "md", className: "max-sm:h-11 max-sm:w-full" })}
+            >
+              <DownloadIcon className="size-4" />
+              Export CSV{filtered ? " (filtered)" : ""}
+            </a>
+          </div>
+
+          {applications.length ? (
             <ApplicationResults applications={applications} directory={directory} />
-          </div>
-        ) : (
-          <div className="mt-6 rounded-sm border border-dotted border-line-strong px-5 py-8 text-center">
-            <p className="font-medium text-paper">
-              {counts.total === 0 ? "No applications yet" : "No applications match these filters"}
-            </p>
-            <p className="mx-auto mt-1 max-w-md text-sm text-paper-muted">
-              {counts.total === 0 ? (
-                <>
-                  Applications appear here as soon as students submit the form at{" "}
-                  <a href={PUBLIC_APPLICATION_HREF} className="font-mono text-xs text-paper underline underline-offset-4 hover:text-accent">
-                    {PUBLIC_APPLICATION_HREF}
-                  </a>
-                  .
-                </>
-              ) : (
-                "Try a different mentor, availability or status — or clear the filters."
-              )}
-            </p>
-          </div>
-        )}
+          ) : (
+            <div className="rounded-md bg-surface-subtle px-6 py-10 text-center">
+              <p className="font-semibold text-text">
+                {counts.total === 0 ? "No applications yet" : "No applications match these filters"}
+              </p>
+              <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-text-muted">
+                {counts.total === 0 ? (
+                  <>
+                    Applications show up here as soon as students submit{" "}
+                    <a href={PUBLIC_APPLICATION_HREF} className="font-medium text-text underline underline-offset-4">
+                      the application on the Office Hours page
+                    </a>
+                    .
+                  </>
+                ) : (
+                  "Try a different mentor, availability or status, or clear the filters."
+                )}
+              </p>
+            </div>
+          )}
+        </section>
       </Container>
 
-      <Container as="section" className="pt-20">
-        <SectionHeading
-          index="02"
-          eyebrow="Capacity"
-          title="Slot capacity"
-          id="capacity-heading"
-          lede="Proposed and confirmed appointments both hold a seat; canceling frees it. Full slots can’t be assigned."
-          className="mb-6"
-        />
-        <SlotBoard directory={directory} usage={usage} />
+      <Container className="pt-20">
+        <section aria-labelledby="capacity-heading">
+          <SectionHeader
+            id="capacity-heading"
+            title="Slot capacity"
+            lede="Proposed and confirmed appointments both hold a seat, and canceling frees it up. Full slots can’t be assigned."
+          />
+          <SlotBoard directory={directory} usage={usage} />
+        </section>
       </Container>
 
-      <Container as="section" className="pt-20">
-        <SectionHeading
-          index="03"
-          eyebrow="Organizer-only"
-          title="Mentor notes"
-          id="mentor-notes-heading"
-          lede="Scheduling state, constraints and copy awaiting approval. None of this appears on the public site."
-          className="mb-6"
-        />
-        <MentorNotes mentors={mentors} />
+      <Container className="pt-20 pb-8">
+        <section aria-labelledby="mentor-notes-heading">
+          <SectionHeader
+            id="mentor-notes-heading"
+            title="Mentor notes"
+            lede="Scheduling, constraints and copy that still needs approval. None of this shows up on the public site. Students can pick a mentor who’s still scheduling without choosing a time, and those applications show as “Interest only”."
+          />
+          <MentorNotes mentors={mentors} />
+        </section>
       </Container>
     </>
   );

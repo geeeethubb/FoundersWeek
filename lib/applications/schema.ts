@@ -7,7 +7,7 @@
 import { z } from "zod";
 import { countWords } from "@/lib/words";
 import type { ApplicationCatalog } from "./catalog";
-import { parseOptionKey } from "./catalog";
+import { mentorNeedsBroadAvailability, parseOptionKey } from "./catalog";
 import { LIMITS, PARTICIPATION_OPTIONS, STAGE_OPTIONS, YEAR_OPTIONS } from "./constants";
 
 /** Raw values as held by the form (all strings/booleans; nothing pre-parsed). */
@@ -104,6 +104,11 @@ export function isAllowedEmail(email: string, domains: string[]): boolean {
   return domains.some((d) => domain === d.toLowerCase());
 }
 
+/** "Vik", "Vik and Ron", "Vik, Elliott and Ron". */
+function joinNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 export function createApplicationSchema(options: { catalog: ApplicationCatalog; emailDomains: string[] }) {
   const { catalog, emailDomains } = options;
   const mentorsById = new Map(catalog.mentors.map((m) => [m.id, m]));
@@ -144,10 +149,11 @@ export function createApplicationSchema(options: { catalog: ApplicationCatalog; 
       firstChoiceMentorId: z.string().min(1, "Choose your first-choice mentor."),
       availability: z.array(z.string()),
       availabilityNotes: trimmed(LIMITS.availabilityNotes),
+      // Length is checked after normalizing, which may add "https://".
       link: z
         .string()
-        .max(LIMITS.link, `Keep links under ${LIMITS.link} characters.`)
         .transform(normalizeLink)
+        .pipe(z.string().max(LIMITS.link, `Keep links under ${LIMITS.link} characters.`))
         .refine((v) => v === "" || isHttpUrl(v), { message: "Enter a full link, like https://example.com." }),
       acknowledgeNoGuarantee: z.literal(true, {
         error: "Please confirm you understand that applying doesn’t guarantee an appointment.",
@@ -165,7 +171,7 @@ export function createApplicationSchema(options: { catalog: ApplicationCatalog; 
           ctx.addIssue({
             code: "custom",
             path: ["mentorIds"],
-            message: "One of the selected mentors is no longer available. Please review your choices.",
+            message: "One of the mentors you picked is no longer available. Check your choices.",
           });
           return;
         }
@@ -180,7 +186,7 @@ export function createApplicationSchema(options: { catalog: ApplicationCatalog; 
 
       const chosen = new Set(v.availability);
       if (chosen.size !== v.availability.length) {
-        ctx.addIssue({ code: "custom", path: ["availability"], message: "Duplicate availability selection." });
+        ctx.addIssue({ code: "custom", path: ["availability"], message: "You picked the same time twice." });
       }
       for (const key of v.availability) {
         const parsed = parseOptionKey(key);
@@ -191,22 +197,32 @@ export function createApplicationSchema(options: { catalog: ApplicationCatalog; 
           ctx.addIssue({
             code: "custom",
             path: ["availability"],
-            message: "One of your availability selections doesn’t match a selected mentor. Please review it.",
+            message: "One of the times you ticked isn’t for a mentor you picked. Check your times.",
           });
           return;
         }
       }
-      for (const id of v.mentorIds) {
-        const mentor = mentorsById.get(id);
-        // Mentors still scheduling have no options: interest is expressed without a time.
-        if (!mentor || mentor.options.length === 0) continue;
-        if (!mentor.options.some((o) => chosen.has(o.key))) {
-          ctx.addIssue({
-            code: "custom",
-            path: [`availability.${id}`],
-            message: `Select at least one time that works for your conversation with ${mentor.firstName}.`,
-          });
-        }
+      // Pending mentor schedules never block an application: students describe when they're
+      // generally free (broad availability). That note is needed for any chosen mentor whose times
+      // aren't set yet (no options, or only a date with the time still to be confirmed);
+      // otherwise a listed time or the note is enough.
+      const notes = v.availabilityNotes.trim();
+      const pending = v.mentorIds
+        .map((id) => mentorsById.get(id))
+        .filter((m): m is NonNullable<typeof m> => Boolean(m) && mentorNeedsBroadAvailability(m!))
+        .map((m) => m.firstName);
+      if (!notes && pending.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["availabilityNotes"],
+          message: `Tell us when you’re generally free during Founders Week. ${joinNames(pending)}’s times aren’t set yet.`,
+        });
+      } else if (v.availability.length === 0 && !notes) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["availabilityNotes"],
+          message: "Tell us when you’re generally free during Founders Week (or pick one of the listed times).",
+        });
       }
     });
 }

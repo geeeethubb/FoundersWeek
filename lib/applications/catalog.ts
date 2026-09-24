@@ -25,8 +25,10 @@ export interface AvailabilityOption {
   date: string;
   /** e.g. "Thu, Oct 1 · 10:00–11:30 AM CT" */
   label: string;
-  /** e.g. "Availability window — exact appointment times not set yet" */
+  /** e.g. "Availability window. Exact appointment times aren’t set yet." */
   detail: string;
+  /** False for a date-only window (time not set yet): students still need to say when they're free. */
+  timeKnown: boolean;
 }
 
 export interface CatalogMentor {
@@ -57,6 +59,15 @@ export function parseOptionKey(key: string): { kind: AvailabilityOptionKind; id:
 }
 
 /**
+ * Mentors whose times aren't set: no options at all (scheduling in progress) or only date-only
+ * windows (e.g. "Thu, Oct 1 · Exact time to be confirmed"). Applicants choosing them must describe
+ * when they're free. Shared by the schema and the form so both apply the same rule.
+ */
+export function mentorNeedsBroadAvailability(mentor: Pick<CatalogMentor, "options">): boolean {
+  return mentor.options.every((o) => !o.timeKnown);
+}
+
+/**
  * Windows that already have slots are represented by their slots; windows without slots
  * are offered as-is ("I'm available during this window").
  */
@@ -80,8 +91,9 @@ export function buildApplicationCatalog(mentors: Mentor[]): ApplicationCatalog {
               : `${formatDate(w.date, "short")} · ${describeTime(w.time).label}`,
             detail:
               w.time.kind === "exact"
-                ? "Availability window — exact appointment times not set yet"
-                : "Availability window — exact times forthcoming",
+                ? "Availability window. Exact appointment times aren’t set yet."
+                : "Availability window. Exact times to be announced.",
+            timeKnown: w.time.kind !== "tba",
           }));
         const slotOptions: AvailabilityOption[] = m.slots.map((s) => {
           const extras = [s.format === "virtual" ? "Virtual" : s.format === "hybrid" ? "Hybrid" : null, s.location]
@@ -98,7 +110,8 @@ export function buildApplicationCatalog(mentors: Mentor[]): ApplicationCatalog {
             detail:
               s.status === "confirmed"
                 ? `Confirmed slot${extras ? ` · ${extras}` : ""}`
-                : `Proposed time — not yet confirmed by ${m.firstName}${extras ? ` · ${extras}` : ""}`,
+                : `Proposed time, not yet confirmed by ${m.firstName}${extras ? ` · ${extras}` : ""}`,
+            timeKnown: true,
           };
         });
         return {

@@ -1,7 +1,4 @@
-/**
- * Badges. Line style carries certainty everywhere on the site:
- *   solid = confirmed · dashed = planned/proposed · dotted = to be announced.
- */
+/** Badges — small, quiet labels for event involvement and status. */
 import type { ConfirmationStatus, Involvement } from "@/content/types";
 import { cn } from "@/lib/cn";
 import {
@@ -15,21 +12,23 @@ import { PickMark } from "./icons";
 export type BadgeTone = "accent" | "accent-solid" | "neutral" | "muted" | "success" | "warning" | "danger" | "info";
 export type LineStyle = "solid" | "dashed" | "dotted";
 
+// Light theme: orange is only ever a fill/border; accent text uses accent-strong (5.5:1 on white).
 const tones: Record<BadgeTone, string> = {
   "accent-solid": "border-accent bg-accent text-accent-ink",
-  accent: "border-line-accent text-accent",
-  neutral: "border-line-strong text-paper",
-  muted: "border-line text-paper-muted",
-  success: "border-success/40 text-success",
-  warning: "border-warning/45 text-warning",
-  danger: "border-danger/45 text-danger",
-  info: "border-info/40 text-info",
+  accent: "border-accent/50 bg-accent-soft text-accent-strong",
+  neutral: "border-line-strong bg-surface text-text-muted",
+  muted: "border-line bg-surface-subtle text-text-subtle",
+  success: "border-success/25 bg-success-soft text-success",
+  warning: "border-warning/25 bg-warning-soft text-warning",
+  danger: "border-danger/25 bg-danger-soft text-danger",
+  info: "border-info/25 bg-info-soft text-info",
 };
 
+// Line style no longer carries meaning in the simplified design; kept for API compatibility.
 const lines: Record<LineStyle, string> = {
   solid: "border-solid",
-  dashed: "border-dashed",
-  dotted: "border-dotted",
+  dashed: "border-solid",
+  dotted: "border-solid",
 };
 
 export function Badge({
@@ -49,7 +48,7 @@ export function Badge({
     <span
       title={title}
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-xs border px-2 font-mono text-[0.6875rem] font-medium uppercase leading-none tracking-[0.08em]",
+        "inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-xs border px-2 text-xs font-semibold leading-none",
         tones[tone],
         lines[line],
         className,
@@ -60,11 +59,7 @@ export function Badge({
   );
 }
 
-/** Hosted (filled orange) > Supported (orange outline) > Part of Founders Week (neutral outline). */
-/**
- * Hosted (filled orange) > Co-hosted (orange outline on an orange wash) > Supported (orange outline)
- * > Part of Founders Week (neutral outline).
- */
+/** Hosted (orange fill) · Co-hosted / Supported (orange tint) · Part of Founders Week (neutral). */
 export function InvolvementBadge({ involvement, className }: { involvement: Involvement; className?: string }) {
   const tone: BadgeTone =
     involvement === "hosted"
@@ -75,7 +70,7 @@ export function InvolvementBadge({ involvement, className }: { involvement: Invo
   return (
     <Badge
       tone={tone}
-      className={cn(involvement === "cohosted" && "border-accent bg-accent-soft", className)}
+      className={className}
       title={INVOLVEMENT_DESCRIPTIONS[involvement]}
     >
       {INVOLVEMENT_LABELS[involvement]}
@@ -110,10 +105,7 @@ export function StatusBadge({ status, className }: { status: ConfirmationStatus;
 export function PickBadge({ className }: { className?: string }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 font-mono text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-accent",
-        className,
-      )}
+      className={cn("inline-flex items-center gap-1.5 text-xs font-semibold text-accent-strong", className)}
     >
       <PickMark className="size-2" />
       Founders pick
@@ -123,7 +115,7 @@ export function PickBadge({ className }: { className?: string }) {
 
 export function DemoBadge({ className }: { className?: string }) {
   return (
-    <Badge tone="info" line="dashed" className={className} title="Fictional demo content — not shown in production">
+    <Badge tone="info" line="dashed" className={className} title="Fictional demo content, never shown in production">
       Demo
     </Badge>
   );
@@ -131,7 +123,7 @@ export function DemoBadge({ className }: { className?: string }) {
 
 export function DraftBadge({ className }: { className?: string }) {
   return (
-    <Badge tone="warning" line="dashed" className={className} title="Draft — not visible on the public site">
+    <Badge tone="warning" line="dashed" className={className} title="Draft, hidden on the public site">
       Draft
     </Badge>
   );

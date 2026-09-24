@@ -6,6 +6,8 @@ import { cn } from "@/lib/cn";
 import type { OrganizerDirectory } from "@/lib/organizer/directory";
 import { activeFilterCount, NO_TIME_SELECTED, SEARCH_MAX_LENGTH, type ApplicationFilters } from "@/lib/organizer/filters";
 
+const LABEL = "mb-2 block text-sm font-medium text-text";
+
 /**
  * Dashboard filters as a plain GET form: works without JavaScript and every filtered view
  * is a shareable URL (the page redirects to the canonical query string).
@@ -27,8 +29,8 @@ export function ApplicationFiltersForm({
       return {
         mentor: m,
         options: [
-          ...windows.map((w) => ({ value: `window:${w.id}`, label: `${w.label} — window` })),
-          ...slots.map((s) => ({ value: `slot:${s.id}`, label: `${s.label} — ${s.status} slot` })),
+          ...windows.map((w) => ({ value: `window:${w.id}`, label: `${w.label} (window)` })),
+          ...slots.map((s) => ({ value: `slot:${s.id}`, label: `${s.label} (${s.status} slot)` })),
         ],
       };
     })
@@ -40,15 +42,15 @@ export function ApplicationFiltersForm({
       action="/organizers"
       role="search"
       aria-label="Filter applications"
-      className="rounded-sm border border-line bg-ink-850/60 p-4 sm:p-5"
+      className="rounded-md border border-line bg-surface p-4 sm:p-6"
     >
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-12 lg:gap-x-5 lg:gap-y-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-12 lg:gap-x-5 lg:gap-y-5">
         <div className="col-span-2 lg:order-1 lg:col-span-4">
-          <label htmlFor="f-q" className="mono-label mb-2 block text-paper-subtle">
+          <label htmlFor="f-q" className={LABEL}>
             Search
           </label>
           <div className="relative">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-paper-subtle" />
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-subtle" />
             <input
               id="f-q"
               name="q"
@@ -78,16 +80,16 @@ export function ApplicationFiltersForm({
           ))}
         </SelectField>
 
-        <fieldset className="col-span-2 min-w-0 sm:col-span-1 lg:order-5 lg:col-span-5" aria-describedby="f-choice-hint">
-          <legend className="mono-label mb-2 text-paper-subtle">Mentor match</legend>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <div className="inline-flex rounded-sm border border-line-strong bg-ink-950 p-0.5">
-              <Segment name="choice" value="" label="Any preference" defaultChecked={!filters.firstChoiceOnly} />
-              <Segment name="choice" value="first" label="First choice only" defaultChecked={filters.firstChoiceOnly} />
-            </div>
-            <p id="f-choice-hint" className="text-xs text-paper-subtle">
-              Applies when a mentor is selected.
-            </p>
+        <fieldset className="col-span-2 min-w-0 sm:col-span-1 lg:order-5 lg:col-span-5">
+          <legend className={LABEL}>
+            Mentor match{" "}
+            <span id="f-choice-hint" className="text-xs font-normal text-text-subtle">
+              · only applies once you pick a mentor
+            </span>
+          </legend>
+          <div className="inline-flex rounded-sm bg-surface-muted p-1">
+            <Segment name="choice" value="" label="Any preference" defaultChecked={!filters.firstChoiceOnly} />
+            <Segment name="choice" value="first" label="First choice only" defaultChecked={filters.firstChoiceOnly} />
           </div>
         </fieldset>
 
@@ -99,7 +101,7 @@ export function ApplicationFiltersForm({
           className="col-span-2 lg:order-3 lg:col-span-3"
         >
           <option value="">Any availability</option>
-          <option value={NO_TIME_SELECTED}>Interest only — no time selected</option>
+          <option value={NO_TIME_SELECTED}>Interest only (no time selected)</option>
           {groups.map((g) => (
             <optgroup key={g.mentor.id} label={`${g.mentor.name}${g.mentor.demo ? " (demo)" : ""}`}>
               {g.options.map((o) => (
@@ -129,12 +131,12 @@ export function ApplicationFiltersForm({
           {active ? (
             <Link
               href="/organizers"
-              className="inline-flex h-11 items-center justify-center rounded-sm px-4 text-[0.9375rem] text-paper-muted underline-offset-4 transition-colors duration-150 hover:text-paper hover:underline"
+              className="inline-flex h-11 items-center justify-center rounded-sm px-4 text-[0.9375rem] font-medium text-text-muted underline-offset-4 transition-colors duration-150 hover:text-text hover:underline"
             >
               Clear filters
             </Link>
           ) : null}
-          <Button type="submit" variant="primary" className="h-11">
+          <Button type="submit" variant="primary" className="h-11 px-5">
             Apply filters
           </Button>
         </div>
@@ -160,7 +162,7 @@ function SelectField({
 }) {
   return (
     <div className={cn("min-w-0", className)}>
-      <label htmlFor={id} className="mono-label mb-2 block text-paper-subtle">
+      <label htmlFor={id} className={LABEL}>
         {label}
       </label>
       <div className="relative">
@@ -172,7 +174,7 @@ function SelectField({
         >
           {children}
         </select>
-        <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-paper-subtle" />
+        <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-text-subtle" />
       </div>
     </div>
   );
@@ -192,7 +194,7 @@ function Segment({
   return (
     <label className="relative cursor-pointer">
       <input type="radio" name={name} value={value} defaultChecked={defaultChecked} className="peer sr-only" />
-      <span className="flex h-[2.625rem] items-center whitespace-nowrap rounded-xs px-3 text-sm text-paper-muted transition-colors duration-150 hover:text-paper peer-checked:bg-paper/[0.09] peer-checked:text-paper peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-accent">
+      <span className="flex h-11 items-center sm:h-[2.375rem] whitespace-nowrap rounded-xs px-3 text-sm text-text-muted transition-colors duration-150 hover:text-text peer-checked:bg-surface peer-checked:font-medium peer-checked:text-text peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-accent">
         {label}
       </span>
     </label>

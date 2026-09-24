@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { getMentors, getScheduleDays, getScheduleEntries, getSite, isDemoContentEnabled } from "@/content";
-import { FeaturedBand } from "@/components/schedule/featured-band";
+import { OfficeHoursCard } from "@/components/schedule/office-hours-card";
 import { ScheduleExplorer } from "@/components/schedule/schedule-explorer";
 import { ScheduleHeader } from "@/components/schedule/schedule-header";
-import { officeHoursMentorSummaries } from "@/lib/schedule/featured";
+import { Container } from "@/components/ui/primitives";
 import { dateRangeLabel } from "@/lib/schedule/format";
+import { mentorHeadshots } from "@/lib/schedule/headshots";
 import { pendingMentors } from "@/lib/schedule/pending-mentors";
 import { parseScheduleFilters, scheduleHref } from "@/lib/schedule/url";
 import { formatDate } from "@/lib/time";
@@ -32,8 +33,8 @@ export async function generateMetadata({ searchParams }: SchedulePageProps): Pro
   const scope = filters.day ? ` on ${formatDate(filters.day, "long")}` : range;
   const description =
     filters.view === "picks"
-      ? `Founders picks from the ${site.week.name} calendar${scope} at UIUC — events recommended by ${site.org.name}. All times Central Time.`
-      : `The ${site.week.name} calendar${scope} at UIUC — Founders Office Hours, talks, panels and receptions, in order, with Founders’ involvement labeled. All times Central Time.`;
+      ? `Founders picks from the ${site.week.name} calendar${scope} at UIUC: the events ${site.org.name} recommends. All times Central Time.`
+      : `The ${site.week.name} calendar${scope} at UIUC: Founders Office Hours, talks, panels and receptions in time order, with Founders’ involvement labeled. All times Central Time.`;
   const canonical = scheduleHref({ day: filters.day, view: filters.view });
 
   return {
@@ -69,16 +70,19 @@ export default async function SchedulePage({ searchParams }: SchedulePageProps) 
   const mentors = getMentors();
 
   return (
-    <>
-      <ScheduleHeader week={site.week} days={days} showDemoLegend={isDemoContentEnabled()} />
-      <FeaturedBand entries={entries} mentors={officeHoursMentorSummaries(mentors)} />
+    <div className="pb-20 md:pb-28">
+      <ScheduleHeader week={site.week} days={days} showDemoNote={isDemoContentEnabled()} />
+      <Container className="pb-10 md:pb-12">
+        <OfficeHoursCard mentors={mentors} />
+      </Container>
       <ScheduleExplorer
         entries={entries}
         days={days}
         partial={site.week.scheduleCompleteness === "partial"}
         pendingMentors={pendingMentors(mentors)}
         calendarCount={entries.filter((e) => e.calendar.available).length}
+        headshots={mentorHeadshots(mentors)}
       />
-    </>
+    </div>
   );
 }

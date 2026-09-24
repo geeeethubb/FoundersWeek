@@ -29,19 +29,19 @@ export interface DataStoreStatus {
 const REASON_COPY: Record<Extract<PersistenceStatus, { ready: false }>["reason"], { headline: string; detail: string }> = {
   "not-configured": {
     headline: "No database configured",
-    detail: "Applications can’t be stored or reviewed until DATABASE_URL (or Supabase’s POSTGRES_URL) is set.",
+    detail: "Applications can’t be saved or reviewed until DATABASE_URL (or POSTGRES_URL) is set.",
   },
   misconfigured: {
     headline: "Database misconfigured",
-    detail: "The database setting isn’t usable on this deployment. Applications can’t be stored or reviewed.",
+    detail: "The database setting on this deployment doesn’t work, so applications can’t be saved or reviewed.",
   },
   "not-migrated": {
     headline: "Database schema missing",
-    detail: "The database is reachable but its tables haven’t been created. Run the migrations.",
+    detail: "The database is reachable, but its tables haven’t been created yet. Run the migrations.",
   },
   unreachable: {
     headline: "Database not connected",
-    detail: "The application database isn’t responding. Nothing is lost — reviewing is paused until it’s back.",
+    detail: "The application database isn’t responding. Nothing is lost, but reviewing is on hold until it’s back.",
   },
 };
 
@@ -101,7 +101,7 @@ export function describeDataStore(input: {
       provider: PROVIDER_LABELS.pglite,
       state: "local",
       headline: "Local database",
-      detail: "Development store on this machine — not the live database. Applications sent to the live site aren’t here.",
+      detail: "A development database on this machine, not the live one. Applications sent to the live site won’t show up here.",
       schema: input.schema,
       hint: null,
     };
@@ -112,7 +112,7 @@ export function describeDataStore(input: {
     provider: input.provider === "supabase" ? PROVIDER_LABELS.supabase : PROVIDER_LABELS.postgres,
     state: "live",
     headline: "Live database connected",
-    detail: "Applications are stored in the hosted database and appear here as soon as students submit.",
+    detail: "Applications are saved to the hosted database and show up here as soon as students submit.",
     schema: input.schema,
     hint: null,
   };

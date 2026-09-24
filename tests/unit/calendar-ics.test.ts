@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GET as eventIcsRoute } from "@/app/schedule/[id]/calendar.ics/route";
+import { GET as feedIcsRoute } from "@/app/schedule/calendar.ics/route";
 import { demoEvents, demoMentors } from "@/content/demo";
 import { events } from "@/content/events";
 import { mentors } from "@/content/mentors";
@@ -12,7 +14,7 @@ import {
   icsLocalDateTime,
   icsUtcDateTime,
 } from "@/lib/calendar/ics";
-import { buildScheduleEntries, eventToEntry } from "@/lib/schedule/entries";
+import { buildScheduleEntries, calendarAvailability, eventToEntry } from "@/lib/schedule/entries";
 
 const SITE = "https://founders-week.example";
 const NOW = new Date("2026-09-23T17:15:00Z");
@@ -27,17 +29,37 @@ const panel = byId("how-to-make-10k-a-month-in-college");
 const showcase = byId("founders-showcase-day-sessions");
 const dan = byId("dan-caruso-fireside-chat");
 const workshop = byId("demo-customer-discovery-workshop", withDemo);
+const HAPPY_HOUR = "happy-hour-at-legends-with-arnav-mishra";
+const HAPPY_HOUR_TITLE = "Happy Hour with Arnav Mishra at Legends";
+const happyHour = byId(HAPPY_HOUR);
+const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
+const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
+const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
+const rishabOfficeHours = byId(RISHAB_OH);
+const OFFICE_HOURS_REASON = "Office hours are by application. Selected students get their confirmed time by email.";
 
 /** Unfold RFC 5545 continuation lines. */
 const unfold = (ics: string) => ics.replace(/\r\n /g, "");
 const octets = (s: string) => new TextEncoder().encode(s).length;
 const vevents = (ics: string) => unfold(ics).match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) ?? [];
 
+/**
+ * The Founders Week Afterparty (Sat Oct 3, HERE Apartments) was canceled and must never appear.
+ * (Arnav's Wednesday happy hour at Legends is a separate, real event.)
+ */
+function expectNoCanceledAfterparty(s: string) {
+  expect(s).not.toMatch(/HERE Apartments/i);
+  expect(s).not.toContain("founders-week-afterparty");
+  expect(s).not.toMatch(/Founders Week Afterparty/i);
+}
+
 describe("calendar eligibility", () => {
   it("exports confirmed events with exact start and end times", () => {
     expect(production.filter((e) => e.calendar.available).map((e) => e.id)).toEqual([
       "how-to-make-10k-a-month-in-college",
       "founders-week-kickoff-reception",
+      HAPPY_HOUR,
+      "founder-failure-lab",
       "science-and-practice-of-pitching",
       "entrepreneurial-impact-launching-from-illinois",
       "techrise-pitch-competition",
@@ -47,9 +69,11 @@ describe("calendar eligibility", () => {
   });
 
   it("explains why forthcoming events and office hours can't be exported yet", () => {
+    // Dan Caruso: confirmed for 4:00 PM, but no end time has been announced — nothing is invented.
+    expect(dan.time).toEqual({ kind: "exact", start: "16:00" });
     expect(dan.calendar).toEqual({
       available: false,
-      reason: "Calendar export opens once the organizer confirms the date and time.",
+      reason: "Calendar export opens once an end time is announced.",
     });
     expect(byId("tailgate-and-enterpriseworks-tour").calendar.available).toBe(false);
     expect(byId("illinois-football-vs-purdue").calendar.available).toBe(false);
@@ -57,6 +81,43 @@ describe("calendar eligibility", () => {
     expect(oh.available).toBe(false);
     expect(!oh.available && oh.reason).toMatch(/by application/i);
     expect(byId("demo-canceled-session", withDemo).calendar.available).toBe(false);
+  });
+
+  it("never exports office hours, including Rishab's date-only (time to be announced) window", () => {
+    expect(production).toHaveLength(15);
+    const officeHours = production.filter((e) => e.kind === "office-hours");
+    expect(officeHours.map((e) => e.id)).toEqual([PATRICK_OH, RISHAB_OH, ARNAV_OH]);
+    for (const e of officeHours) {
+      expect(e.calendar, e.id).toEqual({ available: false, reason: OFFICE_HOURS_REASON });
+      expect(googleCalendarUrl(e, SITE), e.id).toBeNull();
+    }
+    expect(rishabOfficeHours).toMatchObject({
+      date: "2026-10-01",
+      time: { kind: "tba" },
+      status: "planned",
+      startsAt: null,
+      endsAt: null,
+    });
+    // No VEVENT for it, and no invented time on Oct 1.
+    const ics = buildIcsCalendar([rishabOfficeHours], { siteUrl: SITE, now: NOW });
+    expect(ics).not.toContain("BEGIN:VEVENT");
+    expect(ics).not.toContain(RISHAB_OH);
+    expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
+    // Office hours stay out even once a window is confirmed with exact times: selected students get
+    // their time by email.
+    expect(calendarAvailability("office-hours", "confirmed", { kind: "exact", start: "10:00", end: "11:00" })).toEqual({
+      available: false,
+      reason: OFFICE_HOURS_REASON,
+    });
+    expect(calendarAvailability("office-hours", "planned", { kind: "tba" })).toEqual({
+      available: false,
+      reason: OFFICE_HOURS_REASON,
+    });
+    // An event with no announced time explains itself differently.
+    expect(calendarAvailability("event", "confirmed", { kind: "tba" })).toEqual({
+      available: false,
+      reason: "Calendar export opens once an exact time is announced.",
+    });
   });
 });
 
@@ -92,7 +153,9 @@ describe("buildIcsCalendar — Sep 29 panel", () => {
     expect(lines).toContain("DTSTAMP:20260923T171500Z");
     expect(lines).toContain("UID:how-to-make-10k-a-month-in-college@founders-week");
     expect(lines).toContain("SUMMARY:How to Make $10K/Month in College");
-    expect(lines).toContain("LOCATION:100 MSEB");
+    expect(lines).toContain(
+      "LOCATION:Materials Science and Engineering Building\\, Room 100\\, 1304 W. Green St.\\, Urbana\\, IL 61801",
+    );
     expect(lines).toContain("STATUS:CONFIRMED");
     expect(lines).toContain(`URL:${SITE}/schedule/how-to-make-10k-a-month-in-college`);
     expect(lines.some((l) => /^DTSTART:\d{8}T\d{6}Z$/.test(l))).toBe(false);
@@ -109,27 +172,106 @@ describe("buildIcsCalendar — Sep 29 panel", () => {
   });
 });
 
+describe("buildIcsCalendar — Arnav's happy hour at Legends (Wed Sep 30)", () => {
+  const ics = buildIcsCalendar([happyHour], { siteUrl: SITE, now: NOW, name: "Founders Week" });
+  const lines = unfold(ics).split("\r\n");
+
+  it("is a confirmed 5:00–7:00 PM Central Time event at Legends, 6th & Green", () => {
+    expect(happyHour.calendar).toEqual({ available: true });
+    expect(vevents(ics)).toHaveLength(1);
+    expect(lines).toContain(`UID:${HAPPY_HOUR}@founders-week`);
+    expect(lines).toContain("DTSTART;TZID=America/Chicago:20260930T170000");
+    expect(lines).toContain("DTEND;TZID=America/Chicago:20260930T190000");
+    expect(lines).toContain(`SUMMARY:${HAPPY_HOUR_TITLE}`);
+    expect(lines).toContain("LOCATION:Legends\\, 6th & Green");
+    expect(lines).toContain("STATUS:CONFIRMED");
+    expect(lines).toContain(`URL:${SITE}/schedule/${HAPPY_HOUR}`);
+    const description = lines.find((l) => l.startsWith("DESCRIPTION:"))!;
+    expect(description).toBe(`DESCRIPTION:${escapeIcsText(icsDescription(happyHour, SITE))}`);
+    expect(description).toContain("RSVP on Partiful");
+    expect(description).toContain(`Details and updates: ${SITE}/schedule/${HAPPY_HOUR}`);
+    for (const line of ics.split("\r\n")) expect(octets(line)).toBeLessThanOrEqual(75);
+    expectNoCanceledAfterparty(ics.replace(/\r\n /g, ""));
+  });
+
+  it("builds a Google Calendar link with the same local times and place", () => {
+    const params = new URL(googleCalendarUrl(happyHour, SITE)!).searchParams;
+    expect(params.get("text")).toBe(HAPPY_HOUR_TITLE);
+    expect(params.get("dates")).toBe("20260930T170000/20260930T190000");
+    expect(params.get("ctz")).toBe("America/Chicago");
+    expect(params.get("location")).toBe("Legends, 6th & Green");
+    expect(params.get("details")).toContain(`${SITE}/schedule/${HAPPY_HOUR}`);
+  });
+});
+
+describe("calendar.ics routes (public data)", () => {
+  beforeEach(() => {
+    vi.stubEnv("SHOW_DEMO_CONTENT", "");
+    vi.stubEnv("SHOW_DRAFT_CONTENT", "");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://founders.example.edu");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  const get = (id: string) => eventIcsRoute(new Request(`https://founders.example.edu/schedule/${id}/calendar.ics`), {
+    params: Promise.resolve({ id }),
+  });
+
+  it("serves the happy hour's .ics as a download", async () => {
+    const res = await get(HAPPY_HOUR);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/calendar; charset=utf-8");
+    expect(res.headers.get("content-disposition")).toBe(`attachment; filename="${HAPPY_HOUR}.ics"`);
+    const body = unfold(await res.text());
+    expect(body).toContain(`UID:${HAPPY_HOUR}@founders-week`);
+    expect(body).toContain("DTSTART;TZID=America/Chicago:20260930T170000");
+    expect(body).toContain("DTEND;TZID=America/Chicago:20260930T190000");
+    expect(body).toContain(`URL:https://founders.example.edu/schedule/${HAPPY_HOUR}`);
+  });
+
+  it("has no .ics for the canceled afterparty, forthcoming events or office hours", async () => {
+    for (const id of ["founders-week-afterparty", "dan-caruso-fireside-chat", PATRICK_OH, RISHAB_OH, ARNAV_OH]) {
+      const res = await get(id);
+      expect(res.status, id).toBe(404);
+      expect(await res.text(), id).toBe("No calendar file is available for this event.");
+    }
+  });
+
+  it("the all-events feed includes the happy hour and never the canceled afterparty", async () => {
+    const body = unfold(await (await feedIcsRoute()).text());
+    expect(vevents(body)).toHaveLength(9);
+    expect(body).toContain(`UID:${HAPPY_HOUR}@founders-week`);
+    expectNoCanceledAfterparty(body);
+    expect(body).toContain("SUMMARY:Founders Evening Showcase and Reception");
+    // Office hours (Rishab's date-only window included) never reach the feed.
+    expect(body).not.toContain("office-hours-");
+    expect(body).not.toContain("SUMMARY:Office hours");
+  });
+});
+
 describe("buildIcsCalendar — program blocks", () => {
   it("lists the timed sub-sessions (with people and moderators) in DESCRIPTION", () => {
     const text = icsDescription(showcase, SITE);
     expect(text.startsWith(`${showcase.summary}\n\nProgram (Central Time):\n`)).toBe(true);
     const program = text.split("\n\n")[1].split("\n");
     expect(program).toHaveLength(1 + 11);
-    expect(program[1]).toBe("8:00–8:45 AM — Check-In and Breakfast Networking");
+    expect(program[1]).toBe("8:00–8:45 AM: Check-In and Breakfast Networking");
     expect(program[4]).toBe(
-      "11:00–11:30 AM — Fireside Chat with Chancellor Charles Isbell: Innovation, Entrepreneurship, and Illinois’ Ambition for Impact (Charles Isbell (Chancellor); moderated by Scott Rose and Susan Martinis)",
+      "11:00–11:30 AM: Fireside Chat with Chancellor Charles Isbell: Innovation, Entrepreneurship, and Illinois’ Ambition for Impact (Charles Isbell (Chancellor); moderated by Scott Rose and Susan Martinis)",
+    );
+    expect(program[7]).toBe(
+      "1:20–1:55 PM: Health Innovation: From Therapeutics to Devices (Marty Burke, Carol Curtis, Steve Boppart, Rishab Veldur and Rohit Bhargava)",
     );
     expect(program[8]).toBe(
-      "1:55–2:25 PM — From Idea to Scale — Building Doss: Lessons from an Illini Founder (Arnav Mishra; moderated by Ranjitha Kumar)",
+      "1:55–2:25 PM: From Idea to Scale: Building Doss, Lessons from an Illini Founder (Arnav Mishra; moderated by Ranjitha Kumar)",
     );
-    expect(program[11]).toBe("3:50–5:30 PM — Innovation Tours and Structured Networking");
+    expect(program[11]).toBe("3:50–5:30 PM: Innovation Tours and Structured Networking");
     expect(text.endsWith(`Details and updates: ${SITE}/schedule/founders-showcase-day-sessions`)).toBe(true);
   });
 
   it("notes people still to be announced", () => {
     const text = icsDescription(byId("techrise-pitch-competition"), SITE);
     expect(text).toContain(
-      "6:30–6:50 PM — TechRise × University of Illinois Founders Week Cohort 2: Where Are They Now? (Mehmet Gunal and Elliott Notrica; Additional participants to be announced)",
+      "6:30–6:50 PM: TechRise × University of Illinois Founders Week Cohort 2: Where Are They Now? (Mehmet Gunal and Elliott Notrica; Additional participants to be announced)",
     );
   });
 
@@ -143,7 +285,7 @@ describe("buildIcsCalendar — program blocks", () => {
     const description = vevent.split("\r\n").find((l) => l.startsWith("DESCRIPTION:"))!;
     expect(description).toBe(`DESCRIPTION:${escapeIcsText(icsDescription(showcase, SITE))}`);
     expect(description).toContain("(Charles Isbell (Chancellor)\\; moderated by Scott Rose and Susan Martinis)");
-    expect(description).toContain("\\nProgram (Central Time):\\n8:00–8:45 AM — Check-In");
+    expect(description).toContain("\\nProgram (Central Time):\\n8:00–8:45 AM: Check-In");
   });
 });
 
@@ -155,15 +297,19 @@ describe("all-events feed", () => {
 
   it("contains exactly the eligible events", () => {
     expect(uids).toEqual(production.filter((e) => e.calendar.available).map((e) => `UID:${e.id}@founders-week`));
-    expect(vevents(feed)).toHaveLength(7);
+    expect(vevents(feed)).toHaveLength(9);
+    expect(uids).toContain(`UID:${HAPPY_HOUR}@founders-week`);
   });
 
   it("leaves out forthcoming events, office hours and the removed afterparty", () => {
+    expect(feed).not.toContain(`${RISHAB_OH}@`);
     expect(feed).not.toContain("dan-caruso-fireside-chat@");
     expect(feed).not.toContain("tailgate-and-enterpriseworks-tour@");
     expect(feed).not.toContain("illinois-football-vs-purdue@");
     expect(feed).not.toContain("office-hours-");
-    expect(feed).not.toMatch(/afterparty|HERE Apartments/i);
+    expectNoCanceledAfterparty(unfold(feed));
+    // Nothing on Saturday is exportable yet (both items are still "time forthcoming").
+    expect(unfold(feed)).not.toMatch(/DTSTART;TZID=America\/Chicago:20261003/);
     expect(feed).toContain("SUMMARY:Founders Evening Showcase and Reception");
   });
 
@@ -224,17 +370,23 @@ describe("googleCalendarUrl", () => {
     expect(url).toContain("ctz=America/Chicago");
     const params = new URL(url).searchParams;
     expect(params.get("text")).toBe("How to Make $10K/Month in College");
-    expect(params.get("location")).toBe("100 MSEB");
+    expect(params.get("location")).toBe(
+      "Materials Science and Engineering Building, Room 100, 1304 W. Green St., Urbana, IL 61801",
+    );
     expect(params.get("details")).toContain(`${SITE}/schedule/how-to-make-10k-a-month-in-college`);
   });
 
   it("carries the program for blocks", () => {
     const params = new URL(googleCalendarUrl(showcase, SITE)!).searchParams;
-    expect(params.get("details")).toContain("2:40–2:55 PM — Next Generation Industrial, Manufacturing and Space Tech");
+    expect(params.get("details")).toContain("2:40–2:55 PM: Next Generation Industrial, Manufacturing and Space Tech");
+    expect(params.get("details")).toContain(
+      "1:20–1:55 PM: Health Innovation: From Therapeutics to Devices (Marty Burke, Carol Curtis, Steve Boppart, Rishab Veldur and Rohit Bhargava)",
+    );
   });
 
   it("returns null for entries that can't be exported", () => {
     expect(googleCalendarUrl(dan, SITE)).toBeNull();
-    expect(googleCalendarUrl(byId("office-hours-patrick-haddox-2026-10-01-am"), SITE)).toBeNull();
+    expect(googleCalendarUrl(byId(PATRICK_OH), SITE)).toBeNull();
+    expect(googleCalendarUrl(rishabOfficeHours, SITE)).toBeNull();
   });
 });

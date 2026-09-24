@@ -53,7 +53,7 @@ export async function getSubmissionState(now: Date = new Date()): Promise<Submis
     return closed(
       "closed",
       "Applications are closed",
-      "The office-hours application isn’t accepting submissions right now.",
+      "We aren’t taking office-hours applications right now.",
       "Set applications.open to true in content/site.ts to reopen.",
     );
   }
@@ -64,14 +64,14 @@ export async function getSubmissionState(now: Date = new Date()): Promise<Submis
     return closed(
       "deadline-passed",
       "The application deadline has passed",
-      "Thanks for your interest — the office-hours application is closed.",
+      "Thanks for your interest. The office-hours application is now closed.",
     );
   }
   if (!getAppSecret()) {
     return closed(
       "not-configured",
       "Applications open soon",
-      "The office-hours application is still being set up. Please check back shortly.",
+      "We’re still getting the application ready. Check back in a bit.",
       "APP_SECRET is missing or shorter than 32 characters. Add it in Vercel → Production, then redeploy. /api/health shows every setting.",
     );
   }
@@ -92,7 +92,7 @@ export async function getSubmissionState(now: Date = new Date()): Promise<Submis
       notConfigured ? "not-configured" : "database-unavailable",
       notConfigured ? "Applications open soon" : "Applications are temporarily unavailable",
       notConfigured
-        ? "The office-hours application is still being set up. Please check back shortly."
+        ? "We’re still getting the application ready. Check back in a bit."
         : "We can’t save applications right now. Please try again in a little while.",
       `${persistence.detail} See README → Database setup, or /api/health.`,
     );

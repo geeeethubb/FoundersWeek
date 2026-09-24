@@ -4,48 +4,44 @@
  */
 import { AppointmentStatusBadge, AvailabilityBadge } from "@/components/ui/status";
 import { AlertIcon, PickMark } from "@/components/ui/icons";
-import type { ApplicationStatus } from "@/lib/applications/constants";
 import { cn } from "@/lib/cn";
 import type { ResolvedAvailability } from "@/lib/organizer/directory";
 
-/** Line swatch matching ApplicationStatusBadge's tone + line style. */
-const STATUS_SWATCH: Record<ApplicationStatus, string> = {
-  submitted: "border-paper/70 border-solid",
-  under_review: "border-info border-dashed",
-  selected: "border-accent border-dashed",
-  waitlisted: "border-warning border-dotted",
-  confirmed: "border-success border-solid",
-  canceled: "border-danger border-solid",
-  attended: "border-paper-subtle border-solid",
-};
-
-export function StatusSwatch({ status, className }: { status: ApplicationStatus; className?: string }) {
-  return <span aria-hidden className={cn("inline-block w-4 border-t-2", STATUS_SWATCH[status], className)} />;
+/** A setting name, file path or command inside organizer copy. */
+export function Code({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <code className={cn("rounded-xs bg-surface-muted px-1 py-px text-[0.8125rem] font-medium text-charcoal", className)}>
+      {children}
+    </code>
+  );
 }
 
-/** Ranked mentor preferences; rank 1 (first choice) carries the orange pick mark. */
+/** "First choice" marker: a small orange dot plus accessible, readable text. */
+export function FirstChoiceMark({ label = "1st choice", className }: { label?: string; className?: string }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-accent-strong", className)}>
+      <PickMark className="size-1.5" />
+      {label}
+    </span>
+  );
+}
+
+/** Ranked mentor preferences; rank 1 (first choice) is marked. */
 export function PreferenceList({
   mentors,
   className,
-  dense = false,
 }: {
-  mentors: { mentorId: string; rank: number; name: string; demo?: boolean }[];
+  mentors: { mentorId: string; rank: number; name: string }[];
   className?: string;
-  dense?: boolean;
 }) {
   return (
-    <ol className={cn(dense ? "space-y-1" : "space-y-1.5", className)}>
+    <ol className={cn("space-y-1.5", className)}>
       {mentors.map((m) => (
-        <li key={m.mentorId} className="flex items-baseline gap-2">
-          <span className="w-4 shrink-0 font-mono text-xs text-paper-subtle tabular">{m.rank}.</span>
-          <span className={cn("min-w-0", m.rank === 1 ? "text-paper" : "text-paper-muted")}>
+        <li key={m.mentorId} className="flex items-baseline gap-2 text-sm">
+          <span className="w-4 shrink-0 text-text-subtle tabular">{m.rank}.</span>
+          <span className={cn("min-w-0", m.rank === 1 ? "font-medium text-text" : "text-text-muted")}>
             {m.name}
-            {m.rank === 1 ? (
-              <span className="ml-2 inline-flex items-center gap-1 whitespace-nowrap font-mono text-[0.625rem] uppercase tracking-[0.08em] text-accent">
-                <PickMark className="size-1.5" />
-                1st choice
-              </span>
-            ) : null}
+            {m.rank === 1 ? <FirstChoiceMark className="ml-2" /> : null}
           </span>
         </li>
       ))}
@@ -54,8 +50,8 @@ export function PreferenceList({
 }
 
 /**
- * Selected availability with its certainty badge (window / exact times forthcoming / proposed /
- * confirmed), grouped by mentor.
+ * Selected availability with its certainty badge (availability window / exact times forthcoming /
+ * proposed slot / confirmed slot), grouped by mentor.
  */
 export function AvailabilityList({
   items,
@@ -77,15 +73,15 @@ export function AvailabilityList({
     <div className={cn("space-y-3", className)}>
       {groups.map((g) => (
         <div key={g.mentorId} className="min-w-0">
-          {showMentor ? <p className="text-xs leading-5 text-paper-muted">{g.mentorName}</p> : null}
-          <ul className="space-y-1.5">
+          {showMentor ? <p className="text-xs font-medium text-text-subtle">{g.mentorName}</p> : null}
+          <ul className="mt-1 space-y-2">
             {g.items.map((a) => (
-              <li key={a.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="font-mono text-xs leading-5 text-paper">{a.label}</span>
+              <li key={a.key} className="min-w-0">
+                <p className="text-sm leading-snug text-text tabular">{a.label}</p>
                 {a.certainty ? (
-                  <AvailabilityBadge kind={a.certainty} />
+                  <AvailabilityBadge kind={a.certainty} className="mt-1" />
                 ) : (
-                  <span className="mono-label text-danger">No longer in content</span>
+                  <p className="mt-0.5 text-xs font-medium text-danger">No longer listed in content</p>
                 )}
               </li>
             ))}
@@ -96,14 +92,12 @@ export function AvailabilityList({
   );
 }
 
+/** The student chose a mentor but no time (their mentor may still be scheduling). */
 export function InterestOnly({ className }: { className?: string }) {
   return (
     <p className={cn("text-sm", className)}>
-      <span className="mono-label inline-flex items-center gap-2 text-paper">
-        <span aria-hidden className="inline-block w-4 border-t-2 border-dotted border-paper-muted" />
-        Interest only
-      </span>
-      <span className="mt-0.5 block text-xs text-paper-subtle">No time selected</span>
+      <span className="font-medium text-text">Interest only</span>
+      <span className="block text-xs text-text-subtle">No time selected</span>
     </p>
   );
 }
@@ -111,7 +105,7 @@ export function InterestOnly({ className }: { className?: string }) {
 export function DuplicateFlag({ count, className }: { count: number; className?: string }) {
   if (count < 2) return null;
   return (
-    <p className={cn("inline-flex items-center gap-1.5 text-xs text-warning", className)}>
+    <p className={cn("inline-flex items-center gap-1.5 text-xs font-medium text-warning", className)}>
       <AlertIcon className="size-3.5 shrink-0" />
       {count} applications from this email
     </p>
@@ -133,16 +127,17 @@ export function AppointmentLine({
   return (
     <div className={cn("min-w-0", className)}>
       <AppointmentStatusBadge status={status} />
-      <p className="mt-1 text-xs leading-5 text-paper-muted">
-        <span className="text-paper">{mentorName}</span> · <span className="font-mono">{when}</span>
+      <p className="mt-1 text-sm leading-snug text-text-muted">
+        <span className="font-medium text-text">{mentorName}</span>
+        <span className="block text-xs text-text-subtle tabular">{when}</span>
       </p>
     </div>
   );
 }
 
 /**
- * Seat pips for a slot: solid green = confirmed, dashed amber = proposed (holds a seat),
- * hairline = open.
+ * Seats for a slot: filled green = confirmed, amber = proposed (holds a seat), outline = open,
+ * red outline = over capacity. Decorative — the seat count is always given as text next to it.
  */
 export function SeatPips({
   capacity,
@@ -164,10 +159,10 @@ export function SeatPips({
           <span
             key={i}
             className={cn(
-              "size-3 rounded-[1px] border",
+              "size-3 rounded-full border",
               kind === "confirmed" && "border-success bg-success",
-              kind === "proposed" && "border-dashed border-warning bg-warning-soft",
-              kind === "open" && "border-line-strong",
+              kind === "proposed" && "border-accent bg-accent",
+              kind === "open" && "border-line-strong bg-surface",
               i >= capacity && "border-danger",
             )}
           />

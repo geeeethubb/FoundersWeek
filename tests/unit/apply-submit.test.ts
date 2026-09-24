@@ -157,6 +157,8 @@ describe("POST /api/applications", () => {
         to: "alex.student@illinois.edu",
         firstName: "Alex",
         statusUrl: `${ORIGIN}${body.statusUrl}`,
+        // Reads as "office hours during Founders Week" in the email.
+        siteName: site.shortName,
         mentors: [
           { name: "Arnav Mishra", schedulingInProgress: false },
           { name: "Patrick Haddox", schedulingInProgress: false },
@@ -255,6 +257,52 @@ describe("POST /api/applications", () => {
     ]);
   });
 
+  it("stores interest in Elliott (scheduling in progress) as first choice next to Patrick's window", async () => {
+    const res = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["patrick-haddox", "elliott-notrica"],
+          firstChoiceMentorId: "elliott-notrica",
+          availability: ["window:patrick-haddox-2026-10-01-am"],
+          referrerMentorId: "elliott-notrica",
+        }),
+      ),
+      deps(),
+    );
+    expect(res.status).toBe(201);
+    const { id } = await res.json();
+    const ranked = await db.query<{ mentor_id: string; rank: number }>(
+      `select mentor_id, rank from application_mentors where application_id = $1 order by rank`,
+      [id],
+    );
+    expect(ranked).toEqual([
+      { mentor_id: "elliott-notrica", rank: 1 },
+      { mentor_id: "patrick-haddox", rank: 2 },
+    ]);
+    // Only Patrick has a time; Elliott is interest only.
+    const availability = await db.query<{ mentor_id: string; option_kind: string; option_id: string }>(
+      `select mentor_id, option_kind, option_id from application_availability where application_id = $1`,
+      [id],
+    );
+    expect(availability).toEqual([
+      { mentor_id: "patrick-haddox", option_kind: "window", option_id: "patrick-haddox-2026-10-01-am" },
+    ]);
+    const [app] = await db.query<{ first_choice_mentor_id: string; referrer_mentor_id: string }>(
+      `select first_choice_mentor_id, referrer_mentor_id from applications where id = $1`,
+      [id],
+    );
+    expect(app).toEqual({ first_choice_mentor_id: "elliott-notrica", referrer_mentor_id: "elliott-notrica" });
+    await Promise.all(scheduled);
+    expect(sendAcknowledgment.mock.calls[0]).toMatchObject([
+      {
+        mentors: [
+          { name: "Elliott Notrica", schedulingInProgress: true },
+          { name: "Patrick Haddox", schedulingInProgress: false },
+        ],
+      },
+    ]);
+  });
+
   it("stores Patrick's window + Ron (first choice Ron) with Ron ranked first and one availability row", async () => {
     const res = await handleApplicationSubmission(
       post(
@@ -290,6 +338,135 @@ describe("POST /api/applications", () => {
     expect(app.first_choice_mentor_id).toBe("ron-lewis");
   });
 
+  it("stores a Rishab application: his mentor row, his Thu, Oct 1 window row and the broad-availability note", async () => {
+    const res = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["rishab-veldur"],
+          firstChoiceMentorId: "rishab-veldur",
+          availability: ["window:rishab-veldur-2026-10-01"],
+          availabilityNotes: "Free after 3 PM on Thursday",
+          referrerMentorId: "rishab-veldur",
+        }),
+      ),
+      deps(),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(isSubmitSuccess(body)).toBe(true);
+    const ranked = await db.query<{ mentor_id: string; rank: number }>(
+      `select mentor_id, rank from application_mentors where application_id = $1 order by rank`,
+      [body.id],
+    );
+    expect(ranked).toEqual([{ mentor_id: "rishab-veldur", rank: 1 }]);
+    const availability = await db.query<{ mentor_id: string; option_kind: string; option_id: string }>(
+      `select mentor_id, option_kind, option_id from application_availability where application_id = $1`,
+      [body.id],
+    );
+    expect(availability).toEqual([
+      { mentor_id: "rishab-veldur", option_kind: "window", option_id: "rishab-veldur-2026-10-01" },
+    ]);
+    const [app] = await db.query<{ first_choice_mentor_id: string; referrer_mentor_id: string; availability_notes: string }>(
+      `select first_choice_mentor_id, referrer_mentor_id, availability_notes from applications where id = $1`,
+      [body.id],
+    );
+    expect(app).toEqual({
+      first_choice_mentor_id: "rishab-veldur",
+      referrer_mentor_id: "rishab-veldur",
+      availability_notes: "Free after 3 PM on Thursday",
+    });
+    expect(await count("applications")).toBe(1);
+    expect(await count("application_mentors")).toBe(1);
+    expect(await count("application_availability")).toBe(1);
+    // His date is published, so he isn't "scheduling in progress" in the receipt.
+    await Promise.all(scheduled);
+    expect(sendAcknowledgment).toHaveBeenCalledTimes(1);
+    expect(sendAcknowledgment.mock.calls[0]).toMatchObject([
+      { mentors: [{ name: "Rishab Veldur", schedulingInProgress: false }] },
+    ]);
+    // Applying reserves nothing: the status view lists him, with no appointment.
+    expect(await getApplicationStatusView(db, body.id)).toMatchObject({
+      status: "submitted",
+      mentors: [{ mentorId: "rishab-veldur", rank: 1 }],
+      appointments: [],
+    });
+  });
+
+  it("stores Rishab + Patrick (Rishab first) with both windows, ranked", async () => {
+    const res = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["patrick-haddox", "rishab-veldur"],
+          firstChoiceMentorId: "rishab-veldur",
+          availability: ["window:patrick-haddox-2026-10-01-am", "window:rishab-veldur-2026-10-01"],
+          availabilityNotes: "Thursday afternoon",
+          referrerMentorId: "rishab-veldur",
+        }),
+      ),
+      deps(),
+    );
+    expect(res.status).toBe(201);
+    const { id } = await res.json();
+    const ranked = await db.query<{ mentor_id: string; rank: number }>(
+      `select mentor_id, rank from application_mentors where application_id = $1 order by rank`,
+      [id],
+    );
+    expect(ranked).toEqual([
+      { mentor_id: "rishab-veldur", rank: 1 },
+      { mentor_id: "patrick-haddox", rank: 2 },
+    ]);
+    const availability = await db.query<{ mentor_id: string; option_kind: string; option_id: string }>(
+      `select mentor_id, option_kind, option_id from application_availability where application_id = $1 order by mentor_id`,
+      [id],
+    );
+    expect(availability).toEqual([
+      { mentor_id: "patrick-haddox", option_kind: "window", option_id: "patrick-haddox-2026-10-01-am" },
+      { mentor_id: "rishab-veldur", option_kind: "window", option_id: "rishab-veldur-2026-10-01" },
+    ]);
+    await Promise.all(scheduled);
+    expect(sendAcknowledgment.mock.calls[0]).toMatchObject([
+      {
+        mentors: [
+          { name: "Rishab Veldur", schedulingInProgress: false },
+          { name: "Patrick Haddox", schedulingInProgress: false },
+        ],
+      },
+    ]);
+  });
+
+  it("rejects Rishab without a broad-availability note (his time isn't set), even with his or Patrick's window ticked", async () => {
+    for (const [mentorIds, availability] of [
+      [["rishab-veldur"], ["window:rishab-veldur-2026-10-01"]],
+      [["rishab-veldur", "patrick-haddox"], ["window:patrick-haddox-2026-10-01-am"]],
+    ]) {
+      const res = await handleApplicationSubmission(
+        post(validPayload({ mentorIds, firstChoiceMentorId: "rishab-veldur", availability, availabilityNotes: "" })),
+        deps(),
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body).toMatchObject({ ok: false, error: "validation" });
+      expect(body.fieldErrors).toEqual({
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Rishab’s times aren’t set yet.",
+      });
+    }
+    // He has no office hours on Fri, Oct 2.
+    const oct2 = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["rishab-veldur"],
+          firstChoiceMentorId: "rishab-veldur",
+          availability: ["window:rishab-veldur-2026-10-02"],
+        }),
+      ),
+      deps(),
+    );
+    expect(oct2.status).toBe(400);
+    expect(Object.keys((await oct2.json()).fieldErrors)).toEqual(["availability"]);
+    expect(await count("applications")).toBe(0);
+    expect(sendAcknowledgment).not.toHaveBeenCalled();
+  });
+
   it("rejects times that don't belong to a selected mentor, and anything that isn't a mentor (no Dan Caruso)", async () => {
     // Patrick's window without choosing Patrick.
     const stray = await handleApplicationSubmission(
@@ -305,8 +482,16 @@ describe("POST /api/applications", () => {
     expect(stray.status).toBe(400);
     expect((await stray.json()).fieldErrors).toHaveProperty("availability");
 
-    // The Dan Caruso fireside chat is an event, not an office-hours mentor: no application exists.
-    for (const mentorIds of [["dan-caruso"], ["ron-lewis", "dan-caruso"]]) {
+    // Events are not office-hours mentors: no application exists for the Dan Caruso fireside chat,
+    // Arnav's happy hour at Legends, or the canceled Saturday afterparty.
+    for (const mentorIds of [
+      ["dan-caruso"],
+      ["ron-lewis", "dan-caruso"],
+      ["dan-caruso-fireside-chat"],
+      ["happy-hour-at-legends-with-arnav-mishra"],
+      ["arnav-mishra", "happy-hour-at-legends-with-arnav-mishra"],
+      ["founders-week-afterparty"],
+    ]) {
       const res = await handleApplicationSubmission(
         post(validPayload({ mentorIds, firstChoiceMentorId: mentorIds[0], availability: [] })),
         deps(),
@@ -335,8 +520,60 @@ describe("POST /api/applications", () => {
     expect(body).toMatchObject({ ok: false, error: "validation" });
     expect(body.fieldErrors).toHaveProperty("email");
     expect(body.fieldErrors).toHaveProperty("fullName");
-    expect(body.fieldErrors["availability.patrick-haddox"]).toMatch(/Patrick/);
     expect(await count("applications")).toBe(0);
+  });
+
+  it("requires a ticked window or broad availability — and stores broad availability alone (pending mentor)", async () => {
+    // Ron's schedule is pending: no window to tick. Without broad availability → 400, nothing stored.
+    const missing = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["ron-lewis"],
+          firstChoiceMentorId: "ron-lewis",
+          availability: [],
+          availabilityNotes: "",
+        }),
+      ),
+      deps(),
+    );
+    expect(missing.status).toBe(400);
+    const body = await missing.json();
+    expect(body).toMatchObject({ ok: false, error: "validation" });
+    expect(Object.keys(body.fieldErrors)).toEqual(["availabilityNotes"]);
+    expect(await count("applications")).toBe(0);
+
+    // With broad availability it's stored — the text is kept for organizers, no availability rows.
+    const ok = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["ron-lewis"],
+          firstChoiceMentorId: "ron-lewis",
+          availability: [],
+          availabilityNotes: "Thursday mornings, anytime Friday",
+        }),
+      ),
+      deps(),
+    );
+    expect(ok.status).toBe(201);
+    const { id } = await ok.json();
+    const [app] = await db.query<{ availability_notes: string }>(`select availability_notes from applications where id = $1`, [id]);
+    expect(app.availability_notes).toBe("Thursday mornings, anytime Friday");
+    expect(await count("application_availability")).toBe(0);
+
+    // A ticked window alone (no broad availability) is enough too.
+    const windowOnly = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["patrick-haddox"],
+          firstChoiceMentorId: "patrick-haddox",
+          availability: ["window:patrick-haddox-2026-10-01-am"],
+          availabilityNotes: "",
+        }),
+      ),
+      deps(),
+    );
+    expect(windowOnly.status).toBe(201);
+    expect(await count("applications")).toBe(2);
   });
 
   it("rejects honeypot and too-fast submissions with 400, storing nothing and never claiming success", async () => {
@@ -385,7 +622,7 @@ describe("POST /api/applications", () => {
       open: false,
       reason: "deadline-passed",
       title: "The application deadline has passed",
-      message: "Thanks for your interest — the office-hours application is closed.",
+      message: "Thanks for your interest. The office-hours application is now closed.",
       organizerHint: null,
       deadline: null,
       opensAt: null,
@@ -404,7 +641,7 @@ describe("POST /api/applications", () => {
   });
 
   it("rate limits per IP and per email with 429 + Retry-After (limits configurable via env)", async () => {
-    expect(getApplicationRateLimits({})).toEqual({ perIpPerHour: 10, perEmailPerDay: 5 });
+    expect(getApplicationRateLimits({})).toEqual({ perIpPerHour: 60, perEmailPerDay: 5 });
     expect(
       getApplicationRateLimits({ APPLICATION_RATE_LIMIT_PER_HOUR: "3", APPLICATION_RATE_LIMIT_PER_EMAIL_PER_DAY: "nope" }),
     ).toEqual({ perIpPerHour: 3, perEmailPerDay: 5 });
@@ -424,14 +661,48 @@ describe("POST /api/applications", () => {
     );
     expect(limited.status).toBe(429);
     expect(Number(limited.headers.get("retry-after"))).toBeGreaterThan(0);
-    expect((await limited.json()).ok).toBe(false);
+    const limitedBody = await limited.json();
+    expect(limitedBody.ok).toBe(false);
+    // A first-time applicant on busy campus Wi-Fi isn't told they sent "several applications".
+    expect(limitedBody.message).toMatch(/from your network/);
 
     // Per email, across different IPs.
     const emailEnv = { APPLICATION_RATE_LIMIT_PER_EMAIL_PER_DAY: "1" };
     expect((await handleApplicationSubmission(post(validPayload({ email: "same@illinois.edu" })), deps({ env: emailEnv }))).status).toBe(201);
     const again = await handleApplicationSubmission(post(validPayload({ email: "SAME@illinois.edu" })), deps({ env: emailEnv }));
     expect(again.status).toBe(429);
+    expect((await again.json()).message).toMatch(/already sent several applications today/);
     expect(await count("applications")).toBe(3);
+  });
+
+  it("only saved applications count toward the per-email limit (failed saves don't)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = { APPLICATION_RATE_LIMIT_PER_EMAIL_PER_DAY: "1" };
+    // The application insert fails; everything else (including the rate-limit bookkeeping) works.
+    const failingInsert: Database = {
+      kind: "pglite",
+      query: (text, params) => db.query(text, params),
+      transaction: (fn) =>
+        db.transaction((tx) =>
+          fn({
+            query: (text, params) => {
+              if (/insert into applications\b/.test(text)) throw Object.assign(new Error("boom"), { code: "XX000" });
+              return tx.query(text, params);
+            },
+          }),
+        ),
+    };
+    for (let i = 0; i < 3; i++) {
+      const res = await handleApplicationSubmission(
+        post(validPayload({ email: "retry@illinois.edu" })),
+        deps({ env, getDb: async () => failingInsert }),
+      );
+      expect(res.status).toBe(500);
+    }
+    expect(await count("applications")).toBe(0);
+    // Three failed tries later, the student can still submit.
+    const ok = await handleApplicationSubmission(post(validPayload({ email: "retry@illinois.edu" })), deps({ env }));
+    expect(ok.status).toBe(201);
   });
 
   it("never reports success when persistence fails", async () => {

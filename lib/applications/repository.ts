@@ -51,6 +51,21 @@ export async function findApplicationIdByIdempotencyKey(db: Queryable, idempoten
   return rows[0]?.id ?? null;
 }
 
+/** Saved applications from one student (normalized email) within the last `windowSeconds`. */
+export async function countRecentApplications(
+  db: Queryable,
+  email: string,
+  windowSeconds: number,
+): Promise<{ count: number; oldest: Date | string | null }> {
+  const [row] = await db.query<{ n: number; oldest: Date | string | null }>(
+    `select count(*)::int as n, min(created_at) as oldest
+       from applications
+      where email_normalized = $1 and created_at > now() - ($2::int * interval '1 second')`,
+    [email.trim().toLowerCase(), windowSeconds],
+  );
+  return { count: row?.n ?? 0, oldest: row?.oldest ?? null };
+}
+
 export async function insertApplication(db: Database, record: NewApplicationRecord): Promise<InsertResult> {
   if (record.mentorIds.length === 0) throw new Error("An application needs at least one mentor.");
   return db.transaction(async (tx) => {

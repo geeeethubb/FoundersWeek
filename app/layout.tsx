@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { Archivo } from "next/font/google";
 import { getSite } from "@/content";
 import { PreviewBanner } from "@/components/site/demo-banner";
 import { SiteFooter } from "@/components/site/site-footer";
@@ -14,26 +14,13 @@ const archivo = Archivo({
   display: "swap",
 });
 
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  variable: "--font-instrument-serif",
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains-mono",
-  display: "swap",
-});
 
 const site = getSite();
 
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
   title: {
-    default: `${site.name} — UIUC`,
+    default: `${site.name} at UIUC`,
     template: `%s · ${site.name}`,
   },
   description: site.description,
@@ -42,25 +29,25 @@ export const metadata: Metadata = {
     type: "website",
     siteName: site.name,
     locale: "en_US",
-    title: `${site.name} — UIUC`,
+    title: `${site.name} at UIUC`,
     description: site.description,
   },
   twitter: {
     card: "summary_large_image",
-    title: `${site.name} — UIUC`,
+    title: `${site.name} at UIUC`,
     description: site.description,
   },
   formatDetection: { telephone: false, address: false, email: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0f1c",
-  colorScheme: "dark",
+  themeColor: "#ffffff",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={archivo.variable}>
       <body className="flex min-h-dvh flex-col">
         <a
           href="#main"

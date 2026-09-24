@@ -1,16 +1,27 @@
 /**
- * View helpers for the Office Hours page (lineup + mentor sections), mentor profiles and the
- * home-page preview. Pure — safe on server and client. Everything here is derived only from the
- * (already public) mentor data it is given: nothing is inferred, embellished or defaulted to a guess.
+ * View helpers for the Office Hours page (mentor cards), mentor profiles and the home-page
+ * preview. Pure — safe on server and client. Everything here is derived only from the (already
+ * public) mentor data it is given: nothing is inferred, embellished or defaulted to a guess.
  *
  * Inputs are expected to come from `getMentors()` (content/index.ts), which strips organizer notes
  * and draft copy unless draft preview is on. Draft fields that survive (preview only) are surfaced
  * with `draft: true` so the UI can label them.
+ *
+ * Expertise items carry an internal `basis` (where each item comes from) for organizers and
+ * reviewers. Public UI shows the labels only — never the basis (see `helpLabels`).
  */
 import { AVAILABILITY_KIND_LABELS, type AvailabilityKind } from "@/components/ui/status";
 import type { AppointmentSlot, AvailabilityWindow, Draftable, Mentor, SessionFormat } from "@/content/types";
 import { buildApplicationCatalog, type AvailabilityOption } from "@/lib/applications/catalog";
-import { mentorApplyHref, mentorCtaLabel, schedulingStatus, type SchedulingStatus } from "@/lib/mentors";
+import {
+  EXACT_TIME_TO_BE_CONFIRMED,
+  INTEREST_COPY,
+  mentorApplyHref,
+  mentorCtaLabel,
+  SCHEDULING_IN_PROGRESS_LABEL,
+  schedulingStatus,
+  type SchedulingStatus,
+} from "@/lib/mentors";
 import {
   applyHref,
   mentorAffiliation,
@@ -66,12 +77,15 @@ export function mentorProfileHref(id: string): string {
   return `/office-hours/${encodeURIComponent(id)}`;
 }
 
-/** In-page anchor of a mentor's section on /office-hours. */
+/** In-page anchor of a mentor's card on /office-hours (`/office-hours#mentor-<id>`). */
 export function mentorSectionId(id: string): string {
   return `mentor-${id}`;
 }
 
-/** Lineup caption: (0, 4) → "01 / 04". */
+/**
+ * Index caption: (0, 4) → "01 / 04". Kept for the OG images; the Office Hours page and mentor
+ * profiles don't show decorative numbering.
+ */
 export function mentorIndexCaption(index: number, total: number): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(index + 1)} / ${pad(total)}`;
@@ -83,17 +97,17 @@ export function excerpt(text: string, max = 180): string {
   if (clean.length <= max) return clean;
   const cut = clean.slice(0, max + 1);
   const lastSpace = cut.lastIndexOf(" ");
-  const base = (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : clean.slice(0, max)).replace(/[\s,;:.–—-]+$/u, "");
+  const base = (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : clean.slice(0, max)).replace(/[\s,;:.\u2013\u2014-]+$/u, "");
   return `${base}…`;
 }
 
 // ---------------------------------------------------------------------------
-// Expertise (grounded in verified information, each item with its basis)
+// Expertise (grounded in verified information, each item with its internal basis)
 // ---------------------------------------------------------------------------
 
 export interface ExpertiseItem {
   label: string;
-  /** Where the item comes from, e.g. "Founders Showcase panelist". Always shown. */
+  /** Where the item comes from, e.g. "Founders Showcase panelist". Internal — never rendered publicly. */
   basis: string;
 }
 
@@ -107,6 +121,30 @@ export function expertiseSummary(mentor: Pick<Mentor, "expertise">): string | nu
   const field = visibleExpertise(mentor);
   if (!field || field.draft) return null;
   return field.value.map((e) => e.label).join(" · ");
+}
+
+/**
+ * "Can help with" labels for public display — approved items only, labels only (the internal
+ * basis is never included), at most `max` of them (all when omitted).
+ */
+export function helpLabels(mentor: Pick<Mentor, "expertise">, max?: number): string[] {
+  const field = visibleExpertise(mentor);
+  if (!field || field.draft) return [];
+  const labels = field.value.map((e) => e.label);
+  return max === undefined ? labels : labels.slice(0, max);
+}
+
+/**
+ * The first sentence of an approved bio ("St. Louis" is not a sentence break), or null when the
+ * bio is missing or still a draft.
+ */
+export function bioFirstSentence(mentor: Pick<Mentor, "bio">): string | null {
+  const bio = visibleField(mentor.bio);
+  if (!bio || bio.draft) return null;
+  const clean = bio.value.replace(/\s+/g, " ").trim();
+  // A sentence ends before a capital letter or an opening quote (\u201C curly, \x22 straight).
+  const match = /^.*?(?<!\bSt)[.!?](?=\s+[A-Z\u201C\x22]|$)/u.exec(clean);
+  return (match?.[0] ?? clean) || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +168,7 @@ export interface AppearanceView {
   startLabel: string | null;
   /** Local "2026-10-02T13:55" (or the date) for <time dateTime>. */
   dateTime: string;
-  /** "Speaking" · "Moderating" */
+  /** "Speaking" · "Moderating" · "Hosting" */
   roleLabel: string;
   venue: string | null;
 }
@@ -146,7 +184,7 @@ export function appearanceView(a: MentorAppearance): AppearanceView {
     timeLabel: a.start ? `${formatTimeRange(a.start, a.end ?? undefined)} ${TZ_LABEL}` : null,
     startLabel: a.start ? formatTime(a.start) : null,
     dateTime: a.start ? `${a.date}T${a.start}` : a.date,
-    roleLabel: a.role === "moderator" ? "Moderating" : "Speaking",
+    roleLabel: a.role === "moderator" ? "Moderating" : a.role === "host" ? "Hosting" : "Speaking",
     venue: a.venue,
   };
 }
@@ -189,7 +227,7 @@ export const SESSION_FORMAT_LABELS: Record<SessionFormat, string> = {
   hybrid: "Hybrid",
 };
 
-/** Exact windows are "Availability window"; rough ones ("Friday morning") are "Exact times forthcoming". */
+/** Exact windows are "Availability window"; rough ones ("Friday morning") are "Exact times TBA". */
 export function windowKind(
   window: Pick<AvailabilityWindow, "time">,
 ): Extract<AvailabilityKind, "window" | "window-approx"> {
@@ -223,7 +261,7 @@ export interface WindowView {
   dateShort: string;
   /** "Thursday, October 1" */
   dateLong: string;
-  /** Precise time from the data: "10:00–11:30 AM CT" · "Morning, before noon CT" · "Time TBA". */
+  /** Precise time from the data: "10:00–11:30 AM CT" · "Morning, before noon CT" · "Exact time to be confirmed". */
   timeLabel: string;
   /** Content's display override, e.g. "Friday morning, before noon · Exact window pending". */
   label: string | null;
@@ -267,7 +305,8 @@ export function availabilityView(mentor: Pick<Mentor, "availability" | "slots">)
       date: w.date,
       dateShort: formatDate(w.date, "short"),
       dateLong: formatDate(w.date, "long"),
-      timeLabel: describeTime(w.time).label,
+      // A date-only window reads the same everywhere students see it (profile, metadata, CTAs).
+      timeLabel: w.time.kind === "tba" ? EXACT_TIME_TO_BE_CONFIRMED : describeTime(w.time).label,
       label: w.label ?? null,
       note: w.note ?? null,
       slots: mentor.slots
@@ -349,7 +388,7 @@ export const TIMES_TO_BE_ANNOUNCED = "Times to be announced";
 
 export interface AvailabilityHeadline {
   kind: AvailabilityKind;
-  /** "Availability window" · "Exact times forthcoming" · "Scheduling in progress" · … */
+  /** "Availability window" · "Exact times TBA" · "Scheduling in progress" · … */
   label: string;
   /** "Thu, Oct 1" · null while scheduling is in progress. */
   date: string | null;
@@ -484,7 +523,7 @@ export function mentorCta(
       kind: "closed",
       label: "Applications closed",
       href: null,
-      reason: "The office-hours application isn’t accepting submissions right now.",
+      reason: "We aren’t taking office-hours applications right now.",
     };
   }
   if (!mentor.acceptingApplications) {
@@ -492,7 +531,7 @@ export function mentorCta(
       kind: "closed",
       label: "Not accepting applications",
       href: null,
-      reason: `${mentor.firstName} isn’t accepting office-hours applications right now.`,
+      reason: `${mentor.firstName} isn’t taking office-hours applications right now.`,
     };
   }
   const label = mentorCtaLabel(mentor);
@@ -522,7 +561,140 @@ export function mentorMetaDescription(mentor: Mentor): string {
   const view = availabilityView(mentor);
   const when =
     view.status === "in-progress"
-      ? "Scheduling is in progress — express interest and Founders will follow up once availability is finalized."
-      : `Availability: ${availabilityOneLiner(view)}. Apply once to request time.`;
+      ? `Scheduling is in progress, but you can apply now. ${INTEREST_COPY.followUp}`
+      : `Availability: ${availabilityOneLiner(view)}. Apply to request a time.`;
   return `Founders Office Hours with ${who} during Founders Week at UIUC. ${when}`;
+}
+
+// ---------------------------------------------------------------------------
+// Office Hours cards and profiles
+// ---------------------------------------------------------------------------
+
+/** One line of availability, e.g. "Thu, Oct 1 · 10:00–11:30 AM CT". Never implies a booking. */
+export interface AvailabilityLine {
+  /** True while scheduling is in progress (no windows or slots published yet). */
+  pending: boolean;
+  /** "Thu, Oct 1" · null while scheduling is in progress. */
+  date: string | null;
+  /** Value for <time dateTime>: "2026-10-01" or local "2026-10-01T14:00"; null when pending. */
+  dateTime: string | null;
+  /** "10:00–11:30 AM CT" · "Morning, exact window pending" · "Scheduling in progress". */
+  detail: string;
+  /** The whole line as plain text: "Fri, Oct 2 · Morning, exact window pending". */
+  text: string;
+}
+
+const PENDING_LINE: AvailabilityLine = {
+  pending: true,
+  date: null,
+  dateTime: null,
+  detail: SCHEDULING_IN_PROGRESS_LABEL,
+  text: SCHEDULING_IN_PROGRESS_LABEL,
+};
+
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+/**
+ * Every published window/slot as a line, chronologically (a window with specific slots is
+ * represented by its slots, like the application). Exact windows read "10:00–11:30 AM CT"; rough
+ * ones say plainly that the exact window is pending. Empty while scheduling is in progress.
+ */
+export function availabilityLines(mentor: Pick<Mentor, "availability" | "slots">): AvailabilityLine[] {
+  const view = availabilityView(mentor);
+  if (view.status === "in-progress") return [];
+  const windows = new Map(mentor.availability.map((w) => [w.id, w]));
+  return availabilityItems(view).map((item) => {
+    let detail = item.timeLabel;
+    if (item.key.startsWith("window:")) {
+      const time = windows.get(item.key.slice("window:".length))?.time;
+      if (time?.kind === "part-of-day") detail = `${capitalize(time.part)}, exact window pending`;
+      else if (time?.kind === "tba") detail = EXACT_TIME_TO_BE_CONFIRMED;
+    }
+    return { pending: false, date: item.dateShort, dateTime: item.dateTime, detail, text: `${item.dateShort} · ${detail}` };
+  });
+}
+
+/**
+ * The one availability line a mentor card shows: the first published window/slot (plus "+N more"
+ * when there are several) or "Scheduling in progress".
+ */
+export function availabilityLine(mentor: Pick<Mentor, "availability" | "slots">): AvailabilityLine & { more: number } {
+  const lines = availabilityLines(mentor);
+  const first = lines[0];
+  if (!first) return { ...PENDING_LINE, more: 0 };
+  const more = lines.length - 1;
+  return { ...first, more, text: more > 0 ? `${first.text} · +${more} more` : first.text };
+}
+
+/**
+ * The short, public note under a mentor's office-hours line on their profile: the window's own
+ * note from content (e.g. "Patrick is free during this window, but it isn’t a booked appointment. …"), or the follow-up
+ * promise while scheduling is in progress. Organizer notes are never used.
+ */
+export function availabilityNote(mentor: Pick<Mentor, "availability" | "slots">): string | null {
+  if (schedulingStatus(mentor) === "in-progress") return INTEREST_COPY.followUp;
+  const view = availabilityView(mentor);
+  const notes = view.windows.map((w) => w.note).filter((n): n is string => Boolean(n));
+  return notes.length === 1 ? notes[0] : null;
+}
+
+/** Visible label of a mentor card's action (the accessible name adds the mentor's name). */
+export const SELECT_MENTOR_LABEL = "Select mentor";
+
+/** "Apply to meet Patrick" — the profile's action, whatever the mentor's scheduling status. */
+export function applyToMeetLabel(mentor: Pick<Mentor, "firstName">): string {
+  return `Apply to meet ${mentor.firstName}`;
+}
+
+export type MentorAction =
+  | {
+      open: true;
+      /** /office-hours?mentor=<id>[&window|slot=<id>]#apply — the single window/slot preselected. */
+      href: string;
+    }
+  | { open: false; label: string; reason: string };
+
+/** Where a mentor's "Select mentor" / "Apply to meet …" action goes, or why it's unavailable. */
+export function mentorAction(mentor: Mentor, options: { applicationsOpen: boolean }): MentorAction {
+  const cta = mentorCta(mentor, options);
+  return cta.kind === "closed" ? { open: false, label: cta.label, reason: cta.reason } : { open: true, href: cta.href };
+}
+
+export interface MentorCardView {
+  id: string;
+  /** In-page anchor of the card (`mentor-<id>`). */
+  anchor: string;
+  name: string;
+  role: string | null;
+  company: string | null;
+  headshot: Mentor["headshot"];
+  /** Up to three approved "Can help with" labels (never the basis). */
+  help: string[];
+  /** First sentence of the approved bio — only when there are no approved help labels. */
+  intro: string | null;
+  availability: AvailabilityLine & { more: number };
+  action: MentorAction;
+  profileHref: string;
+  demo: boolean;
+}
+
+/** Everything a mentor card on /office-hours shows — and nothing more. */
+export function mentorCardView(mentor: Mentor, options: { applicationsOpen: boolean }): MentorCardView {
+  const help = helpLabels(mentor, 3);
+  return {
+    id: mentor.id,
+    anchor: mentorSectionId(mentor.id),
+    name: mentor.name,
+    role: mentor.role,
+    company: mentor.company,
+    headshot: mentor.headshot,
+    help,
+    intro: help.length ? null : bioFirstSentence(mentor),
+    availability: availabilityLine(mentor),
+    action: mentorAction(mentor, options),
+    profileHref: mentorProfileHref(mentor.id),
+    demo: Boolean(mentor.demo),
+  };
 }

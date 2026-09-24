@@ -33,7 +33,7 @@ export const stageDescription = (v: string) => STAGE_OPTIONS.find((o) => o.value
 function statusLabel(value: unknown): string {
   return typeof value === "string" && value in APPLICATION_STATUS_LABELS
     ? APPLICATION_STATUS_LABELS[value as ApplicationStatus]
-    : String(value ?? "—");
+    : String(value ?? "Not recorded");
 }
 
 export interface ActivityDescription {

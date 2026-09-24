@@ -39,6 +39,17 @@ export interface SetupStatus {
  * provider type, pooled/direct, port, DNS address families and whether a plain TCP connection
  * to the port succeeds — never the host name or credentials.
  */
+const PROBE_CACHE_MS = 60_000;
+let probeCache: { at: number; value: Promise<string> } | null = null;
+
+/** The probe opens test connections, so anonymous requests share one result per minute. */
+function cachedProbe(rawUrl: string): Promise<string> {
+  if (!probeCache || Date.now() - probeCache.at > PROBE_CACHE_MS) {
+    probeCache = { at: Date.now(), value: probeDatabase(rawUrl) };
+  }
+  return probeCache.value;
+}
+
 async function probeDatabase(rawUrl: string): Promise<string> {
   let host: string;
   let port: number;
@@ -54,7 +65,7 @@ async function probeDatabase(rawUrl: string): Promise<string> {
     : /pooler\.supabase\.com$/i.test(host)
       ? "Supabase pooler"
       : /supabase\.co$/i.test(host)
-        ? "Supabase direct host (IPv6-only — unreachable from Vercel; use the pooler URI)"
+        ? "Supabase direct host (IPv6 only, so Vercel can’t reach it; use the pooler URI)"
         : /vercel-storage\.com$/i.test(host)
           ? "Vercel Postgres"
           : "other host";
@@ -182,7 +193,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
       ok: false,
       status:
         config.reason === "not-configured"
-          ? `missing — no DATABASE_URL or POSTGRES_URL in this deployment${seen.length ? ` (found: ${seen.join(", ")})` : ""}`
+          ? `missing: no DATABASE_URL or POSTGRES_URL in this deployment${seen.length ? ` (found: ${seen.join(", ")})` : ""}`
           : "misconfigured",
       fix:
         config.reason === "not-configured"
@@ -196,11 +207,11 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     const elapsed = Date.now() - started;
     const poolNote = poolMaxWarning(env);
     const failure = lastDatabaseFailure();
-    const probe = !persistence.ready && found && config.kind === "postgres" ? await probeDatabase(found.url) : null;
+    const probe = !persistence.ready && found && config.kind === "postgres" ? await cachedProbe(found.url) : null;
     const failureNote = failure
-      ? ` — using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}; waited ${elapsed}ms, trace [${failure.trace?.join(", ") ?? ""}]${poolNote ? `; ${poolNote}` : ""}${probe ? `; probe: ${probe}` : ""}`
+      ? ` (using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}; waited ${elapsed}ms, trace [${failure.trace?.join(", ") ?? ""}]${poolNote ? `; ${poolNote}` : ""}${probe ? `; probe: ${probe}` : ""})`
       : probe
-        ? ` — using ${found?.name ?? "?"}; probe: ${probe}`
+        ? ` (using ${found?.name ?? "?"}; probe: ${probe})`
         : "";
     const via = config.kind === "pglite" ? "local PGlite" : `Postgres via ${source ?? "DATABASE_URL"}`;
     const schema = config.schema ? `, schema "${config.schema}"` : "";

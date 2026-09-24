@@ -235,6 +235,60 @@ describe("CSV export sanitization (through the route)", () => {
   });
 });
 
+describe("CSV export filtered to Rishab (through the route)", () => {
+  it("exports only applications listing Rishab, with his Oct 1 window and the student's availability notes", async () => {
+    vi.stubEnv("SHOW_DEMO_CONTENT", "");
+    const first = await insertApplication(db, {
+      fullName: "Rishab Export First",
+      email: "rishab.export.first@illinois.edu",
+      mentors: ["rishab-veldur", "patrick-haddox"],
+      availability: ["window:rishab-veldur-2026-10-01"],
+      createdAt: "2026-09-24T15:00:00Z",
+    });
+    await db.query(`update applications set availability_notes = $2 where id = $1`, [first, "Thu Oct 1 after 2 PM"]);
+    const second = await insertApplication(db, {
+      fullName: "Rishab Export Second",
+      email: "rishab.export.second@illinois.edu",
+      mentors: ["patrick-haddox", "rishab-veldur"],
+      availability: ["window:patrick-haddox-2026-10-01-am"],
+      createdAt: "2026-09-24T16:00:00Z",
+    });
+
+    const read = async (query: string) => {
+      const res = await exportCsv(req(`/api/organizer/export?${query}`));
+      expect(res.status).toBe(200);
+      const [header, ...rows] = parseCsv(new TextDecoder().decode(new Uint8Array(await res.arrayBuffer()).slice(3)));
+      return rows.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])));
+    };
+
+    const rows = await read("mentor=rishab-veldur");
+    expect(rows.map((r) => [r.id, r.full_name])).toEqual([
+      [second, "Rishab Export Second"],
+      [first, "Rishab Export First"],
+    ]);
+    expect(rows[1]).toMatchObject({
+      status: "Submitted",
+      first_choice: "Rishab Veldur",
+      preferred_mentors: "1. Rishab Veldur; 2. Patrick Haddox",
+      availability: "Rishab Veldur: Thu, Oct 1 · Exact time to be confirmed (window)",
+      availability_notes: "Thu Oct 1 after 2 PM",
+      appointments: "",
+    });
+    expect(rows[0]).toMatchObject({
+      first_choice: "Patrick Haddox",
+      preferred_mentors: "1. Patrick Haddox; 2. Rishab Veldur",
+      availability: "Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window)",
+    });
+
+    // First choice only, and by his window: just the first application.
+    expect((await read("mentor=rishab-veldur&choice=first")).map((r) => r.id)).toEqual([first]);
+    expect((await read("availability=window:rishab-veldur-2026-10-01")).map((r) => r.id)).toEqual([first]);
+    // Oct 2 isn't one of his office-hours windows: dropped, so the export isn't silently empty.
+    const unknownWindow = await read("mentor=rishab-veldur&availability=window:rishab-veldur-2026-10-02");
+    expect(unknownWindow.map((r) => r.id)).toEqual([second, first]);
+  });
+});
+
 describe("organizer sign-in", () => {
   it("sets a strict httpOnly cookie on success and rejects wrong passwords", async () => {
     const wrong = await login(

@@ -21,6 +21,7 @@ import type {
   TimeSpec,
 } from "@/content/types";
 import { OFFICE_HOURS_ID_PREFIX } from "@/content/validate";
+import { APPLICATION_COPY } from "@/lib/applications/constants";
 import { describeTime, exactInterval, formatDate, timeSortMinutes } from "@/lib/time";
 
 export type CalendarAvailability = { available: true } | { available: false; reason: string };
@@ -31,7 +32,7 @@ export interface ScheduleEntry {
   title: string;
   date: ISODate;
   time: TimeSpec;
-  /** Display override for the time (e.g. "Friday morning · Exact times forthcoming"). */
+  /** Display override for the time (e.g. "Friday morning · Exact times TBA"). */
   timeLabel: string | null;
   status: ConfirmationStatus;
   statusNote: string | null;
@@ -122,9 +123,9 @@ export const STATUS_LABELS: Record<ConfirmationStatus, string> = {
 
 export const STATUS_DESCRIPTIONS: Record<ConfirmationStatus, string> = {
   confirmed: "Date, time and place confirmed by the organizer.",
-  planned: "Announced, pending final organizer confirmation.",
-  tentative: "Still being arranged — details may change.",
-  canceled: "This event will not take place.",
+  planned: "Announced, but the organizer hasn’t confirmed the final details yet.",
+  tentative: "Still being arranged, so details may change.",
+  canceled: "This event was canceled.",
 };
 
 export function calendarAvailability(
@@ -135,7 +136,7 @@ export function calendarAvailability(
   if (kind === "office-hours") {
     return {
       available: false,
-      reason: "Office hours are by application. Selected students receive confirmed times by email.",
+      reason: "Office hours are by application. Selected students get their confirmed time by email.",
     };
   }
   if (status === "canceled") return { available: false, reason: "This event was canceled." };
@@ -236,9 +237,12 @@ export function officeHoursToEntries(mentor: Mentor, site: SiteSettings): Schedu
       : { kind: "tba", note: locationNote ?? undefined };
 
     const intro = `${mentor.name}${affiliation ? ` (${affiliation})` : ""} is available for office hours: ${when}.`;
-    const how =
-      "This is an availability window, not a booked appointment. Appointments are limited. Founders will match applicants based on interests and availability, then email selected students to confirm.";
-    const description = [intro, window.note ?? mentor.session.note, how].filter(Boolean).join("\n\n");
+    const note = window.note ?? mentor.session.note;
+    // Skip the "not a booked appointment" line when the mentor's note already says so.
+    const notBooked =
+      note && /booked appointment/i.test(note) ? null : "This is an availability window, not a booked appointment.";
+    const how = [notBooked, APPLICATION_COPY.limited].filter(Boolean).join(" ");
+    const description = [intro, note, how].filter(Boolean).join("\n\n");
 
     return {
       id: officeHoursEntryId(window),
@@ -251,13 +255,13 @@ export function officeHoursToEntries(mentor: Mentor, site: SiteSettings): Schedu
       statusNote:
         status === "confirmed"
           ? null
-          : (mentor.session.note ?? "Appointment times and location are being finalized."),
+          : (mentor.session.note ?? "Appointment times and location are still being set."),
       types: ["office-hours"],
       involvement: "hosted" as const,
       foundersPick: true,
       organizer: site.org.name,
       location,
-      summary: `By application. Meet ${mentor.firstName}${mentor.company ? ` of ${mentor.company}` : ""} one-on-one — appointments are limited.`,
+      summary: `By application. Meet ${mentor.firstName}${mentor.company ? ` of ${mentor.company}` : ""} during Founders Week. Appointments are limited.`,
       description,
       speakers: [],
       topics: mentor.askMeAbout?.status === "approved" ? mentor.askMeAbout.value : [],
@@ -332,7 +336,7 @@ export interface MentorAppearance {
   sessionTitle: string | null;
   start: string | null;
   end: string | null;
-  role: "speaker" | "moderator";
+  role: "speaker" | "moderator" | "host";
   venue: string | null;
 }
 
@@ -352,7 +356,7 @@ export function mentorAppearances(entries: ScheduleEntry[], mentorId: string): M
         sessionTitle: null,
         start: entry.time.kind === "exact" ? entry.time.start : null,
         end: entry.time.kind === "exact" ? (entry.time.end ?? null) : null,
-        role: s.role === "moderator" ? "moderator" : "speaker",
+        role: s.role ?? "speaker",
         venue,
       });
     }
@@ -366,7 +370,7 @@ export function mentorAppearances(entries: ScheduleEntry[], mentorId: string): M
         sessionTitle: session.title,
         start: session.start,
         end: session.end,
-        role: p.role === "moderator" ? "moderator" : "speaker",
+        role: p.role ?? "speaker",
         venue,
       });
     }

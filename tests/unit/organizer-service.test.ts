@@ -193,7 +193,7 @@ describe("confirming and canceling appointments", () => {
       updateAppointment(db, { id: appointment.id, action: "confirm" }, ctx),
       409,
       "slot_not_confirmed",
-      /not yet confirmed with the mentor/,
+      /isn’t confirmed with the mentor/,
     );
     expect(await applicationStatus(db, id)).toBe("selected");
   });

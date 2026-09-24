@@ -14,7 +14,7 @@ const NEEDS_CONFIRMED_APPOINTMENT: ApplicationStatus[] = ["confirmed", "attended
 
 const HINTS: Partial<Record<ApplicationStatus, string>> = {
   under_review: "No appointment needed.",
-  selected: "No appointment needed yet — email the student, then propose a time when one exists.",
+  selected: "No appointment needed yet. Email the student, then propose a time once there’s a slot for it.",
   waitlisted: "No appointment needed.",
   canceled: "Also cancels this application’s active appointments.",
 };
@@ -78,12 +78,12 @@ export function StatusForm({
               <option key={s} value={s}>
                 {APPLICATION_STATUS_LABELS[s]}
                 {confirmBlockedReason && NEEDS_CONFIRMED_APPOINTMENT.includes(s) && s !== status
-                  ? " — needs a confirmed appointment"
+                  ? " (needs a confirmed appointment)"
                   : ""}
               </option>
             ))}
           </select>
-          <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-paper-subtle" />
+          <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-text-subtle" />
         </div>
         <Button
           type="submit"
@@ -101,7 +101,7 @@ export function StatusForm({
             <span>{error}</span>
           </p>
         ) : hint ? (
-          <p className={blocked ? "mt-2 flex items-start gap-1.5 text-warning" : "mt-2 text-paper-subtle"}>
+          <p className={blocked ? "mt-2 flex items-start gap-1.5 text-warning" : "mt-2 text-text-muted"}>
             {blocked ? <AlertIcon className="mt-0.5 size-3.5 shrink-0" /> : null}
             <span>{hint}</span>
           </p>

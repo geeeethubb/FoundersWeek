@@ -56,7 +56,7 @@ export const demoEvents: ScheduleEvent[] = [
     date: "2026-10-01",
     time: { kind: "exact", start: "18:00", end: "19:30" },
     status: "planned",
-    statusNote: "Planned — pending venue confirmation (demo).",
+    statusNote: "Planned. The venue is still being confirmed (demo).",
     types: ["networking", "social"],
     involvement: "hosted",
     foundersPick: true,
@@ -95,7 +95,7 @@ export const demoEvents: ScheduleEvent[] = [
     date: "2026-10-02",
     time: { kind: "tba" },
     status: "tentative",
-    statusNote: "Tentative — time not announced (demo).",
+    statusNote: "Tentative. The time hasn’t been announced yet (demo).",
     types: ["networking"],
     involvement: null,
     foundersPick: false,
@@ -185,8 +185,8 @@ export const demoMentors: Mentor[] = [
     expertise: {
       status: "approved",
       value: [
-        { label: "Hardware prototyping", basis: "Demo — fictional" },
-        { label: "Early customer discovery", basis: "Demo — fictional" },
+        { label: "Hardware prototyping", basis: "Fictional demo data" },
+        { label: "Early customer discovery", basis: "Fictional demo data" },
       ],
     },
     askMeAbout: {

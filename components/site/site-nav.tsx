@@ -4,43 +4,32 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 
-/**
- * Site priority: 1. Office Hours (primary experience) · 2. Calendar. The calendar lives at
- * /schedule (/calendar redirects there).
- */
+/** Office Hours (primary) and Calendar. The calendar lives at /schedule (/calendar redirects). */
 const NAV_ITEMS = [
-  { href: "/", label: "Home", mobileOnly: true, primary: false },
-  { href: "/office-hours", label: "Office Hours", mobileOnly: false, primary: true },
-  { href: "/schedule", label: "Calendar", mobileOnly: false, primary: false },
+  { href: "/office-hours", label: "Office Hours" },
+  { href: "/schedule", label: "Calendar" },
 ] as const;
 
 function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Primary navigation links with an orange underline for the active page. */
-export function SiteNav({ variant }: { variant: "desktop" | "mobile" }) {
+export function SiteNav({ className }: { className?: string }) {
   const pathname = usePathname() ?? "/";
-  const items = NAV_ITEMS.filter((i) => variant === "mobile" || !i.mobileOnly);
   return (
-    <ul className={cn("flex items-stretch", variant === "desktop" ? "h-full gap-7" : "h-11 gap-6")}>
-      {items.map((item) => {
+    <ul className={cn("flex items-center gap-1", className)}>
+      {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
         return (
-          <li key={item.href} className="flex">
+          <li key={item.href}>
             <Link
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex items-center gap-2 text-[0.9375rem] transition-colors duration-150",
-                item.primary && "font-semibold",
-                active ? "text-paper" : item.primary ? "text-paper hover:text-accent" : "text-paper-muted hover:text-paper",
-                "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-accent after:transition-transform after:duration-200",
-                active ? "after:scale-x-100" : "after:scale-x-0",
+                "inline-flex h-11 items-center rounded-sm px-3 text-[0.9375rem] font-medium transition-colors duration-150",
+                active ? "bg-surface-muted text-text" : "text-text-muted hover:bg-surface-subtle hover:text-text",
               )}
             >
-              {item.primary ? <span aria-hidden className="size-1.5 rotate-45 bg-accent" /> : null}
               {item.label}
             </Link>
           </li>
@@ -50,21 +39,17 @@ export function SiteNav({ variant }: { variant: "desktop" | "mobile" }) {
   );
 }
 
-/** "Apply for Office Hours" — the primary sitewide call to action. */
+/** The one prominent "Apply" button. Accessible name is the full CTA at every width. */
 export function ApplyNavButton({ className }: { className?: string }) {
   return (
     <Link
       href="/office-hours#apply"
       className={cn(
-        "inline-flex h-9 items-center rounded-sm bg-accent px-3.5 text-sm font-semibold text-accent-ink transition-colors duration-150 hover:bg-accent-hover",
+        "inline-flex h-11 items-center rounded-sm bg-accent px-4 text-[0.9375rem] font-semibold text-accent-ink transition-colors duration-150 hover:bg-accent-hover",
         className,
       )}
     >
-      {/* Short visible label on phones; the accessible name is always the full CTA. */}
-      <span className="md:hidden">
-        Apply<span className="sr-only"> for Office Hours</span>
-      </span>
-      <span className="hidden md:inline">Apply for Office Hours</span>
+      Apply<span className="sr-only"> for Office Hours</span>
     </Link>
   );
 }

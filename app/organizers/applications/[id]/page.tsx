@@ -4,15 +4,15 @@ import { notFound } from "next/navigation";
 import { getMentorsForOrganizers, isDemoContentEnabled } from "@/content";
 import { AppointmentActions } from "@/components/organizer/appointment-actions";
 import { AssignForm, type AssignGroup } from "@/components/organizer/assign-form";
-import { AvailabilityList, InterestOnly } from "@/components/organizer/bits";
+import { AvailabilityList, Code, FirstChoiceMark, InterestOnly } from "@/components/organizer/bits";
 import { CopyLink } from "@/components/organizer/copy-link";
 import { NotesForm } from "@/components/organizer/notes-form";
 import { OrganizerBar } from "@/components/organizer/organizer-bar";
 import { StatusForm } from "@/components/organizer/status-form";
 import { DemoBadge } from "@/components/ui/badge";
 import { MentorPortrait } from "@/components/ui/portrait";
-import { ArrowLeftIcon, ArrowUpRightIcon, CheckIcon, PickMark, XIcon } from "@/components/ui/icons";
-import { Container, Eyebrow, Notice } from "@/components/ui/primitives";
+import { AlertIcon, ArrowLeftIcon, ArrowUpRightIcon, CheckIcon, XIcon } from "@/components/ui/icons";
+import { Container, Notice } from "@/components/ui/primitives";
 import { AppointmentStatusBadge, ApplicationStatusBadge, AvailabilityBadge } from "@/components/ui/status";
 import { APPLICATION_STATUS_LABELS } from "@/lib/applications/constants";
 import { cn } from "@/lib/cn";
@@ -64,11 +64,17 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
     return (
       <>
         <OrganizerBar name={session.name} demo={isDemoContentEnabled()} />
-        <Container className="pt-10">
-          <Notice tone="danger" title="The application database isn’t available" role="alert">
-            <p>This application can’t be loaded right now. Try again shortly.</p>
-            {isNonProductionDeploy() ? <p className="mt-2 font-mono text-xs">{redactSecrets(persistence.detail)}</p> : null}
-          </Notice>
+        <Container className="pt-10 pb-6">
+          <div role="alert" className="max-w-3xl rounded-md bg-danger-soft px-5 py-4 text-sm leading-relaxed">
+            <p className="flex items-center gap-2 font-semibold text-text">
+              <AlertIcon className="size-4 shrink-0 text-danger" />
+              The application database isn’t available
+            </p>
+            <p className="mt-1.5 text-text-muted">This application can’t be loaded right now. Try again in a minute.</p>
+            {isNonProductionDeploy() ? (
+              <p className="mt-2 break-words text-xs text-text-subtle">{redactSecrets(persistence.detail)}</p>
+            ) : null}
+          </div>
         </Container>
       </>
     );
@@ -95,51 +101,51 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
       <OrganizerBar name={session.name} demo={isDemoContentEnabled()} />
 
       <header className="border-b border-line">
-        <Container className="pt-8 pb-8 md:pt-12 md:pb-10">
-        <Link
-          href="/organizers"
-          className="-ml-1 inline-flex min-h-11 items-center gap-1.5 rounded-xs px-1 text-sm text-paper-muted transition-colors hover:text-paper sm:min-h-8"
-        >
-          <ArrowLeftIcon className="size-4" />
-          All applications
-        </Link>
-        <Eyebrow className="mt-6">
-          Application · Submitted <time dateTime={app.createdAt}>{formatInstant(app.createdAt)}</time>
-        </Eyebrow>
-        <h1 className="mt-4 font-wide [overflow-wrap:anywhere] text-4xl font-bold leading-[0.95] tracking-[-0.035em] text-paper sm:text-5xl">
-          {app.fullName}
-        </h1>
-        <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3">
-          <ApplicationStatusBadge status={app.status} />
-          <span className="break-all font-mono text-sm text-paper-muted">{app.email}</span>
-          {demo ? <DemoBadge /> : null}
-        </div>
-        {detail.related.length ? (
-          <div className="mt-5 max-w-2xl">
-            <Notice tone="warning" title={`${app.duplicateCount} applications from this email`}>
-              <ul className="mt-1 space-y-1">
-                {detail.related.map((r) => (
-                  <li key={r.id}>
-                    <Link
-                      href={`/organizers/applications/${r.id}`}
-                      className="text-paper underline underline-offset-4 hover:text-accent"
-                    >
-                      {formatInstant(r.createdAt)}
-                    </Link>{" "}
-                    · {APPLICATION_STATUS_LABELS[r.status]}
-                  </li>
-                ))}
-              </ul>
-            </Notice>
+        <Container className="pt-6 pb-10 md:pt-8 md:pb-12">
+          <Link
+            href="/organizers"
+            className="-ml-1 inline-flex min-h-11 items-center gap-1.5 rounded-xs px-1 text-sm font-medium text-text-muted transition-colors hover:text-text sm:min-h-9"
+          >
+            <ArrowLeftIcon className="size-4" />
+            All applications
+          </Link>
+          <p className="mt-6 text-sm text-text-subtle">
+            Submitted <time dateTime={app.createdAt}>{formatInstant(app.createdAt)}</time>
+          </p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-text [overflow-wrap:anywhere] sm:text-4xl">
+            {app.fullName}
+          </h1>
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <ApplicationStatusBadge status={app.status} />
+            <span className="break-all text-base text-text-muted">{app.email}</span>
+            {demo ? <DemoBadge /> : null}
           </div>
-        ) : null}
+          {detail.related.length ? (
+            <div className="mt-6 max-w-2xl">
+              <Notice tone="warning" title={`${app.duplicateCount} applications from this email`}>
+                <ul className="mt-1 space-y-1">
+                  {detail.related.map((r) => (
+                    <li key={r.id}>
+                      <Link
+                        href={`/organizers/applications/${r.id}`}
+                        className="font-medium text-text underline underline-offset-4"
+                      >
+                        {formatInstant(r.createdAt)}
+                      </Link>{" "}
+                      · {APPLICATION_STATUS_LABELS[r.status]}
+                    </li>
+                  ))}
+                </ul>
+              </Notice>
+            </div>
+          ) : null}
         </Container>
       </header>
 
       {/* Phones: the actions column sits below the answers — offer a shortcut. */}
-      <nav aria-label="Jump to organizer actions" className="border-b border-line lg:hidden">
+      <nav aria-label="Jump to organizer actions" className="border-b border-line bg-surface-subtle lg:hidden">
         <Container>
-          <ul className="-mx-2 flex gap-1 overflow-x-auto py-1.5">
+          <ul className="-mx-2 flex gap-1 overflow-x-auto py-1">
             {[
               ["status", "Status"],
               ["appointments", "Appointments"],
@@ -149,7 +155,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
               <li key={href}>
                 <a
                   href={`#${href}`}
-                  className="inline-flex min-h-11 items-center whitespace-nowrap rounded-xs px-2 text-sm text-paper-muted transition-colors hover:text-paper"
+                  className="inline-flex min-h-11 items-center whitespace-nowrap rounded-xs px-2 text-sm font-medium text-text-muted transition-colors hover:text-text"
                 >
                   {label}
                 </a>
@@ -159,36 +165,36 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
         </Container>
       </nav>
 
-      <Container className="grid gap-12 pt-10 lg:grid-cols-12 lg:gap-10">
+      <Container className="grid gap-12 pt-10 pb-8 md:pt-12 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 space-y-12 lg:col-span-7">
           <Answers detail={detail} directory={directory} />
         </div>
 
-        <aside aria-label="Organizer actions" className="min-w-0 space-y-10 lg:col-span-5">
+        <aside aria-label="Organizer actions" className="min-w-0 space-y-4 lg:col-span-5">
           <Panel title="Status" id="status">
             <StatusForm applicationId={app.id} status={app.status} confirmBlockedReason={confirmBlockedReason} />
           </Panel>
 
           <Panel title="Appointments" id="appointments">
             {activeAppointments.length ? (
-              <ul className="divide-y divide-line border-y border-line">
+              <ul className="divide-y divide-line">
                 {activeAppointments.map((a) => {
                   const slot = directory.slotsById.get(a.slotId);
                   const blocked = !slot
-                    ? "This slot is no longer in content."
+                    ? "This slot isn’t in content anymore."
                     : slot.status !== "confirmed"
-                      ? `Can’t confirm yet — this time isn’t confirmed with ${slot.mentorFirstName}.`
+                      ? `This time isn’t confirmed with ${slot.mentorFirstName} yet, so it can’t be confirmed here.`
                       : null;
                   return (
-                    <li key={a.id} className="py-4">
+                    <li key={a.id} className="py-4 first:pt-0">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <AppointmentStatusBadge status={a.status} />
                         {slot ? <AvailabilityBadge kind={slot.status} /> : null}
                       </div>
-                      <p className="mt-3 font-medium text-paper">{mentorName(directory, a.mentorId)}</p>
-                      <p className="font-mono text-xs text-paper-muted">{intervalLabel(a.startsAt, a.endsAt)}</p>
-                      {slot?.location ? <p className="mt-0.5 text-xs text-paper-subtle">{slot.location}</p> : null}
-                      <p className="mt-1 text-xs text-paper-subtle">
+                      <p className="mt-3 font-semibold text-text">{mentorName(directory, a.mentorId)}</p>
+                      <p className="text-sm text-text-muted tabular">{intervalLabel(a.startsAt, a.endsAt)}</p>
+                      {slot?.location ? <p className="mt-0.5 text-sm text-text-subtle">{slot.location}</p> : null}
+                      <p className="mt-1 text-xs text-text-subtle">
                         Proposed by {a.createdBy} · {formatInstant(a.createdAt)}
                       </p>
                       <div className="mt-3">
@@ -203,16 +209,14 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
                 })}
               </ul>
             ) : (
-              <p className="rounded-sm border border-dotted border-line-strong px-4 py-3 text-sm text-paper-muted">
-                No active appointments.
-              </p>
+              <p className="rounded-md bg-surface-subtle px-4 py-3 text-sm text-text-muted">No active appointments.</p>
             )}
             {canceledAppointments.length ? (
               <details className="group mt-3 text-sm">
-                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-paper-subtle hover:text-paper sm:min-h-8">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 font-medium text-text-muted underline-offset-4 hover:text-text hover:underline sm:min-h-9 [&::-webkit-details-marker]:hidden">
                   {canceledAppointments.length} canceled appointment{canceledAppointments.length === 1 ? "" : "s"}
                 </summary>
-                <ul className="mt-2 space-y-1 text-xs text-paper-subtle">
+                <ul className="mt-1 space-y-1 text-sm text-text-subtle">
                   {canceledAppointments.map((a) => (
                     <li key={a.id}>
                       <span className="line-through">
@@ -232,18 +236,17 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
               />
             ) : null}
 
-            <div className="mt-6 border-t border-line pt-5">
-              <h3 className="mono-label mb-3 text-paper">Assign appointment</h3>
+            <div className="mt-5 border-t border-line pt-5">
+              <h3 className="mb-3 font-semibold text-text">Assign appointment</h3>
               {closed ? (
-                <p className="text-sm text-paper-muted">
+                <p className="text-sm text-text-muted">
                   This application is {APPLICATION_STATUS_LABELS[app.status].toLowerCase()}. Change its status to assign
                   an appointment.
                 </p>
               ) : directory.slots.length === 0 ? (
-                <p className="text-sm leading-relaxed text-paper-muted">
-                  No mentor has appointment slots yet, so nothing can be proposed. Add proposed or confirmed slots to{" "}
-                  <code className="font-mono text-paper">content/mentors.ts</code> once specific times are set — they’ll
-                  appear here.
+                <p className="text-sm leading-relaxed text-text-muted">
+                  No mentor has appointment slots yet, so there’s nothing to propose. Once specific times are set, add
+                  them as proposed or confirmed slots in <Code>content/mentors.ts</Code> and they’ll show up here.
                 </p>
               ) : (
                 <AssignForm
@@ -256,7 +259,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
           </Panel>
 
           <Panel title="Private status link" id="status-link">
-            <p className="mb-3 text-sm text-paper-muted">
+            <p className="mb-3 text-sm leading-relaxed text-text-muted">
               Send this to the student so they can check their status. Anyone with the link can see it.
             </p>
             <CopyLink url={statusUrl} label="Private status link" />
@@ -275,10 +278,11 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
   );
 }
 
+/** One organizer action group: a white card in the actions column. */
 function Panel({ title, id, children }: { title: string; id: string; children: React.ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-heading`}>
-      <h2 id={`${id}-heading`} className="mb-4 flex items-center gap-3 font-wide text-lg font-bold tracking-[-0.015em] text-paper">
+    <section id={id} aria-labelledby={`${id}-heading`} className="rounded-md border border-line bg-surface p-5 sm:p-6">
+      <h2 id={`${id}-heading`} className="mb-4 text-lg font-semibold text-text">
         {title}
       </h2>
       {children}
@@ -295,7 +299,7 @@ function Answers({ detail, directory }: { detail: ApplicationDetail; directory: 
   return (
     <>
       <section aria-labelledby="about-heading">
-        <SectionTitle id="about-heading" index="01">
+        <SectionTitle id="about-heading">
           Student
         </SectionTitle>
         <dl>
@@ -306,13 +310,13 @@ function Answers({ detail, directory }: { detail: ApplicationDetail; directory: 
             {app.participation === "team" ? (
               <dl className="mt-2 space-y-1 text-sm">
                 <div>
-                  <dt className="inline text-paper-subtle">Team name: </dt>
-                  <dd className="inline">{app.teamName ?? <span className="text-paper-subtle">Not given</span>}</dd>
+                  <dt className="inline text-text-subtle">Team name: </dt>
+                  <dd className="inline">{app.teamName ?? <span className="text-text-subtle">Not given</span>}</dd>
                 </div>
                 <div>
-                  <dt className="inline text-paper-subtle">Teammates: </dt>
+                  <dt className="inline text-text-subtle">Teammates: </dt>
                   <dd className="inline whitespace-pre-line">
-                    {app.teammates ?? <span className="text-paper-subtle">Not given</span>}
+                    {app.teammates ?? <span className="text-text-subtle">Not given</span>}
                   </dd>
                 </div>
               </dl>
@@ -321,28 +325,28 @@ function Answers({ detail, directory }: { detail: ApplicationDetail; directory: 
           <Row label="Stage">
             {stageLabel(app.stage)}
             {stageDescription(app.stage) ? (
-              <span className="block text-sm text-paper-subtle">{stageDescription(app.stage)}</span>
+              <span className="block text-sm text-text-subtle">{stageDescription(app.stage)}</span>
             ) : null}
           </Row>
         </dl>
       </section>
 
       <section aria-labelledby="answers-heading">
-        <SectionTitle id="answers-heading" index="02">
+        <SectionTitle id="answers-heading">
           Answers
         </SectionTitle>
         <div className="space-y-6">
           <LongAnswer label="What they’re working on or exploring" text={app.workingOn} />
           <LongAnswer label="Question or challenge" text={app.question} />
           <div>
-            <h3 className="mono-label mb-2 text-paper-subtle">Link</h3>
-            {app.link ? <SafeLink href={app.link} /> : <p className="text-sm text-paper-subtle">No link shared.</p>}
+            <h3 className="mb-2 text-sm font-medium text-text-subtle">Link</h3>
+            {app.link ? <SafeLink href={app.link} /> : <p className="text-sm text-text-subtle">No link shared.</p>}
           </div>
         </div>
       </section>
 
       <section aria-labelledby="prefs-heading">
-        <SectionTitle id="prefs-heading" index="03">
+        <SectionTitle id="prefs-heading">
           Mentors &amp; availability
         </SectionTitle>
         <ol className="divide-y divide-line border-y border-line">
@@ -350,22 +354,17 @@ function Answers({ detail, directory }: { detail: ApplicationDetail; directory: 
             const info = directory.mentorsById.get(m.mentorId);
             const picks = byMentor(m.mentorId);
             return (
-              <li key={m.mentorId} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:gap-6">
+              <li key={m.mentorId} className="grid gap-3 py-5 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] sm:gap-6">
                 <div className="flex gap-3">
-                  <span className="w-5 shrink-0 pt-2.5 font-mono text-xs text-paper-subtle tabular">{m.rank}.</span>
+                  <span className="w-5 shrink-0 pt-2 text-sm text-text-subtle tabular">{m.rank}.</span>
                   <MentorPortrait id={m.mentorId} name={info?.name ?? m.mentorId} headshot={info?.headshot} size="xs" />
                   <div className="min-w-0">
-                    <p className="font-medium text-paper">
+                    <p className="font-semibold text-text">
                       {mentorName(directory, m.mentorId)}
                       {info?.demo ? <DemoBadge className="ml-2 align-middle" /> : null}
                     </p>
-                    {info?.affiliation ? <p className="text-xs text-paper-subtle">{info.affiliation}</p> : null}
-                    {m.rank === 1 ? (
-                      <p className="mt-1 inline-flex items-center gap-1.5 font-mono text-[0.625rem] uppercase tracking-[0.08em] text-accent">
-                        <PickMark className="size-1.5" />
-                        First choice
-                      </p>
-                    ) : null}
+                    {info?.affiliation ? <p className="text-sm text-text-subtle">{info.affiliation}</p> : null}
+                    {m.rank === 1 ? <FirstChoiceMark label="First choice" className="mt-1" /> : null}
                   </div>
                 </div>
                 <div className="min-w-0 pl-[4.25rem] sm:pl-0">
@@ -385,39 +384,39 @@ function Answers({ detail, directory }: { detail: ApplicationDetail; directory: 
           })}
         </ol>
         <div className="mt-6">
-          <h3 className="mono-label mb-2 text-paper-subtle">Availability notes</h3>
+          <h3 className="mb-2 text-sm font-medium text-text-subtle">Availability notes</h3>
           {app.availabilityNotes ? (
-            <p className="whitespace-pre-line break-words text-[0.9375rem] leading-relaxed text-paper">{app.availabilityNotes}</p>
+            <p className="whitespace-pre-line break-words text-base leading-relaxed text-text">{app.availabilityNotes}</p>
           ) : (
-            <p className="text-sm text-paper-subtle">None.</p>
+            <p className="text-sm text-text-subtle">None.</p>
           )}
         </div>
       </section>
 
       <section aria-labelledby="meta-heading">
-        <SectionTitle id="meta-heading" index="04">
+        <SectionTitle id="meta-heading">
           Consent &amp; submission
         </SectionTitle>
         <dl>
           <Row label="No guarantee">
-            <Flag ok={app.acknowledgedNoGuarantee}>Understands applying doesn’t guarantee an appointment</Flag>
+            <Flag ok={app.acknowledgedNoGuarantee}>understands applying doesn’t guarantee an appointment</Flag>
           </Row>
           <Row label="Sharing">
-            <Flag ok={app.consentToShare}>Agreed to share answers with matched mentor(s)</Flag>
+            <Flag ok={app.consentToShare}>agreed to share their answers with the mentor(s) they’re matched with</Flag>
           </Row>
           <Row label="Submitted">
-            <time dateTime={app.createdAt} className="font-mono text-sm">
+            <time dateTime={app.createdAt}>
               {formatInstant(app.createdAt)}
             </time>
           </Row>
           <Row label="Last updated">
-            <time dateTime={app.updatedAt} className="font-mono text-sm">
+            <time dateTime={app.updatedAt}>
               {formatInstant(app.updatedAt)}
             </time>
           </Row>
           {referrer ? <Row label="Came from">{referrer}’s profile</Row> : null}
           <Row label="Reference">
-            <span className="break-all font-mono text-xs text-paper-muted">{app.id}</span>
+            <span className="break-all text-sm text-text-muted">{app.id}</span>
           </Row>
         </dl>
       </section>
@@ -425,10 +424,9 @@ function Answers({ detail, directory }: { detail: ApplicationDetail; directory: 
   );
 }
 
-function SectionTitle({ id, index, children }: { id: string; index: string; children: React.ReactNode }) {
+function SectionTitle({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <h2 id={id} className="mb-4 flex items-center gap-3 font-wide text-xl font-bold tracking-[-0.015em] text-paper">
-      <span className="mono-label text-accent tabular">{index}</span>
+    <h2 id={id} className="mb-4 text-xl font-semibold tracking-tight text-text">
       {children}
     </h2>
   );
@@ -436,9 +434,9 @@ function SectionTitle({ id, index, children }: { id: string; index: string; chil
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-4 border-t border-line py-3 text-[0.9375rem] last:border-b sm:grid-cols-[10rem_minmax(0,1fr)]">
-      <dt className="mono-label pt-1 text-paper-subtle">{label}</dt>
-      <dd className="min-w-0 text-paper">{children}</dd>
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4 border-t border-line py-3 text-base last:border-b sm:grid-cols-[10rem_minmax(0,1fr)]">
+      <dt className="text-sm leading-6 text-text-subtle">{label}</dt>
+      <dd className="min-w-0 text-text">{children}</dd>
     </div>
   );
 }
@@ -446,22 +444,20 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function LongAnswer({ label, text }: { label: string; text: string }) {
   return (
     <div>
-      <h3 className="mono-label mb-2 text-paper-subtle">{label}</h3>
-      <p className="whitespace-pre-line break-words border-l-2 border-line-strong pl-4 text-base leading-relaxed text-paper">
+      <h3 className="mb-2 text-sm font-medium text-text-subtle">{label}</h3>
+      <p className="whitespace-pre-line break-words border-l-2 border-accent pl-4 text-base leading-relaxed text-text">
         {text}
       </p>
     </div>
   );
 }
 
+/** Yes plus what they agreed to (children, lowercase), or "No, not confirmed". */
 function Flag({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
-    <span className={cn("inline-flex items-start gap-2", ok ? "text-paper" : "text-danger")}>
+    <span className={cn("inline-flex items-start gap-2", ok ? "text-text" : "text-danger")}>
       {ok ? <CheckIcon className="mt-1 size-3.5 shrink-0 text-success" /> : <XIcon className="mt-1 size-3.5 shrink-0" />}
-      <span>
-        {ok ? "Yes — " : "No — "}
-        {children}
-      </span>
+      <span>{ok ? <>Yes, {children}</> : "No, not confirmed"}</span>
     </span>
   );
 }
@@ -477,21 +473,21 @@ function SafeLink({ href }: { href: string }) {
   }
   return (
     <div className="space-y-1">
-      <p className="break-all font-mono text-sm text-paper">{href}</p>
+      <p className="break-all text-sm text-text">{href}</p>
       {safe ? (
         <a
           href={safe}
           target="_blank"
           rel="noopener noreferrer nofollow"
           referrerPolicy="no-referrer"
-          className="inline-flex min-h-11 items-center gap-1 text-sm text-paper-muted underline underline-offset-4 hover:text-accent sm:min-h-8"
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-text underline underline-offset-4 sm:min-h-9"
         >
           Open link
           <ArrowUpRightIcon className="size-3.5" />
           <span className="sr-only">(opens in new tab)</span>
         </a>
       ) : (
-        <p className="text-xs text-warning">Not a web link — not clickable.</p>
+        <p className="text-xs font-medium text-warning">Not a web link, so it isn’t clickable.</p>
       )}
     </div>
   );
@@ -499,7 +495,7 @@ function SafeLink({ href }: { href: string }) {
 
 function ActivityLog({ detail, directory }: { detail: ApplicationDetail; directory: OrganizerDirectory }) {
   if (!detail.activity.length) {
-    return <p className="text-sm text-paper-subtle">No activity recorded yet.</p>;
+    return <p className="text-sm text-text-subtle">No activity recorded yet.</p>;
   }
   const describeSlot = (slotId: string, startsAt?: string, endsAt?: string) => {
     const slot = directory.slotsById.get(slotId);
@@ -512,12 +508,12 @@ function ActivityLog({ detail, directory }: { detail: ApplicationDetail; directo
         const d = describeActivity(a.action, a.detail, describeSlot);
         return (
           <li key={a.id} className="relative">
-            <span aria-hidden className="absolute -left-[1.4rem] top-1.5 size-2 rounded-full border border-line-strong bg-ink-900" />
-            <p className="text-sm text-paper">
-              {d.title} <span className="text-paper-subtle">by {a.actor}</span>
+            <span aria-hidden className="absolute -left-[1.4rem] top-1.5 size-2 rounded-full border border-line-strong bg-surface" />
+            <p className="text-sm text-text">
+              <span className="font-medium">{d.title}</span> <span className="text-text-subtle">by {a.actor}</span>
             </p>
-            {d.detail ? <p className="mt-0.5 text-xs text-paper-muted">{d.detail}</p> : null}
-            <time dateTime={a.at} className="mt-0.5 block font-mono text-[0.6875rem] text-paper-subtle">
+            {d.detail ? <p className="mt-0.5 text-sm text-text-muted">{d.detail}</p> : null}
+            <time dateTime={a.at} className="mt-0.5 block text-xs text-text-subtle">
               {formatInstant(a.at)}
             </time>
           </li>
@@ -573,7 +569,7 @@ function assignGroups(
         });
       return {
         mentorId: m.id,
-        label: `${m.name}${m.demo ? " (demo)" : ""} — ${r === 1 ? "1st choice" : r ? `preference ${r}` : "not requested"}`,
+        label: `${m.name}${m.demo ? " (demo)" : ""} · ${r === 1 ? "1st choice" : r ? `preference ${r}` : "not requested"}`,
         preferred: r !== undefined,
         options,
       };
@@ -595,15 +591,15 @@ function confirmationBlocker(
   if (proposed.length) {
     const confirmable = proposed.some((a) => directory.slotsById.get(a.slotId)?.status === "confirmed");
     return confirmable
-      ? "Needs a confirmed appointment — confirm the proposed appointment below first."
-      : "Needs a confirmed appointment. The proposed time isn’t confirmed with the mentor yet, so it can’t be confirmed.";
+      ? "Needs a confirmed appointment. Confirm the proposed one below first."
+      : "Needs a confirmed appointment. The proposed time isn’t confirmed with the mentor yet, so you can’t confirm it here.";
   }
   const without = preferences.filter((p) => p.slots.length === 0);
   if (preferences.length && without.length === preferences.length) {
     const names = joinNames(without.map((p) => p.firstName));
     return `Needs a confirmed appointment, and ${names} ${without.length === 1 ? "doesn’t" : "don’t"} have appointment slots yet. Use Under review, Selected or Waitlisted for now.`;
   }
-  return "Needs a confirmed appointment — propose a slot below, then confirm it.";
+  return "Needs a confirmed appointment. Propose a slot below, then confirm it.";
 }
 
 /** Preferred mentors without appointment slots (scheduling in progress, or a window only). */
@@ -618,18 +614,18 @@ function NoSlotsYet({
   hasConfirmed: boolean;
 }) {
   const names = joinNames(mentors.map((m) => m.firstName));
-  const contentFile = <code className="font-mono text-xs text-paper">content/mentors.ts</code>;
+  const contentFile = <Code>content/mentors.ts</Code>;
   return (
-    <div className="mt-4 rounded-sm border border-dotted border-line-strong px-4 py-3.5 text-sm">
-      <p className="font-medium text-paper">No appointment slots yet for {names}</p>
+    <div className="mt-4 rounded-md bg-surface-subtle px-4 py-3.5 text-sm">
+      <p className="font-semibold text-text">No appointment slots yet for {names}</p>
       <ul className="mt-2.5 space-y-2">
         {mentors.map((m) => (
           <li key={m.mentorId} className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span className="text-paper-muted">{m.mentorName}</span>
+            <span className="text-text-muted">{m.mentorName}</span>
             {m.windows.length ? (
               m.windows.map((w) => (
                 <span key={w.id} className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <span className="font-mono text-xs text-paper-subtle">{w.label}</span>
+                  <span className="text-sm text-text-subtle">{w.label}</span>
                   <AvailabilityBadge kind={w.kind} />
                 </span>
               ))
@@ -640,16 +636,16 @@ function NoSlotsYet({
         ))}
       </ul>
       {hasConfirmed ? (
-        <p className="mt-3 leading-relaxed text-paper-muted">
+        <p className="mt-3 leading-relaxed text-text-muted">
           To offer a time with {names} as well, add slots to {contentFile} once they’re set.
         </p>
       ) : (
-        <p className="mt-3 leading-relaxed text-paper-muted">
+        <p className="mt-3 leading-relaxed text-text-muted">
           {allWithout
-            ? "You can review this application now — mark it Under review, Selected or Waitlisted. "
-            : "Their preferences can’t be booked yet; you can still propose another mentor’s slot below. "}
-          Confirmed and Attended need a confirmed appointment, which becomes possible once slots for {names} are
-          added to {contentFile} and confirmed with {mentors.length === 1 ? "them" : "each mentor"}.
+            ? "You can still review this application: mark it Under review, Selected or Waitlisted. "
+            : "Their preferences can’t be booked yet, but you can still propose another mentor’s slot below. "}
+          Confirmed and Attended need a confirmed appointment. That’s possible once slots for {names} are added to{" "}
+          {contentFile} and confirmed with {mentors.length === 1 ? "them" : "each mentor"}.
         </p>
       )}
     </div>

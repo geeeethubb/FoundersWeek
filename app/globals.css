@@ -1,64 +1,82 @@
 @import "tailwindcss";
 
 /*
- * Founders × Founders Week — design tokens
+ * Founders × Founders Week — design tokens (Founders brand)
  *
- * Ink (deep navy) surfaces, warm "paper" text, Illinois orange as a controlled accent.
- * Line style carries meaning across the site (technical-drawing convention):
- *   solid  = confirmed
- *   dashed = planned / proposed / pending confirmation
- *   dotted = time or detail to be announced
- * Contrast (WCAG): paper 16.7:1, paper-muted 8.1:1, paper-subtle 5.6:1 and accent 6.3:1 on ink-900.
- * paper-faint (3.6:1) is decorative only — never use it for text people need to read.
+ * Palette sampled from the supplied Founders – Illinois Entrepreneurs logo
+ * (public/brand/founders-logo-original.png):
+ *   charcoal #3C3C3C · golden orange #FF9600 · white · pale gray #EEEEEE
+ * Predominantly white, charcoal text, restrained orange accents.
+ *
+ * Contrast on white (WCAG): text #262626 15.1:1 · charcoal #3C3C3C 11.0:1 · muted #555 7.5:1 ·
+ * subtle #6B6B6B 5.3:1 · accent-strong #A35500 5.5:1 · charcoal text on orange buttons 5.1:1.
+ * Orange (#FF9600) on white is 2.2:1 — use it for fills and rules, never for text, focus rings or
+ * the only cue of a control's state (use accent-strong, 5.5:1, for those).
+ *
+ * Legacy token names (ink-*, paper-*) are kept as aliases so every existing component follows
+ * the new palette: ink-* are now light surfaces, paper-* are now charcoal text tones.
  */
 @theme {
-  --color-ink-950: #070a12;
-  --color-ink-900: #0a0f1c;
-  --color-ink-850: #0e1526;
-  --color-ink-800: #131b30;
-  --color-ink-700: #1b2540;
-  --color-ink-600: #283353;
+  /* Surfaces */
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f7f7f6;
+  --color-surface-muted: #eeeeee;
 
-  --color-paper: #f4efe7;
-  --color-paper-muted: #ada89f;
-  --color-paper-subtle: #8e8a83;
-  --color-paper-faint: #6e6b67;
+  /* Text */
+  --color-text: #262626;
+  --color-charcoal: #3c3c3c;
+  --color-text-muted: #555555;
+  --color-text-subtle: #6b6b6b;
 
-  --color-line: rgb(244 239 231 / 0.09);
-  --color-line-strong: rgb(244 239 231 / 0.17);
-  --color-line-accent: rgb(255 95 5 / 0.45);
+  /* Brand */
+  --color-accent: #ff9600;
+  --color-accent-hover: #f08a00;
+  --color-accent-soft: #fff4e5;
+  --color-accent-strong: #a35500;
+  --color-accent-ink: #262626;
 
-  --color-accent: #ff5f05;
-  --color-accent-hover: #ff7a2e;
-  --color-accent-soft: rgb(255 95 5 / 0.12);
-  --color-accent-ink: #0a0f1c;
+  /* Lines */
+  --color-line: #e8e8e6;
+  --color-line-strong: #d6d6d3;
+  --color-line-accent: rgb(255 150 0 / 0.55);
 
+  /* Legacy aliases (see header comment) */
+  --color-ink-950: #ffffff;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #f7f7f6;
+  --color-ink-800: #f2f2f0;
+  --color-ink-700: #e8e8e6;
+  --color-ink-600: #d6d6d3;
+  --color-paper: #262626;
+  --color-paper-muted: #555555;
+  --color-paper-subtle: #6b6b6b;
+  --color-paper-faint: #a3a3a0;
   --color-illini-blue: #13294b;
 
-  --color-success: #6fd3a4;
-  --color-success-soft: rgb(111 211 164 / 0.12);
-  --color-warning: #f3c969;
-  --color-warning-soft: rgb(243 201 105 / 0.12);
-  --color-danger: #ff8a7a;
-  --color-danger-soft: rgb(255 138 122 / 0.12);
-  --color-info: #8fb3ff;
-  --color-info-soft: rgb(143 179 255 / 0.12);
+  /* Status */
+  --color-success: #1f7a4d;
+  --color-success-soft: #eaf6ef;
+  --color-warning: #8a5a00;
+  --color-warning-soft: #fdf4e3;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-info: #1d4ed8;
+  --color-info-soft: #eaf0fd;
 
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 
   --breakpoint-xs: 25rem;
 
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-
-  --animate-fade-up: fade-up 420ms var(--ease-out-quart) both;
+  --animate-fade-up: fade-up 320ms var(--ease-out-quart) both;
 
   @keyframes fade-up {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
@@ -67,20 +85,31 @@
   }
 }
 
+/* One sans-serif family everywhere (Archivo). The old serif/mono slots map to it. */
 @theme inline {
   --font-sans: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, "Times New Roman", serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-serif: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-archivo), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 @layer base {
   html {
-    color-scheme: dark;
-    background-color: var(--color-ink-900);
+    color-scheme: light;
+    background-color: var(--color-surface);
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-    scroll-padding-top: 7rem;
+    /*
+     * Keeps anchored headings (e.g. #apply) — and scrollIntoView() targets — clear of the sticky
+     * header: 122px on phones (with its nav row), 73px from md.
+     */
+    scroll-padding-top: 8.75rem;
+  }
+
+  @media (width >= 48rem) {
+    html {
+      scroll-padding-top: 6.5rem;
+    }
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -90,10 +119,9 @@
   }
 
   body {
-    background-color: var(--color-ink-900);
-    color: var(--color-paper);
+    background-color: var(--color-surface);
+    color: var(--color-text);
     font-family: var(--font-sans);
-    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -105,16 +133,16 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-accent-strong);
     outline-offset: 2px;
   }
 
-  /* Headings inherit the display treatment; size is set per use. */
   h1,
   h2,
   h3 {
     font-family: var(--font-display);
     text-wrap: balance;
+    color: var(--color-text);
   }
 
   p {
@@ -137,51 +165,43 @@
   }
 }
 
-/* Expanded display cut of Archivo for headlines. */
+/* Retired "expanded" display cuts: headlines use Archivo's normal width now. */
 @utility font-wide {
-  font-stretch: 112%;
-  font-variation-settings: "wdth" 112;
+  font-stretch: 100%;
 }
-
 @utility font-extra-wide {
-  font-stretch: 125%;
-  font-variation-settings: "wdth" 125;
+  font-stretch: 100%;
 }
 
-/* Small uppercase monospaced metadata label: dates, times, section numbers. */
+/* Small label (formerly monospaced). Sans, semibold, lightly tracked. */
 @utility mono-label {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
   line-height: 1rem;
-  font-weight: 500;
-  letter-spacing: 0.12em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-/* Tabular monospaced figures for times and counts. */
+/* Tabular figures for times and counts. */
 @utility tabular {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "zero" 0;
 }
 
-/* Hairline blueprint grid for hero texture only. Fades out toward the edges. */
+/* Retired decorative grid texture — intentionally renders nothing. */
 @utility bg-blueprint {
-  background-image:
-    linear-gradient(to right, rgb(244 239 231 / 0.045) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(244 239 231 / 0.045) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 80% 70% at 30% 20%, black 30%, transparent 75%);
+  background-image: none;
 }
 
-/* Line-style semantics used by badges, availability windows and agenda rules. */
+/* Retired line-style semantics (kept as no-ops for any leftover usage). */
 @utility line-confirmed {
   border-style: solid;
 }
 @utility line-planned {
-  border-style: dashed;
+  border-style: solid;
 }
 @utility line-tba {
-  border-style: dotted;
+  border-style: solid;
 }
 
 /* Form controls shared by the application and organizer views. */
@@ -190,8 +210,8 @@
   width: 100%;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-line-strong);
-  background-color: var(--color-ink-950);
-  color: var(--color-paper);
+  background-color: var(--color-surface);
+  color: var(--color-text);
   padding: 0.625rem 0.75rem;
   font-size: 1rem;
   line-height: 1.5rem;
@@ -200,21 +220,23 @@
     box-shadow 150ms ease;
 
   &::placeholder {
-    color: var(--color-paper-subtle);
+    color: #8a8a87;
   }
   &:hover {
-    border-color: rgb(244 239 231 / 0.28);
-  }
-  &:focus-visible {
-    outline: none;
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 3px rgb(255 95 5 / 0.25);
+    border-color: #bdbdb9;
   }
   &[aria-invalid="true"] {
     border-color: var(--color-danger);
   }
+  /* A 2px accent-strong ring (border + 1px shadow): 5.5:1 against white. Wins over the error border. */
+  &:focus-visible {
+    outline: none;
+    border-color: var(--color-accent-strong);
+    box-shadow: 0 0 0 1px var(--color-accent-strong);
+  }
   &:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+    background-color: var(--color-surface-subtle);
   }
 }

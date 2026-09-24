@@ -98,7 +98,7 @@ export function LoginForm({ next }: { next: string }) {
 
       <div aria-live="polite" aria-atomic="true">
         {error ? (
-          <p role="alert" className="flex items-start gap-2 rounded-sm border border-danger/40 bg-danger-soft px-3 py-2.5 text-sm text-paper">
+          <p role="alert" className="flex items-start gap-2 rounded-sm bg-danger-soft px-3 py-2.5 text-sm text-text">
             <AlertIcon className="mt-0.5 size-4 shrink-0 text-danger" />
             <span>{error}</span>
           </p>

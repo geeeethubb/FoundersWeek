@@ -14,7 +14,7 @@ import {
   ORGANIZER_NAME_MAX,
   sessionCookieHeader,
 } from "@/lib/organizer/session";
-import { getOrganizerPassword } from "@/lib/config";
+import { getAppSecret, getOrganizerPassword } from "@/lib/config";
 import { DatabaseUnavailableError, getDb } from "@/lib/db/client";
 import { consumeRateLimit, resetRateLimit } from "@/lib/security/rate-limit";
 import { clientIp, isSameOriginRequest, jsonError } from "@/lib/security/request";
@@ -24,6 +24,9 @@ export const dynamic = "force-dynamic";
 const LOGIN_BUCKET = "organizer-login";
 const LOGIN_LIMIT = 8;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
+// Shared by every network, so spreading guesses across many addresses doesn't help.
+const LOGIN_GLOBAL_BUCKET = "organizer-login:all";
+const LOGIN_GLOBAL_LIMIT = 50;
 
 const loginSchema = z.object({
   password: z.string().min(1, "Enter the organizer password.").max(200),
@@ -40,6 +43,10 @@ export async function POST(request: Request) {
   const password = getOrganizerPassword();
   if (!password) {
     return jsonError(503, "organizer_disabled", "Organizer sign-in is disabled. Set ORGANIZER_PASSWORD (see README).");
+  }
+  // Sessions (and the rate limiter's hashed IPs) are signed with APP_SECRET.
+  if (!getAppSecret()) {
+    return jsonError(503, "organizer_disabled", "Organizer sign-in is disabled. Set APP_SECRET (see README).");
   }
   if (!isSameOriginRequest(request)) {
     return jsonError(403, "forbidden_origin", "Request blocked: cross-origin request.");
@@ -61,18 +68,26 @@ export async function POST(request: Request) {
     db = await getDb();
   } catch (error) {
     if (error instanceof DatabaseUnavailableError) {
-      return jsonError(503, "database_unavailable", "Sign-in is unavailable until the application database is ready.");
+      return jsonError(503, "database_unavailable", "Sign-in won’t work until the application database is ready.");
     }
     throw error;
   }
 
   const ip = clientIp(request);
-  const limit = await consumeRateLimit(db, {
+  const perIp = await consumeRateLimit(db, {
     bucket: LOGIN_BUCKET,
     key: ip,
     limit: LOGIN_LIMIT,
     windowSeconds: LOGIN_WINDOW_SECONDS,
   });
+  const limit = perIp.allowed
+    ? await consumeRateLimit(db, {
+        bucket: LOGIN_GLOBAL_BUCKET,
+        key: "all",
+        limit: LOGIN_GLOBAL_LIMIT,
+        windowSeconds: LOGIN_WINDOW_SECONDS,
+      })
+    : perIp;
   if (!limit.allowed) {
     const minutes = Math.max(1, Math.ceil(limit.retryAfterSeconds / 60));
     return jsonError(

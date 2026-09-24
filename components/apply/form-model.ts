@@ -1,81 +1,71 @@
 /**
- * Pure helpers behind the application form: steps, field order, DOM ids for focus management,
- * client-side validation with the SAME zod schema the API uses, and the wording of prefill notices.
+ * Pure helpers behind the application form: field order, DOM ids for focus management, client-side
+ * validation with the SAME zod schema the API uses, and the wording of prefill notices.
  * No React here, so it can be unit tested.
  */
-import type { ApplicationCatalog, CatalogMentor } from "@/lib/applications/catalog";
+import type { ApplicationCatalog, AvailabilityOption, CatalogMentor } from "@/lib/applications/catalog";
+import { mentorNeedsBroadAvailability } from "@/lib/applications/catalog";
 import { LIMITS, STAGE_OPTIONS, YEAR_OPTIONS } from "@/lib/applications/constants";
 import type { OptionPresentation } from "@/lib/applications/option-presentation";
-import type { ApplicationPrefill, PrefillMergeOutcome } from "@/lib/applications/prefill";
+import {
+  PREFILL_PARAMS,
+  prefillParamsFrom,
+  resolvePrefill,
+  type ApplicationPrefill,
+  type ApplySearchParams,
+  type PrefillMergeOutcome,
+} from "@/lib/applications/prefill";
 import {
   createApplicationSchema,
+  emptyApplicationValues,
   toFieldErrors,
   type ApplicationFormValues,
 } from "@/lib/applications/schema";
+import { APPLY_ANCHOR, APPLY_PATH } from "@/lib/schedule/entries";
 
 /** Form state held in React. The idempotency key and elapsed time are added at submit. */
 export type FormState = Omit<ApplicationFormValues, "idempotencyKey" | "elapsedMs">;
 
 export type FieldErrors = Record<string, string>;
 
-export type SectionId = "mentors" | "about" | "team" | "project" | "links" | "confirm";
-
-export interface SectionDef {
-  id: SectionId;
-  index: string;
-  title: string;
-  /** Short label for the progress panel and the review checklist. */
-  short: string;
-  optional?: boolean;
-  /** Error keys that belong to this section (prefix match for per-mentor availability). */
-  fields: string[];
+export function emptyFormState(): FormState {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { idempotencyKey, elapsedMs, ...empty } = emptyApplicationValues("");
+  return empty;
 }
 
-/**
- * Mentors come first: it's why students are here, and a mentor preselected from a profile or a
- * calendar entry is visible (and adjustable) the moment the application opens.
- */
-export const SECTIONS: SectionDef[] = [
+/** The three groups of the form, in order, with the error keys each one owns. */
+export const FORM_GROUPS = [
   {
-    id: "mentors",
-    index: "01",
-    title: "Who you’d like to meet",
-    short: "Mentors & times",
-    fields: ["mentorIds", "firstChoiceMentorId", "availability", "availabilityNotes"],
-  },
-  { id: "about", index: "02", title: "About you", short: "About you", fields: ["fullName", "email", "year", "major"] },
-  {
-    id: "team",
-    index: "03",
-    title: "Solo or with a team",
-    short: "Solo or team",
-    fields: ["participation", "teamName", "teammates"],
+    id: "about",
+    title: "About you",
+    fields: ["fullName", "email", "year", "major", "participation", "teamName", "teammates"],
   },
   {
-    id: "project",
-    index: "04",
-    title: "What you’re working on",
-    short: "Your project",
-    fields: ["stage", "workingOn", "question"],
+    id: "interests",
+    title: "Your interests",
+    fields: [
+      "mentorIds",
+      "firstChoiceMentorId",
+      "availability",
+      "availabilityNotes",
+      "stage",
+      "workingOn",
+      "question",
+      "link",
+    ],
   },
-  { id: "links", index: "05", title: "A link, if you have one", short: "Link", optional: true, fields: ["link"] },
-  {
-    id: "confirm",
-    index: "06",
-    title: "Confirm",
-    short: "Confirm",
-    fields: ["acknowledgeNoGuarantee", "consentToShare"],
-  },
-];
+  { id: "submit", title: "Submit", fields: ["acknowledgeNoGuarantee", "consentToShare"] },
+] as const;
 
-export const SECTION_COUNT = String(SECTIONS.length).padStart(2, "0");
+export type FormGroupId = (typeof FORM_GROUPS)[number]["id"];
 
-export function sectionDomId(id: SectionId): string {
-  return `apply-section-${id}`;
+/** Every field in on-screen order (used to order the error summary). */
+export const FIELD_ORDER: string[] = FORM_GROUPS.flatMap((g) => [...g.fields]);
+
+export function groupDomId(id: FormGroupId): string {
+  return `apply-group-${id}`;
 }
-
-/** The review-and-submit block at the end of the form. */
-export const SUBMIT_BLOCK_ID = "apply-submit";
 
 /** Stable DOM id for a simple field. */
 export function fieldId(name: string): string {
@@ -86,7 +76,7 @@ export function mentorCheckboxId(mentorId: string): string {
   return `apply-mentor-${mentorId}`;
 }
 
-/** The list item that holds a mentor's card (scroll target after a prefill merge). */
+/** The list item that holds a mentor's row (scroll target after a prefill merge). */
 export function mentorRowId(mentorId: string): string {
   return `apply-mentor-row-${mentorId}`;
 }
@@ -97,16 +87,6 @@ export function firstChoiceRadioId(mentorId: string): string {
 
 export function optionCheckboxId(key: string): string {
   return `apply-option-${key.replace(/[^a-zA-Z0-9-]/g, "-")}`;
-}
-
-/** Id of the element that carries an error message for `key` (for aria-describedby). */
-export function errorElementId(key: string): string {
-  return `${fieldId(key)}-error`;
-}
-
-export function sectionOfError(key: string): SectionId | null {
-  const base = key.startsWith("availability.") ? "availability" : key;
-  return SECTIONS.find((s) => s.fields.includes(base))?.id ?? null;
 }
 
 /** Selected availability that belongs to currently selected mentors (deselecting keeps choices in state). */
@@ -121,6 +101,65 @@ export function effectiveAvailability(state: Pick<FormState, "availability" | "m
 export function effectiveFirstChoice(state: Pick<FormState, "mentorIds" | "firstChoiceMentorId">): string {
   if (state.mentorIds.length === 1) return state.mentorIds[0];
   return state.mentorIds.includes(state.firstChoiceMentorId) ? state.firstChoiceMentorId : "";
+}
+
+/** Selected mentors in directory order. */
+export function selectedMentors(state: Pick<FormState, "mentorIds">, catalog: ApplicationCatalog): CatalogMentor[] {
+  return catalog.mentors.filter((m) => state.mentorIds.includes(m.id));
+}
+
+/**
+ * Times a student can tick ("I can make …"): the published options of the selected mentors.
+ * Mentors whose schedule is still pending have none (see `mentorsWithoutTimes`).
+ */
+export function knownTimes(
+  state: Pick<FormState, "mentorIds">,
+  catalog: ApplicationCatalog,
+): { mentor: CatalogMentor; option: AvailabilityOption }[] {
+  return selectedMentors(state, catalog).flatMap((mentor) => mentor.options.map((option) => ({ mentor, option })));
+}
+
+/**
+ * Selected mentors whose times aren't set yet (scheduling in progress, or a date with the time still
+ * to be confirmed), in the order they were chosen. Same rule as the schema.
+ */
+export function mentorsWithoutTimes(state: Pick<FormState, "mentorIds">, catalog: ApplicationCatalog): CatalogMentor[] {
+  return state.mentorIds.flatMap((id) => {
+    const mentor = catalog.mentors.find((m) => m.id === id);
+    return mentor && mentorNeedsBroadAvailability(mentor) ? [mentor] : [];
+  });
+}
+
+/** "Vik", "Vik and Ron", "Vik, Elliott and Ron" (same wording as the schema's messages). */
+export function joinNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Hint for "Broad availability", and whether it's required right now. Mirrors the schema's rule:
+ * it's needed for any selected mentor whose times aren't set yet; otherwise a ticked time or the
+ * note is enough.
+ */
+export function broadAvailabilityGuidance(
+  state: Pick<FormState, "mentorIds" | "availability">,
+  catalog: ApplicationCatalog,
+): { hint: string; required: boolean } {
+  const ask = "When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday.";
+  const pending = mentorsWithoutTimes(state, catalog);
+  if (pending.length) {
+    // Mentors with a set date but no time yet (e.g. Rishab on Thu, Oct 1): ask for that day.
+    const dated = pending
+      .filter((m) => m.options.length)
+      .map((m) => `${m.firstName} has office hours on ${joinNames([...new Set(m.options.map((o) => o.label.split(" · ")[0]))])}, so include when you’re free that day.`);
+    return {
+      hint: [`${ask} Needed because ${joinNames(pending.map((m) => m.firstName))}’s times aren’t set yet.`, ...dated].join(" "),
+      required: true,
+    };
+  }
+  if (knownTimes(state, catalog).length) {
+    return { hint: `${ask} Not needed if you tick a time above.`, required: effectiveAvailability(state, catalog).length === 0 };
+  }
+  return { hint: ask, required: true };
 }
 
 /** The exact values that are validated and sent. */
@@ -141,16 +180,23 @@ export function toSubmissionValues(
   };
 }
 
-/** A syntactically valid placeholder so progress checks don't depend on the real key. */
+/** A syntactically valid placeholder so live validation doesn't depend on the real key. */
 export const PLACEHOLDER_KEY = "00000000-0000-4000-8000-000000000000";
 
-function isMentorKey(key: string): boolean {
-  return key === "mentorIds" || key === "firstChoiceMentorId" || key === "availability" || key.startsWith("availability.");
-}
+/**
+ * Errors produced by the schema's cross-field rules (mentors, first choice, availability) — they
+ * depend on each other, so changing one of these answers clears the server's errors for all of them.
+ */
+export const CROSS_FIELD_KEYS: ReadonlySet<string> = new Set([
+  "mentorIds",
+  "firstChoiceMentorId",
+  "availability",
+  "availabilityNotes",
+]);
 
 export function createValidator(catalog: ApplicationCatalog, emailDomains: string[]) {
   const schema = createApplicationSchema({ catalog, emailDomains });
-  // Known-valid answers for everything except the mentor choices (see below).
+  // Known-valid answers for everything except the cross-field choices (see below).
   const standIns: ApplicationFormValues = {
     idempotencyKey: PLACEHOLDER_KEY,
     fullName: "Stand In",
@@ -174,23 +220,42 @@ export function createValidator(catalog: ApplicationCatalog, emailDomains: strin
     nickname: "",
     elapsedMs: LIMITS.minFillMs,
   };
+  const probeMentor = catalog.mentors[0]?.id;
+
   return (values: ApplicationFormValues): FieldErrors => {
     const result = schema.safeParse(values);
     if (result.success) return {};
     const errors = toFieldErrors(result.error);
-    // Zod skips the schema's cross-field checks (unknown mentor, first choice, a time per mentor)
-    // while any other field is invalid. Run the same schema with valid stand-ins for the other
-    // fields so those errors show up together with the rest instead of on a second submit.
-    const cross = schema.safeParse({
-      ...standIns,
-      mentorIds: values.mentorIds,
-      firstChoiceMentorId: values.firstChoiceMentorId,
-      availability: values.availability,
-    });
-    if (!cross.success) {
-      for (const [key, message] of Object.entries(toFieldErrors(cross.error))) {
-        if (isMentorKey(key) && !(key in errors)) errors[key] = message;
+    const addCross = (parsed: ReturnType<typeof schema.safeParse>, only?: string) => {
+      if (parsed.success) return;
+      for (const [key, message] of Object.entries(toFieldErrors(parsed.error))) {
+        if (CROSS_FIELD_KEYS.has(key) && (!only || key === only) && !(key in errors)) errors[key] = message;
       }
+    };
+    // Zod skips the schema's cross-field rules (unknown mentor, first choice, the availability
+    // rule) while any other field is invalid. Run the same schema with valid stand-ins for the
+    // other fields so those errors show up together with the rest instead of on a second submit.
+    addCross(
+      schema.safeParse({
+        ...standIns,
+        mentorIds: values.mentorIds,
+        firstChoiceMentorId: values.firstChoiceMentorId,
+        availability: values.availability,
+        availabilityNotes: values.availabilityNotes,
+      }),
+    );
+    // With no mentor chosen, "Choose at least one mentor" stops the availability rule too — check
+    // it on its own so an empty form lists every missing answer at once.
+    if (values.mentorIds.length === 0 && probeMentor) {
+      addCross(
+        schema.safeParse({
+          ...standIns,
+          mentorIds: [probeMentor],
+          firstChoiceMentorId: probeMentor,
+          availabilityNotes: values.availabilityNotes,
+        }),
+        "availabilityNotes",
+      );
     }
     // "Choose at least one mentor" already covers this; a first choice needs mentors to pick from.
     if (values.mentorIds.length === 0) delete errors.firstChoiceMentorId;
@@ -198,31 +263,11 @@ export function createValidator(catalog: ApplicationCatalog, emailDomains: strin
   };
 }
 
-/** Field order for the error summary: the order of the form (per-mentor times follow the directory). */
-export function orderErrors(errors: FieldErrors, mentorOrder: string[]): [string, string][] {
-  const order = [
-    "mentorIds",
-    "firstChoiceMentorId",
-    "availability",
-    ...mentorOrder.map((id) => `availability.${id}`),
-    "availabilityNotes",
-    "fullName",
-    "email",
-    "year",
-    "major",
-    "participation",
-    "teamName",
-    "teammates",
-    "stage",
-    "workingOn",
-    "question",
-    "link",
-    "acknowledgeNoGuarantee",
-    "consentToShare",
-  ];
+/** Field order for the error summary: the order of the form. */
+export function orderErrors(errors: FieldErrors): [string, string][] {
   const rank = (key: string) => {
-    const i = order.indexOf(key);
-    return i < 0 ? order.length : i;
+    const i = FIELD_ORDER.indexOf(key);
+    return i < 0 ? FIELD_ORDER.length : i;
   };
   return Object.entries(errors).sort((a, b) => rank(a[0]) - rank(b[0]));
 }
@@ -236,19 +281,20 @@ export function focusTargetId(key: string, state: FormState, catalog: Applicatio
     case "participation":
       return fieldId(`participation-${state.participation || "individual"}`);
     case "stage":
-      return fieldId(`stage-${state.stage || "exploring"}`);
+      return fieldId(`stage-${state.stage || STAGE_OPTIONS[0].value}`);
+    case "year":
+      return fieldId("year");
     case "mentorIds": {
-      const first = state.mentorIds[0] ?? catalog.mentors[0]?.id;
+      const first = selectedMentors(state, catalog)[0]?.id ?? catalog.mentors[0]?.id;
       return first ? mentorCheckboxId(first) : null;
     }
     case "firstChoiceMentorId": {
-      // Directory order, like the cards on screen.
-      const first = catalog.mentors.find((m) => state.mentorIds.includes(m.id))?.id ?? state.mentorIds[0];
+      const first = selectedMentors(state, catalog)[0]?.id;
       return first ? firstChoiceRadioId(first) : null;
     }
     case "availability": {
-      const mentor = catalog.mentors.find((m) => state.mentorIds.includes(m.id) && m.options.length > 0);
-      return mentor ? optionCheckboxId(mentor.options[0].key) : null;
+      const time = knownTimes(state, catalog)[0];
+      return time ? optionCheckboxId(time.option.key) : fieldId("availabilityNotes");
     }
     case "idempotencyKey":
     case "form":
@@ -257,56 +303,19 @@ export function focusTargetId(key: string, state: FormState, catalog: Applicatio
     case "elapsedMs":
       return null;
     default:
-      if (key.startsWith("availability.")) {
-        const mentor = catalog.mentors.find((m) => m.id === key.slice("availability.".length));
-        return mentor?.options[0] ? optionCheckboxId(mentor.options[0].key) : null;
-      }
       return fieldId(key);
   }
 }
 
-export type SectionProgress = { id: SectionId; complete: boolean; started: boolean };
-
-/** Complete = no validation errors in the section; "started" distinguishes untouched optional sections. */
-export function sectionProgress(state: FormState, allErrors: FieldErrors): SectionProgress[] {
-  const errored = new Set(
-    Object.keys(allErrors)
-      .map(sectionOfError)
-      .filter(Boolean),
-  );
-  return SECTIONS.map((s) => {
-    const started =
-      s.id === "links"
-        ? state.link.trim() !== ""
-        : s.id === "team"
-          ? true
-          : s.fields.some((f) => {
-              const v = (state as unknown as Record<string, unknown>)[f];
-              return Array.isArray(v) ? v.length > 0 : typeof v === "string" ? v.trim() !== "" : v === true;
-            });
-    return { id: s.id, complete: !errored.has(s.id) && (started || Boolean(s.optional)), started };
-  });
-}
-
-/** Required steps done / total, for progress displays. */
-export function requiredProgress(progress: SectionProgress[]): { done: number; total: number } {
-  const required = progress.filter((p) => !SECTIONS.find((s) => s.id === p.id)?.optional);
-  return { done: required.filter((p) => p.complete).length, total: required.length };
-}
-
-export function mentorsById(catalog: ApplicationCatalog): Map<string, CatalogMentor> {
-  return new Map(catalog.mentors.map((m) => [m.id, m]));
-}
-
 // ---------------------------------------------------------------------------
-// Prefill notices (initial deep link, and merges while the form is open)
+// Prefill notices (initial deep link, restored drafts, and merges while the form is open)
 // ---------------------------------------------------------------------------
 
-type Presentations = Record<string, Pick<OptionPresentation, "label">>;
+type Presentations = Record<string, Pick<OptionPresentation, "phrase">>;
 
-function optionLabel(catalog: ApplicationCatalog, key: string, presentations: Presentations): string | null {
+function optionPhrase(catalog: ApplicationCatalog, key: string, presentations: Presentations): string | null {
   const option = catalog.mentors.flatMap((m) => m.options).find((o) => o.key === key);
-  return option ? (presentations[key]?.label ?? option.label) : null;
+  return option ? (presentations[key]?.phrase ?? option.label) : null;
 }
 
 /** Context line when the application opens with a mentor preselected from a link. */
@@ -317,16 +326,13 @@ export function prefillNote(
 ): string | null {
   const mentor = catalog.mentors.find((m) => m.id === prefill.mentorIds[0]);
   if (!mentor) return null;
-  if (mentor.options.length === 0) {
-    return `${mentor.name} is preselected. Scheduling is still in progress, so there’s no time to pick — you’re expressing interest. Add more mentors if you like.`;
-  }
-  const label = prefill.availability[0] ? optionLabel(catalog, prefill.availability[0], presentations) : null;
-  return label
-    ? `${mentor.name} is preselected, with ${label}. Add more mentors if you like — one application covers them all.`
-    : `${mentor.name} is preselected. Pick a time below, and add more mentors if you like.`;
+  const phrase = prefill.availability[0] ? optionPhrase(catalog, prefill.availability[0], presentations) : null;
+  return phrase
+    ? `${mentor.name} is selected below, with “I can make ${phrase}” ticked. Add anyone else you’d like to meet.`
+    : `${mentor.name} is selected below. Add anyone else you’d like to meet.`;
 }
 
-/** Live announcement after a link on the page added a mentor (or time) to an open application. */
+/** Plain-language summary of what a merge (a mentor link used while the form is open) changed. */
 export function mergeAnnouncement(
   catalog: ApplicationCatalog,
   outcome: PrefillMergeOutcome,
@@ -334,31 +340,133 @@ export function mergeAnnouncement(
 ): string {
   const mentor = catalog.mentors.find((m) => m.id === outcome.mentorId);
   if (!mentor) return "";
-  const label = outcome.optionAdded ? optionLabel(catalog, outcome.optionAdded, presentations) : null;
+  const phrase = outcome.optionAdded ? optionPhrase(catalog, outcome.optionAdded, presentations) : null;
   const parts: string[] = [];
   if (outcome.mentorAdded) {
     parts.push(`${mentor.name} added to your mentors.`);
-    if (label) parts.push(`${label} selected.`);
-  } else if (label) {
-    parts.push(`${label} selected for ${mentor.name}.`);
+    if (phrase) parts.push(`“I can make ${phrase}” is ticked.`);
+  } else if (phrase) {
+    parts.push(`“I can make ${phrase}” is ticked for ${mentor.name}.`);
   } else {
     parts.push(`${mentor.name} is already in your mentors.`);
   }
   if (outcome.madeFirstChoice) parts.push(`${mentor.firstName} is your first choice.`);
-  if (outcome.mentorAdded && mentor.options.length === 0) {
-    parts.push("Scheduling is in progress, so there’s no time to pick — you’re expressing interest.");
-  } else if (outcome.mentorAdded && !label) {
-    parts.push(`Pick a time that works for you with ${mentor.firstName}.`);
-  }
   return parts.join(" ");
 }
 
 /**
- * Break points for labels like "Thu, Oct 1 · 10:00–11:30 AM CT": lines may wrap only after " ·" or
- * " —", so a date or a time range never splits across lines on a phone.
+ * The line shown about a preselection: `top` above the form (a deep link or a restored draft
+ * preselected someone); `merge` above the mentors (a link on this page added a mentor while the
+ * form was open).
  */
-export function splitPhrases(text: string): string[] {
-  return text.split(/(?<= [·—]) /u);
+export interface SelectionNotice {
+  id: number;
+  kind: "top" | "merge";
+  message: string;
+  mentorId: string;
+  /** The time the notice says is ticked, if any. */
+  optionKey: string | null;
+}
+
+/** The `top` notice for a preselection (null when it preselects nobody). */
+export function prefillNotice(
+  catalog: ApplicationCatalog,
+  prefill: ApplicationPrefill,
+  presentations: Presentations,
+  id: number,
+): SelectionNotice | null {
+  const message = prefillNote(catalog, prefill, presentations);
+  const mentorId = prefill.mentorIds[0];
+  return message && mentorId ? { id, kind: "top", message, mentorId, optionKey: prefill.availability[0] ?? null } : null;
+}
+
+/** Whether two preselections select the same mentor and time. */
+export function samePrefill(a: ApplicationPrefill, b: ApplicationPrefill): boolean {
+  return a.mentorIds[0] === b.mentorIds[0] && a.availability[0] === b.availability[0];
+}
+
+/** A notice about a mentor (or a time) the student has since removed is stale: drop it. */
+export function noticeAfterRemoval(
+  notice: SelectionNotice | null,
+  removed: { mentorId?: string; optionKey?: string },
+): SelectionNotice | null {
+  if (!notice) return null;
+  if (removed.mentorId && removed.mentorId === notice.mentorId) return null;
+  if (removed.optionKey && removed.optionKey === notice.optionKey) return null;
+  return notice;
+}
+
+// ---------------------------------------------------------------------------
+// The URL's preselection (?mentor=…&window|slot=…) and links on the page
+// ---------------------------------------------------------------------------
+
+/** What a query string (e.g. `window.location.search`) preselects, validated against the catalog. */
+export function prefillFromSearch(catalog: ApplicationCatalog, search: string): ApplicationPrefill {
+  return resolvePrefill(catalog, prefillParamsFrom(new URLSearchParams(search)));
+}
+
+/**
+ * True when removing this mentor or time undoes what the URL preselected — the parameters are then
+ * dropped from the address bar, so a reload doesn't add the mentor back.
+ */
+export function removesUrlSelection(
+  catalog: ApplicationCatalog,
+  search: string,
+  removed: { mentorId?: string; optionKey?: string },
+): boolean {
+  const prefill = prefillFromSearch(catalog, search);
+  return Boolean(
+    (removed.mentorId && prefill.mentorIds.includes(removed.mentorId)) ||
+      (removed.optionKey && prefill.availability.includes(removed.optionKey)),
+  );
+}
+
+/** The same URL (path, other parameters and hash) without the application's preselection parameters. */
+export function withoutPrefillParams(href: string): string {
+  const url = new URL(href);
+  for (const key of PREFILL_PARAMS) url.searchParams.delete(key);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+export type ApplyLinkAction =
+  | { kind: "navigate" }
+  | { kind: "scroll" }
+  | { kind: "merge"; params: ApplySearchParams };
+
+/**
+ * What a click on a link does while the application is open on this page:
+ * - `merge`: a mentor link to the URL we're already on. Next wouldn't navigate (so the URL and
+ *   useSearchParams wouldn't change): the form merges its selection itself.
+ * - `scroll`: a link to the application that selects nobody, to the URL we're on — just bring the
+ *   application into view (nothing else would scroll for an unchanged hash).
+ * - `navigate`: anything else is left to the browser / Next (a changed URL merges when it changes).
+ *
+ * A fragment-only href ("#apply", like the hero button) never selects anyone, even though the
+ * browser resolves it against the current `?mentor=…` URL. Neither does a link to a mentor who
+ * isn't in the catalog, or any link once the application is submitted: those only scroll.
+ */
+export function applyLinkAction(
+  hrefAttribute: string,
+  currentHref: string,
+  catalog: ApplicationCatalog,
+  options: { canMerge: boolean },
+): ApplyLinkAction {
+  const current = new URL(currentHref);
+  let url: URL;
+  try {
+    url = new URL(hrefAttribute, current);
+  } catch {
+    return { kind: "navigate" };
+  }
+  if (current.pathname !== APPLY_PATH || url.origin !== current.origin || url.pathname !== APPLY_PATH) {
+    return { kind: "navigate" };
+  }
+  if (url.hash !== `#${APPLY_ANCHOR}`) return { kind: "navigate" };
+  const fragmentOnly = hrefAttribute.trim().startsWith("#");
+  if (!fragmentOnly && url.search !== current.search) return { kind: "navigate" };
+  const params = fragmentOnly ? {} : prefillParamsFrom(url.searchParams);
+  if (options.canMerge && resolvePrefill(catalog, params).mentorIds.length > 0) return { kind: "merge", params };
+  return url.hash === current.hash ? { kind: "scroll" } : { kind: "navigate" };
 }
 
 /** Browsers without crypto.randomUUID (non-secure contexts) still get a v4 UUID. */

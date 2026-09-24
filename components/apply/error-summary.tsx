@@ -22,13 +22,13 @@ export const ErrorSummary = forwardRef<HTMLDivElement, { title: string; items: S
         role="alert"
         tabIndex={-1}
         aria-labelledby="apply-error-summary-title"
-        className="rounded-sm border border-danger/50 bg-danger-soft px-5 py-4 focus-visible:outline-offset-4"
+        className="rounded-md border border-danger/35 bg-danger-soft px-5 py-4 focus-visible:outline-offset-4"
       >
-        <p id="apply-error-summary-title" className="flex items-center gap-2 font-semibold text-paper">
+        <p id="apply-error-summary-title" className="flex items-center gap-2 font-semibold text-text">
           <AlertIcon className="size-4 shrink-0 text-danger" />
           {title}
         </p>
-        <ul className="mt-3 space-y-1.5 pl-6 text-sm">
+        <ul className="mt-1.5 pl-6 text-sm leading-relaxed">
           {items.map((item) => (
             <li key={item.key} className="list-disc marker:text-danger">
               {item.targetId ? (
@@ -38,12 +38,12 @@ export const ErrorSummary = forwardRef<HTMLDivElement, { title: string; items: S
                     e.preventDefault();
                     onJump(item.targetId!);
                   }}
-                  className="text-paper underline decoration-danger/60 underline-offset-[3px] transition-colors duration-150 hover:decoration-danger"
+                  className="inline-flex min-h-11 items-center py-1 text-text underline decoration-danger/50 underline-offset-[3px] transition-colors duration-150 hover:decoration-danger"
                 >
                   {item.message}
                 </a>
               ) : (
-                <span className="text-paper">{item.message}</span>
+                <span className="inline-flex min-h-11 items-center py-1 text-text">{item.message}</span>
               )}
             </li>
           ))}

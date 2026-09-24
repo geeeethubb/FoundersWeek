@@ -17,7 +17,7 @@ export interface AssignOption {
 
 export interface AssignGroup {
   mentorId: string;
-  /** e.g. "Avery Sample — 1st choice" */
+  /** e.g. "Avery Sample · 1st choice" */
   label: string;
   /** The student listed this mentor. */
   preferred: boolean;
@@ -65,7 +65,7 @@ export function AssignForm({
         }
       }}
     >
-      <label htmlFor={`${id}-slot`} className="mono-label mb-2 block text-paper-subtle">
+      <label htmlFor={`${id}-slot`} className="mb-2 block text-sm font-medium text-text">
         Slot
       </label>
       <div className="relative">
@@ -78,7 +78,7 @@ export function AssignForm({
             setDone(null);
           }}
           aria-describedby={`${id}-msg`}
-          className="field-control cursor-pointer appearance-none pr-9 text-[0.9375rem]"
+          className="field-control cursor-pointer appearance-none pr-9 sm:text-sm"
         >
           <option value="">Choose a slot…</option>
           {groups.map((g) => (
@@ -92,7 +92,7 @@ export function AssignForm({
             </optgroup>
           ))}
         </select>
-        <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-paper-subtle" />
+        <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-text-subtle" />
       </div>
       <div id={`${id}-msg`} aria-live="polite" className="text-sm">
         {error ? (
@@ -103,8 +103,8 @@ export function AssignForm({
         ) : done ? (
           <p className="mt-2 text-success">{done}</p>
         ) : selected?.status === "proposed" ? (
-          <p className="mt-2 text-xs text-paper-subtle">
-            This slot’s time isn’t confirmed with the mentor yet — you can propose it now and confirm later.
+          <p className="mt-2 text-xs text-text-subtle">
+            This time isn’t confirmed with the mentor yet. You can still propose it now and confirm it later.
           </p>
         ) : null}
       </div>
@@ -116,7 +116,7 @@ export function AssignForm({
       >
         {pending ? "Proposing…" : hasActiveAppointment ? "Propose another appointment" : "Propose appointment"}
       </Button>
-      <p className="mt-2 text-xs text-paper-subtle">
+      <p className="mt-2 text-xs text-text-subtle">
         Proposing holds a seat and moves new applications to “Selected”. Email the student to confirm.
       </p>
     </form>

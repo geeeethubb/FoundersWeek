@@ -109,18 +109,18 @@ export function ShareActions({
       : status === "shared"
         ? "Shared."
         : status === "manual"
-          ? "Couldn’t copy automatically — the link is selected below."
+          ? "Couldn’t copy automatically. The link is selected below so you can copy it."
           : "";
 
   return (
     <div className={className}>
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={copy} className={buttonClasses({ variant: "secondary", className: "flex-1 sm:flex-none" })}>
+        <button type="button" onClick={copy} className={buttonClasses({ variant: "secondary", className: "min-h-11 flex-1" })}>
           {status === "copied" ? <CheckIcon className="size-4 text-success" /> : <LinkIcon className="size-4" />}
           {status === "copied" ? "Link copied" : "Copy link"}
         </button>
         {canShare ? (
-          <button type="button" onClick={share} className={buttonClasses({ variant: "secondary", className: "flex-1 sm:flex-none" })}>
+          <button type="button" onClick={share} className={buttonClasses({ variant: "secondary", className: "min-h-11 flex-1" })}>
             <ShareIcon className="size-4" />
             Share…
           </button>
@@ -128,7 +128,7 @@ export function ShareActions({
       </div>
       {status === "manual" && url ? (
         <div className="mt-3">
-          <label htmlFor="share-url" className="mono-label text-paper-subtle">
+          <label htmlFor="share-url" className="text-sm font-medium text-text-muted">
             Event link
           </label>
           <input
@@ -137,11 +137,11 @@ export function ShareActions({
             readOnly
             value={url}
             onFocus={(e) => e.currentTarget.select()}
-            className="field-control mt-1.5 font-mono text-[0.8125rem]"
+            className="field-control mt-1.5 text-sm"
           />
         </div>
       ) : null}
-      <p aria-live="polite" className={cn("mt-2 min-h-5 text-[0.8125rem]", status === "manual" ? "text-paper-muted" : "text-success")}>
+      <p aria-live="polite" className={cn("mt-2 min-h-5 text-sm", status === "manual" ? "text-text-muted" : "text-success")}>
         {message}
       </p>
     </div>

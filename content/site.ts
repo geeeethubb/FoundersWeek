@@ -9,7 +9,7 @@ export const site: SiteSettings = {
   shortName: "Founders Week",
   tagline: "Find your people. Build what’s next.",
   description:
-    "Founders Office Hours during Founders Week at the University of Illinois Urbana-Champaign: apply to meet startup founders and operators one-on-one — plus a student-curated calendar of the week.",
+    "Founders Office Hours during Founders Week 2026 at the University of Illinois Urbana-Champaign. Apply to meet startup founders and operators, and check out the full Founders Week calendar.",
   university: "University of Illinois Urbana-Champaign",
   timezone: "America/Chicago",
   org: {
@@ -26,7 +26,8 @@ export const site: SiteSettings = {
     name: "Founders Week",
     year: 2026,
     officialUrl: null,
-    dates: null,
+    // Official Founders Week program. Related events begin Monday, Sept 28.
+    dates: { start: "2026-09-30", end: "2026-10-03" },
     scheduleCompleteness: "complete",
     lastReviewed: "2026-09-23",
   },
@@ -38,7 +39,14 @@ export const site: SiteSettings = {
     emailDomains: ["illinois.edu"],
   },
   brand: {
-    foundersLogo: null,
+    // Tight crop of the supplied logo (public/brand/founders-logo-original.png, kept intact):
+    // foreground mark + wordmark only, original colors and proportions, transparent background.
+    foundersLogo: {
+      src: "/brand/founders-logo.png",
+      width: 539,
+      height: 145,
+      alt: "Founders – Illinois Entrepreneurs",
+    },
     illinoisMark: null,
   },
 };
