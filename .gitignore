@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data (PGlite dev database)
+/.data/
+
+# alternate Next build dirs (NEXT_DIST_DIR)
+/.next-*/
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# keep the example env file
+!.env.example

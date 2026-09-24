@@ -1,0 +1,106 @@
+/**
+ * Organizer sign-in (POST) and sign-out (DELETE).
+ *
+ * POST { password, name } → sets the `fw_organizer` session cookie.
+ * Rate limited per IP (8 attempts / 15 minutes, cleared on success); password compared in
+ * constant time; same-origin only.
+ */
+import { z } from "zod";
+import { NO_STORE_HEADERS, readJson } from "@/lib/organizer/auth";
+import {
+  checkOrganizerPassword,
+  clearSessionCookieHeader,
+  createSessionToken,
+  ORGANIZER_NAME_MAX,
+  sessionCookieHeader,
+} from "@/lib/organizer/session";
+import { getOrganizerPassword } from "@/lib/config";
+import { DatabaseUnavailableError, getDb } from "@/lib/db/client";
+import { consumeRateLimit, resetRateLimit } from "@/lib/security/rate-limit";
+import { clientIp, isSameOriginRequest, jsonError } from "@/lib/security/request";
+
+export const dynamic = "force-dynamic";
+
+const LOGIN_BUCKET = "organizer-login";
+const LOGIN_LIMIT = 8;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
+
+const loginSchema = z.object({
+  password: z.string().min(1, "Enter the organizer password.").max(200),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Enter your name so the activity log shows who made changes.")
+    .max(ORGANIZER_NAME_MAX, `Keep your name under ${ORGANIZER_NAME_MAX} characters.`)
+    // No control characters in names that end up in logs and exports.
+    .refine((v) => !/[\u0000-\u001f\u007f]/.test(v), "Use letters, numbers and spaces."),
+});
+
+export async function POST(request: Request) {
+  const password = getOrganizerPassword();
+  if (!password) {
+    return jsonError(503, "organizer_disabled", "Organizer sign-in is disabled. Set ORGANIZER_PASSWORD (see README).");
+  }
+  if (!isSameOriginRequest(request)) {
+    return jsonError(403, "forbidden_origin", "Request blocked: cross-origin request.");
+  }
+
+  const body = await readJson(request);
+  const parsed = loginSchema.safeParse(body ?? {});
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] ?? "form");
+      fieldErrors[key] ??= issue.message;
+    }
+    return jsonError(400, "invalid_input", "Check the highlighted fields.", { fieldErrors });
+  }
+
+  let db;
+  try {
+    db = await getDb();
+  } catch (error) {
+    if (error instanceof DatabaseUnavailableError) {
+      return jsonError(503, "database_unavailable", "Sign-in is unavailable until the application database is ready.");
+    }
+    throw error;
+  }
+
+  const ip = clientIp(request);
+  const limit = await consumeRateLimit(db, {
+    bucket: LOGIN_BUCKET,
+    key: ip,
+    limit: LOGIN_LIMIT,
+    windowSeconds: LOGIN_WINDOW_SECONDS,
+  });
+  if (!limit.allowed) {
+    const minutes = Math.max(1, Math.ceil(limit.retryAfterSeconds / 60));
+    return jsonError(
+      429,
+      "rate_limited",
+      `Too many sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+      { retryAfterSeconds: limit.retryAfterSeconds },
+    );
+  }
+
+  if (!checkOrganizerPassword(parsed.data.password, password)) {
+    return jsonError(401, "invalid_credentials", "That password isn’t right.");
+  }
+
+  await resetRateLimit(db, LOGIN_BUCKET, ip);
+  const token = createSessionToken({ name: parsed.data.name, password });
+  return Response.json(
+    { ok: true, name: parsed.data.name },
+    { status: 200, headers: { ...NO_STORE_HEADERS, "Set-Cookie": sessionCookieHeader(token) } },
+  );
+}
+
+export async function DELETE(request: Request) {
+  if (!isSameOriginRequest(request)) {
+    return jsonError(403, "forbidden_origin", "Request blocked: cross-origin request.");
+  }
+  return Response.json(
+    { ok: true },
+    { status: 200, headers: { ...NO_STORE_HEADERS, "Set-Cookie": clearSessionCookieHeader() } },
+  );
+}
