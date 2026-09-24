@@ -135,7 +135,7 @@ async function probeHandshake(rawUrl: string, host: string, port: number): Promi
             const type = String.fromCharCode(m[0]);
             if (type === "R") done(`startup → auth request ${m.readInt32BE(5)}`);
             else if (type === "E") {
-              const text = m.toString("utf8", 5).split("\0").find((f) => f.startsWith("M"))?.slice(1) ?? "error";
+              const text = m.toString("utf8", 5).split("\0").find((f: string) => f.startsWith("M"))?.slice(1) ?? "error";
               done(`startup → error: ${sanitizeForProbe(text)}`);
             } else done(`startup → message ${type}`);
             secure.destroy();
