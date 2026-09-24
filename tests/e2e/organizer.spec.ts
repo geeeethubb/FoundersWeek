@@ -1,12 +1,15 @@
 /**
- * Checklist 5 — the organizer view (/organizers).
- *   - Signed out: /organizers → sign-in; /api/organizer/export → 401.
- *   - Sign in, then find an application (Patrick + Ron, Ron first — the shape spec 3 submits) with
- *     its mentor preferences and availability.
- *   - Filters: mentor, first choice, status; "Interest only" shows the Ron-only application.
- *   - Demo slot capacity: "demo-avery-slot-1400" (capacity 1) is assigned to one application; a
- *     second is blocked as full; confirming the appointment makes the application Confirmed.
- *   - CSV export (with the session cookie) neutralizes a major that starts with "=".
+ * Checklist 6 — the organizer view (/organizers) and /api/health.
+ *   - Signed out: /organizers → the sign-in page, with the setup checklist visible;
+ *     /api/organizer/export without a session cookie → 401.
+ *   - Sign in; the application shaped like spec 4's (Elliott first — schedule pending — plus
+ *     Patrick's window, with broad availability) is visible with its mentor preferences, the window
+ *     and the broad availability.
+ *   - Filters: mentor, first choice, status, "Interest only".
+ *   - Capacity: the demo slot "demo-avery-slot-1400" (capacity 1) takes one appointment; a second is
+ *     refused as full; confirming makes the application Confirmed.
+ *   - CSV export (with the session) neutralizes a formula in an applicant's answer.
+ *   - /api/health: JSON readiness checks, no applicant data or secrets.
  *
  * This spec creates its own applications through the public API (unique e2e-… emails), so it runs
  * on its own and against a non-empty database. Slot seats it takes are released afterwards.
@@ -17,7 +20,9 @@ import {
   createApplication,
   DEMO_SLOT_ID,
   E2E_EMAIL_MARKER,
+  ELLIOTT,
   exportApplications,
+  MENTORS,
   organizerLogin,
   ORGANIZER_NAME,
   PATRICK,
@@ -33,10 +38,11 @@ test.describe.configure({ mode: "serial" });
 
 /** Shared by this spec's applications, so a search finds exactly them. */
 const MAJOR_TAG = `Organizer Studies ${Date.now().toString(36)}`;
+const BROAD = "Thursdays after 3 PM; Friday mornings work too.";
 
 let api: APIRequestContext;
-let patrickAndRon: CreatedApplication; // Ron first + Patrick's Thursday window
-let ronOnly: CreatedApplication; // interest only
+let elliottAndPatrick: CreatedApplication; // Elliott first (pending) + Patrick's window + broad availability
+let ronOnly: CreatedApplication; // pending mentor only, broad availability only
 let seatHolder: CreatedApplication;
 let seatSeeker: CreatedApplication;
 
@@ -52,20 +58,22 @@ test.beforeAll(async ({ playwright }) => {
     }
   }
 
-  patrickAndRon = await createApplication(api, {
+  elliottAndPatrick = await createApplication(api, {
     fullName: "Morgan Organizer-Test",
-    email: uniqueEmail("org-pr"),
+    email: uniqueEmail("org-ep"),
     major: MAJOR_TAG,
-    mentorIds: [RON.id, PATRICK.id],
-    firstChoiceMentorId: RON.id,
+    mentorIds: [ELLIOTT.id, PATRICK.id],
+    firstChoiceMentorId: ELLIOTT.id,
     availability: [`window:${PATRICK.windowId}`],
+    availabilityNotes: BROAD,
   });
   ronOnly = await createApplication(api, {
-    fullName: "Quinn Interest-Only",
+    fullName: "Quinn Broad-Only",
     email: uniqueEmail("org-ron"),
     major: MAJOR_TAG,
     mentorIds: [RON.id],
     firstChoiceMentorId: RON.id,
+    availabilityNotes: BROAD,
   });
   seatHolder = await createApplication(api, {
     fullName: "Taylor Seat-Holder",
@@ -91,7 +99,10 @@ async function signIn(page: Page) {
   await organizerLogin(page.request);
 }
 
-async function applyFilters(page: Page, filters: { q?: string; mentor?: string; status?: string; availability?: string; firstChoiceOnly?: boolean }) {
+async function applyFilters(
+  page: Page,
+  filters: { q?: string; mentor?: string; status?: string; availability?: string; firstChoiceOnly?: boolean },
+) {
   const form = page.getByRole("search", { name: "Filter applications" });
   await form.getByRole("searchbox", { name: "Search" }).fill(filters.q ?? "");
   await form.getByRole("combobox", { name: "Mentor" }).selectOption({ label: filters.mentor ?? "All mentors" });
@@ -119,19 +130,34 @@ function resultRow(page: Page, email: string) {
   return page.getByRole("table").getByRole("row").filter({ hasText: email });
 }
 
-test("signed out: the dashboard redirects to sign-in and the export API refuses", async ({ page, playwright }) => {
+test("signed out: /organizers → sign-in with the setup checklist; the export API refuses without a cookie", async ({
+  page,
+  playwright,
+}) => {
   await page.goto("/organizers");
-  await expect(page).toHaveURL(/\/organizers\/login$/);
+  await expect(page).toHaveURL(/\/organizers\/login(\?.*)?$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Organizer sign-in");
+  await expect(page.getByRole("region", { name: "Sign in", exact: true })).toBeVisible();
 
-  await page.goto(`/organizers/applications/${patrickAndRon.id}`);
+  // Deployment readiness is visible before sign-in (setting names and ok/not ok — never values).
+  const setup = page.getByRole("region", { name: "Setup", exact: true });
+  await expect(setup).toBeVisible();
+  await expect(setup.getByRole("listitem")).toHaveCount(4);
+  for (const title of ["Signing secret", "Application database", "Organizer password", "Applications switch"]) {
+    await expect(setup).toContainText(title);
+  }
+  await expect(setup).toContainText("All 4 checks pass");
+  await expect(page.locator("body")).not.toContainText(E2E_ORGANIZER_PASSWORD);
+
+  await page.goto(`/organizers/applications/${elliottAndPatrick.id}`);
   await expect(page).toHaveURL(/\/organizers\/login\?next=/);
 
   const anonymous = await playwright.request.newContext({ baseURL: E2E_BASE_URL });
   const exportRes = await anonymous.get("/api/organizer/export");
   expect(exportRes.status()).toBe(401);
-  expect(exportRes.headers()["content-type"]).not.toContain("text/csv");
-  const mutation = await anonymous.patch(`/api/organizer/applications/${patrickAndRon.id}`, {
+  expect(exportRes.headers()["content-type"] ?? "").not.toContain("text/csv");
+  expect(await exportRes.text()).not.toContain(elliottAndPatrick.email);
+  const mutation = await anonymous.patch(`/api/organizer/applications/${elliottAndPatrick.id}`, {
     data: { status: "confirmed" },
     headers: { Origin: E2E_BASE_URL },
   });
@@ -139,7 +165,38 @@ test("signed out: the dashboard redirects to sign-in and the export API refuses"
   await anonymous.dispose();
 });
 
-test("sign in and see the application with mentor preferences and availability", async ({ page }) => {
+test("/api/health returns JSON readiness checks with no applicant data or secrets", async ({ playwright }) => {
+  const anonymous = await playwright.request.newContext({ baseURL: E2E_BASE_URL });
+  const res = await anonymous.get("/api/health");
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toContain("application/json");
+  expect(res.headers()["cache-control"] ?? "").toContain("no-store");
+  const raw = await res.text();
+  const body = JSON.parse(raw) as { applications: string; checks: { key: string; ok: boolean; status: string; fix: string | null }[] };
+
+  expect(body.applications).toBe("open");
+  expect(body.checks.map((c) => c.key).sort()).toEqual(["app-secret", "applications-switch", "database", "organizer-password"]);
+  for (const check of body.checks) {
+    expect(Object.keys(check).sort()).toEqual(["fix", "key", "ok", "status"]);
+    expect(check.ok, `${check.key}: ${check.status}`).toBe(true);
+  }
+
+  // Nothing about applicants, and no secret values or connection details.
+  for (const app of [elliottAndPatrick, ronOnly, seatHolder]) {
+    expect(raw).not.toContain(app.email);
+    expect(raw).not.toContain(app.fullName);
+    expect(raw).not.toContain(app.id);
+  }
+  expect(raw).not.toMatch(/@illinois\.edu/i);
+  expect(raw).not.toContain(MAJOR_TAG);
+  expect(raw).not.toContain(BROAD);
+  expect(raw).not.toContain(E2E_ORGANIZER_PASSWORD);
+  expect(raw).not.toContain("e2e-only-app-secret");
+  expect(raw).not.toMatch(/postgres(ql)?:\/\/|pglite:|\.data[\\/]/i);
+  await anonymous.dispose();
+});
+
+test("sign in; the application shows its mentor preferences, the window and the broad availability", async ({ page }) => {
   await page.goto("/organizers/login");
   const signInButton = page.getByRole("button", { name: "Sign in" });
   await waitForHydration(signInButton);
@@ -155,66 +212,69 @@ test("sign in and see the application with mentor preferences and availability",
   await expect(page).toHaveURL(/\/organizers$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Applications");
 
-  await applyFilters(page, { q: patrickAndRon.email });
-  const row = resultRow(page, patrickAndRon.email);
+  await applyFilters(page, { q: elliottAndPatrick.email });
+  const row = resultRow(page, elliottAndPatrick.email);
   await expect(row).toHaveCount(1);
-  await expect(row).toContainText(patrickAndRon.fullName);
+  await expect(row).toContainText(elliottAndPatrick.fullName);
 
   const cells = row.getByRole("cell");
   const preferences = cells.nth(1).getByRole("listitem");
   await expect(preferences).toHaveCount(2);
-  await expect(preferences.nth(0)).toContainText(RON.name);
+  await expect(preferences.nth(0)).toContainText(ELLIOTT.name);
   await expect(preferences.nth(0)).toContainText("1st choice");
   await expect(preferences.nth(1)).toContainText(PATRICK.name);
   await expect(cells.nth(2)).toContainText(PATRICK.name);
   await expect(cells.nth(2)).toContainText("10:00–11:30");
-  await expect(cells.nth(2)).toContainText("Availability window");
   await expect(cells.nth(3)).toContainText("Submitted");
 
-  // The detail page tells the same story.
-  await row.getByRole("link", { name: patrickAndRon.fullName }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(patrickAndRon.fullName);
+  // The detail page tells the whole story, broad availability included.
+  await row.getByRole("link", { name: elliottAndPatrick.fullName }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(elliottAndPatrick.fullName);
   const prefs = page.getByRole("region", { name: /Mentors & availability/ });
-  await expect(prefs.getByRole("listitem").first()).toContainText(RON.name);
-  await expect(prefs.getByRole("listitem").first()).toContainText("First choice");
-  await expect(prefs).toContainText("Interest only");
-  await expect(prefs).toContainText("10:00–11:30");
+  const first = prefs.getByRole("listitem").first();
+  await expect(first).toContainText(ELLIOTT.name);
+  await expect(first).toContainText("First choice");
+  await expect(first).toContainText("Interest only");
+  await expect(prefs.getByRole("listitem").filter({ hasText: PATRICK.name }).first()).toContainText("10:00–11:30");
+  await expect(prefs).toContainText("Availability notes");
+  await expect(prefs).toContainText(BROAD);
 });
 
-test("filter by mentor, first choice and status; Interest only shows the Ron-only application", async ({ page }) => {
+test("filters: mentor, first choice, status and Interest only", async ({ page }) => {
   await signIn(page);
   await page.goto("/organizers");
 
-  // Mentor: Ron (first choice only) + Submitted → both of this spec's tagged applications.
-  await applyFilters(page, { q: MAJOR_TAG, mentor: RON.name, firstChoiceOnly: true, status: "Submitted" });
-  await expect(page).toHaveURL(/mentor=ron-lewis/);
+  // Elliott, first choice only → the Elliott + Patrick application (Ron is first on the other).
+  await applyFilters(page, { q: MAJOR_TAG, mentor: ELLIOTT.name, firstChoiceOnly: true, status: "Submitted" });
+  await expect(page).toHaveURL(/mentor=elliott-notrica/);
   await expect(page).toHaveURL(/choice=first/);
   await expect(page).toHaveURL(/status=submitted/);
-  await expect(resultRow(page, patrickAndRon.email)).toHaveCount(1);
-  await expect(resultRow(page, ronOnly.email)).toHaveCount(1);
+  await expect(resultRow(page, elliottAndPatrick.email)).toHaveCount(1);
+  await expect(resultRow(page, ronOnly.email)).toHaveCount(0);
 
-  // Mentor: Patrick, first choice only → neither (Ron is first choice on both).
+  // Patrick, first choice only → none; any preference → the Elliott + Patrick application.
   await applyFilters(page, { q: MAJOR_TAG, mentor: PATRICK.name, firstChoiceOnly: true });
   await expect(page.getByText("No applications match these filters")).toBeVisible();
-
-  // Mentor: Patrick, any preference → only the Patrick + Ron application.
   await applyFilters(page, { q: MAJOR_TAG, mentor: PATRICK.name });
-  await expect(resultRow(page, patrickAndRon.email)).toHaveCount(1);
+  await expect(resultRow(page, elliottAndPatrick.email)).toHaveCount(1);
   await expect(resultRow(page, ronOnly.email)).toHaveCount(0);
 
   // Status: Confirmed → none of them.
   await applyFilters(page, { q: MAJOR_TAG, status: "Confirmed" });
   await expect(page.getByText("No applications match these filters")).toBeVisible();
 
-  // Interest only — no time selected → the Ron-only application, not the one with Patrick's window.
+  // Interest only — no time selected → the broad-availability-only application.
   await applyFilters(page, { q: MAJOR_TAG, availability: "Interest only — no time selected" });
   await expect(page).toHaveURL(/availability=none/);
   await expect(resultRow(page, ronOnly.email)).toHaveCount(1);
   await expect(resultRow(page, ronOnly.email)).toContainText("Interest only");
-  await expect(resultRow(page, patrickAndRon.email)).toHaveCount(0);
+  await expect(resultRow(page, elliottAndPatrick.email)).toHaveCount(0);
 
-  // Dan Caruso's event is never a mentor filter.
-  const mentorOptions = await page.getByRole("combobox", { name: "Mentor" }).locator("option").allInnerTexts();
+  // Every real mentor is a filter option, in the published order; Dan Caruso's event never is.
+  const mentorOptions = (await page.getByRole("combobox", { name: "Mentor" }).locator("option").allTextContents()).map((t) =>
+    t.trim(),
+  );
+  expect(mentorOptions.slice(0, MENTORS.length + 1)).toEqual(["All mentors", ...MENTORS.map((m) => m.name)]);
   expect(mentorOptions.join(" ")).not.toMatch(/Caruso/);
 });
 
@@ -260,7 +320,6 @@ test("demo slot capacity: one seat assigned, the next is blocked as full; confir
 });
 
 test("CSV export (signed in) neutralizes a formula in an applicant's major", async ({ page, playwright }) => {
-  // Created through the public API with the site's Origin, like the browser form.
   const email = uniqueEmail("org-csv");
   await createApplication(api, {
     fullName: "Formula Tester",
@@ -268,6 +327,7 @@ test("CSV export (signed in) neutralizes a formula in an applicant's major", asy
     major: "=1+2",
     mentorIds: [RON.id],
     firstChoiceMentorId: RON.id,
+    availabilityNotes: "=HYPERLINK(\"https://evil.example\")",
   });
 
   // A cross-site Origin is refused by the public API.
@@ -286,8 +346,10 @@ test("CSV export (signed in) neutralizes a formula in an applicant's major", asy
   const raw = await res.text();
   expect(raw).toContain(",'=1+2,");
   expect(raw).not.toMatch(/(^|,)=1\+2(,|\r?$)/m);
+  expect(raw).not.toMatch(/(^|,)"?=HYPERLINK/m);
 
   const [record] = await storedApplicationsFor(page.request, email);
   expect(record.major).toBe("'=1+2");
+  expect(record.availability_notes.startsWith("'=HYPERLINK")).toBe(true);
   expect(record.full_name).toBe("Formula Tester");
 });

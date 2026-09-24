@@ -1,6 +1,6 @@
 /**
  * Shared helpers for the end-to-end suite: the mentor fixtures the checklist names, unique test
- * data, the public application API, organizer sign-in/export, and form helpers.
+ * data, the public application API, organizer sign-in/export, and application-form helpers.
  *
  * Everything the suite creates uses e2e-… Illinois emails that are unique per run, so specs work
  * against a fresh PGlite database and against a real, non-empty Postgres (E2E_DATABASE_URL).
@@ -17,13 +17,18 @@ export interface MentorFixture {
   id: string;
   name: string;
   firstName: string;
-  /** Verified role, or null when it must NOT be shown (Vik's title is unverified). */
-  role: string | null;
+  /** Verified role and company ("role · company" on cards). */
+  role: string;
   company: string;
-  /** The single availability window a "window" CTA preselects, or null while scheduling. */
+  /** The single availability window the mentor's Select/Apply action preselects, or null while scheduling. */
   windowId: string | null;
-  /** CTA label on cards/panels. */
-  cta: string;
+  /** The one availability line on the Office Hours card. */
+  cardLine: string;
+  linkedin: string;
+  /** A distinctive phrase from the approved bio (profile page). */
+  bioFragment: string;
+  /** Approved "Can help with" labels (public). */
+  helpsWith: string[];
 }
 
 export const PATRICK: MentorFixture = {
@@ -33,7 +38,10 @@ export const PATRICK: MentorFixture = {
   role: "CEO & Co-Founder",
   company: "Samara Aerospace",
   windowId: "patrick-haddox-2026-10-01-am",
-  cta: "Apply to meet Patrick",
+  cardLine: "Thu, Oct 1 · 10:00–11:30 AM CT",
+  linkedin: "https://www.linkedin.com/in/patrick-haddox/",
+  bioFragment: "building the Hummingbird satellite bus",
+  helpsWith: ["Turning university research into a startup", "Raising a seed round for deep-tech hardware"],
 };
 export const ARNAV: MentorFixture = {
   id: "arnav-mishra",
@@ -42,16 +50,34 @@ export const ARNAV: MentorFixture = {
   role: "Co-Founder & CTO",
   company: "Doss",
   windowId: "arnav-mishra-2026-10-02-am",
-  cta: "Apply to meet Arnav",
+  cardLine: "Fri, Oct 2 · Morning, exact window pending",
+  linkedin: "https://www.linkedin.com/in/arnav-mishra/",
+  bioFragment: "AI-native alternative to legacy ERP software",
+  helpsWith: ["Going from engineer to technical co-founder", "Building B2B and enterprise software"],
 };
 export const VIK: MentorFixture = {
   id: "vikram-lakhwara",
   name: "Vikram “Vik” Lakhwara",
   firstName: "Vik",
-  role: null,
+  role: "Founder & Managing Member",
   company: "Stakehouse",
   windowId: null,
-  cta: "Express interest",
+  cardLine: "Scheduling in progress",
+  linkedin: "https://www.linkedin.com/in/viklakhwara/",
+  bioFragment: "a St. Louis venture fund that backs early-stage founders",
+  helpsWith: ["Raising a pre-seed round", "What early-stage investors look for"],
+};
+export const ELLIOTT: MentorFixture = {
+  id: "elliott-notrica",
+  name: "Elliott Notrica",
+  firstName: "Elliott",
+  role: "Founder & CEO",
+  company: "Symbio Bioculinary",
+  windowId: null,
+  cardLine: "Scheduling in progress",
+  linkedin: "https://www.linkedin.com/in/elliottnotrica/",
+  bioFragment: "engineers microorganisms to turn companies’ food waste into new ingredients",
+  helpsWith: ["Starting a company as an undergrad", "Biotech and food-tech startups"],
 };
 export const RON: MentorFixture = {
   id: "ron-lewis",
@@ -60,24 +86,166 @@ export const RON: MentorFixture = {
   role: "Co-Founder",
   company: "Auctus Advisory",
   windowId: null,
-  cta: "Express interest",
+  cardLine: "Scheduling in progress",
+  linkedin: "https://www.linkedin.com/in/ronlewis20/",
+  bioFragment: "repeat entrepreneur and co-founder of Auctus Advisory",
+  helpsWith: ["Revenue strategy and optimization", "Financial forecasting and planning"],
 };
 
-/** The four real mentors, in the published order. */
-export const MENTORS: MentorFixture[] = [PATRICK, ARNAV, VIK, RON];
+/** The five real mentors, in the published order. */
+export const MENTORS: MentorFixture[] = [PATRICK, ARNAV, VIK, ELLIOTT, RON];
+
+/** Mentors whose schedule is still pending (no window yet): Vik, Elliott and Ron. */
+export const PENDING_MENTORS: MentorFixture[] = MENTORS.filter((m) => m.windowId === null);
+
+/**
+ * Fictional demo mentors (content/demo.ts). The main e2e server runs with demo content on, so they
+ * follow the five real mentors in every lineup; production-content.spec.ts runs without them.
+ */
+export const DEMO_MENTOR_NAMES = ["Avery Sample", "Jordan Placeholder"];
 
 /** The capacity-1 demo slot used by the organizer capacity test (content/demo.ts). */
 export const DEMO_SLOT_ID = "demo-avery-slot-1400";
 
-/** Copy that must never be public: Ron's draft topics and organizer-only notes. */
-export const DRAFT_TOPICS = ["Revenue strategy", "Startup financial planning", "Communicating business progress to stakeholders"];
-export const ORGANIZER_ONLY = /commitments|Wednesday through Saturday|Willing to help|Verify title/i;
+/** The one sentence explaining how matching works — exactly once on /office-hours. */
+export const MATCHING_SENTENCE =
+  "Founders will match students by interests and availability and email selected applicants to confirm.";
 
-/** The canceled afterparty must not appear anywhere. */
-export const AFTERPARTY = /after-?party|HERE Apartments/i;
+// ---------------------------------------------------------------------------
+// Never public
+// ---------------------------------------------------------------------------
+
+/**
+ * Internal "basis" annotations of mentor expertise (content/mentors.ts). Labels are public; the basis
+ * behind each one never is. These phrases appear nowhere else in public copy.
+ */
+export const EXPERTISE_BASIS: RegExp[] = [
+  /Samara’s SpaceWERX contract/,
+  /Founders Showcase talk on building Doss/,
+  /Founders Showcase panelist/,
+  /Symbio licenses engineered microbes to food companies/,
+  /Writes publicly about Chicago venture capital/,
+  /Advises on stakeholder communication at Auctus Advisory/,
+  /\bBasis\b/,
+];
+
+/** Ron's suggested "Ask me about" topics are a DRAFT and must never be public. */
+export const DRAFT_TOPICS: RegExp[] = [/Startup financial planning/, /Communicating business progress to stakeholders/];
+
+/** Organizer-only notes (content/mentors.ts `organizerNotes`) — stripped before anything renders. */
+export const ORGANIZER_ONLY =
+  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)/i;
+
+/** Content-maintenance notes on approved fields (`note`) — never public. */
+export const CONTENT_NOTES =
+  /at the organizers' request|Grounded in (public sources|Ron’s supplied bio)|own topics if (he|she|they) suppl|Suggested topics pending|First sentence supplied by/i;
+
+/** The canceled Saturday afterparty (HERE Apartments) must not appear anywhere. */
+export const CANCELED_AFTERPARTY = /HERE Apartments|Founders Week Afterparty|founders-week-afterparty|after[\s-]?party/i;
+
+/** Copy the owner removed: no "one-on-one" promise, no "Founders vs" section. */
+export const ONE_ON_ONE = /one[\s-]on[\s-]one/i;
+export const FOUNDERS_VS = /Founders\s+vs\.?\b/i;
+
+// ---------------------------------------------------------------------------
+// Small utilities
+// ---------------------------------------------------------------------------
 
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Unfold RFC 5545 content lines (a CRLF followed by a space/tab continues the previous line). */
+export function unfoldIcs(text: string): string {
+  return text.replace(/\r?\n[ \t]/g, "");
+}
+
+/** The VEVENT blocks of an .ics document (unfolded). */
+export function icsEvents(text: string): string[] {
+  return unfoldIcs(text).match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) ?? [];
+}
+
+/** Occurrences of `pattern` (made global) in `text`. */
+export function countMatches(text: string, pattern: RegExp | string): number {
+  const re =
+    typeof pattern === "string"
+      ? new RegExp(escapeRegExp(pattern), "g")
+      : new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+  return text.match(re)?.length ?? 0;
+}
+
+/** Rendered text of a locator (innerText: excludes <script> payloads and display:none content). */
+export async function visibleText(locator: Locator): Promise<string> {
+  return locator.evaluate((el) => (el as HTMLElement).innerText);
+}
+
+/** Horizontal overflow of the document in px (0 when nothing scrolls sideways). */
+export async function horizontalOverflow(page: Page): Promise<number> {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+}
+
+/** A headshot is a real, loaded photo from /public/mentors/<id>.jpg (served through next/image). */
+export async function expectHeadshot(img: Locator, mentor: Pick<MentorFixture, "id" | "name">): Promise<void> {
+  await expect(img).toBeVisible();
+  await expect(img).toHaveAttribute("alt", mentor.name);
+  const src = decodeURIComponent((await img.getAttribute("src")) ?? "");
+  expect(src, `${mentor.name}'s headshot source`).toContain(`/mentors/${mentor.id}.jpg`);
+  await expect
+    .poll(() => img.evaluate((el: HTMLImageElement) => (el.complete ? el.naturalWidth : 0)), {
+      message: `${mentor.name}'s headshot should load`,
+    })
+    .toBeGreaterThan(0);
+}
+
+/** Resolves once React has hydrated `locator` (event handlers attached). */
+export async function waitForHydration(locator: Locator): Promise<void> {
+  await locator.first().waitFor({ state: "attached" });
+  await expect
+    .poll(() => locator.first().evaluate((el) => Object.keys(el).some((key) => key.startsWith("__reactProps$"))), {
+      message: "waiting for React to hydrate",
+      timeout: 60_000,
+    })
+    .toBe(true);
+}
+
+// ---------------------------------------------------------------------------
+// Site chrome
+// ---------------------------------------------------------------------------
+
+/** The header's one "Apply" button — accessible name "Apply for Office Hours" at every width. */
+export function headerApplyLink(page: Page): Locator {
+  return page.getByRole("banner").getByRole("link", { name: "Apply for Office Hours", exact: true });
+}
+
+/** Bottom edge (px from the viewport top) of the sticky site header. */
+export async function headerBottom(page: Page): Promise<number> {
+  return page.getByRole("banner").evaluate((el) => el.getBoundingClientRect().bottom);
+}
+
+/**
+ * The element's whole box is on screen and not hidden under the sticky header:
+ * top ≥ header bottom, bottom ≤ viewport height. Polls until scrolling has settled.
+ */
+export async function expectClearOfHeader(page: Page, target: Locator, label: string): Promise<void> {
+  await expect(target).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        const [box, bottom] = await Promise.all([
+          target.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+          }),
+          headerBottom(page),
+        ]);
+        const viewport = page.viewportSize()!.height;
+        return box.top >= bottom - 0.5 && box.bottom <= viewport + 0.5
+          ? "clear"
+          : `top ${box.top.toFixed(1)} / header bottom ${bottom.toFixed(1)} / bottom ${box.bottom.toFixed(1)} / viewport ${viewport}`;
+      },
+      { message: `${label}: fully visible below the sticky header`, timeout: 10_000 },
+    )
+    .toBe("clear");
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +261,7 @@ export function uniqueEmail(tag: string): string {
   return `e2e-${tag}-${RUN_ID}-${sequence}@illinois.edu`;
 }
 
-/** Marker shared by every email this suite creates (for scoped cleanup/searches). */
+/** Marker shared by every email this suite creates (for scoped searches). */
 export const E2E_EMAIL_MARKER = "e2e-";
 
 // ---------------------------------------------------------------------------
@@ -108,11 +276,16 @@ export interface ApplicationInput {
   firstChoiceMentorId: string;
   /** Option keys, e.g. "window:patrick-haddox-2026-10-01-am". */
   availability?: string[];
+  /** Broad availability. Defaults to a sentence when no window is picked (the schema needs one or the other). */
+  availabilityNotes?: string;
   workingOn?: string;
   question?: string;
 }
 
+export const DEFAULT_BROAD_AVAILABILITY = "Weekday afternoons after 2 PM; anytime Friday.";
+
 export function applicationPayload(input: ApplicationInput) {
+  const availability = input.availability ?? [];
   return {
     idempotencyKey: randomUUID(),
     fullName: input.fullName,
@@ -127,8 +300,8 @@ export function applicationPayload(input: ApplicationInput) {
     question: input.question ?? "How do I find my first ten paying customers?",
     mentorIds: input.mentorIds,
     firstChoiceMentorId: input.firstChoiceMentorId,
-    availability: input.availability ?? [],
-    availabilityNotes: "",
+    availability,
+    availabilityNotes: input.availabilityNotes ?? (availability.length ? "" : DEFAULT_BROAD_AVAILABILITY),
     link: "",
     acknowledgeNoGuarantee: true,
     consentToShare: true,
@@ -253,18 +426,64 @@ export async function setApplicationStatus(request: APIRequestContext, id: strin
 }
 
 // ---------------------------------------------------------------------------
-// Pages
+// The application form (/office-hours#apply)
 // ---------------------------------------------------------------------------
 
-/** Resolves once React has hydrated `locator` (event handlers attached). */
-export async function waitForHydration(locator: Locator): Promise<void> {
-  await locator.first().waitFor({ state: "attached" });
-  await expect
-    .poll(() => locator.first().evaluate((el) => Object.keys(el).some((key) => key.startsWith("__reactProps$"))), {
-      message: "waiting for React to hydrate",
-      timeout: 60_000,
-    })
-    .toBe(true);
+/** The office-hours application form (named by its "Apply for Office Hours" heading). */
+export function applicationForm(page: Page): Locator {
+  return page.getByRole("form", { name: "Apply for Office Hours" });
+}
+
+/** The application section (#apply): heading, notices, the form and — after submitting — the confirmation. */
+export function applySection(page: Page): Locator {
+  return page.getByRole("region", { name: "Apply for Office Hours", exact: true });
+}
+
+/**
+ * The note that tells a student which mentor a link preselected — "Ron Lewis added to your
+ * mentors." or "Ron Lewis is selected below." (the wording depends on whether answers were already
+ * in progress).
+ */
+export function preselectionNotice(page: Page, mentor: Pick<MentorFixture, "name">): Locator {
+  return applySection(page).getByText(new RegExp(`${escapeRegExp(mentor.name)} (added to your mentors|is selected below)`));
+}
+
+/** The "Apply for Office Hours" heading of the application section. */
+export function applicationHeading(page: Page): Locator {
+  return page.getByRole("heading", { name: "Apply for Office Hours", exact: true });
+}
+
+/** A mentor's checkbox in the application ("Patrick Haddox CEO & Co-Founder · Samara Aerospace"). */
+export function mentorCheckbox(page: Page, mentor: Pick<MentorFixture, "name">): Locator {
+  return applicationForm(page).getByRole("checkbox", { name: new RegExp(`^${escapeRegExp(mentor.name)}\\b`) });
+}
+
+/** "I can make …" checkboxes for a mentor's published window(s) — shown once the mentor is selected. */
+export function mentorWindows(page: Page, mentor: Pick<MentorFixture, "firstName">): Locator {
+  return applicationForm(page).getByRole("checkbox", {
+    name: new RegExp(`^I can make .*${escapeRegExp(mentor.firstName)}’s office-hours (window|time)$`),
+  });
+}
+
+/** First-choice radio for a mentor (shown once two or more mentors are selected). */
+export function firstChoiceRadio(page: Page, mentor: Pick<MentorFixture, "name">): Locator {
+  return applicationForm(page).getByRole("group", { name: /^First choice/ }).getByRole("radio", { name: mentor.name, exact: true });
+}
+
+export function fullNameField(page: Page): Locator {
+  return applicationForm(page).getByRole("textbox", { name: "Full name" });
+}
+export function emailField(page: Page): Locator {
+  return applicationForm(page).getByRole("textbox", { name: "Illinois email" });
+}
+export function broadAvailabilityField(page: Page): Locator {
+  return applicationForm(page).getByRole("textbox", { name: /^Broad availability/ });
+}
+export function workingOnField(page: Page): Locator {
+  return applicationForm(page).getByRole("textbox", { name: /^What are you working on/ });
+}
+export function questionField(page: Page): Locator {
+  return applicationForm(page).getByRole("textbox", { name: /^What question would you like help with/ });
 }
 
 /**
@@ -279,21 +498,13 @@ export async function tick(control: Locator): Promise<void> {
   await expect(control).toBeChecked();
 }
 
-/** The office-hours application form (the #apply section on /office-hours). */
-export function applicationForm(page: Page): Locator {
-  return page.getByRole("form", { name: "Apply for Office Hours" });
-}
-
-/** A mentor's checkbox in the application. */
-export function mentorCheckbox(page: Page, mentor: Pick<MentorFixture, "name">): Locator {
-  return applicationForm(page).getByRole("checkbox", { name: new RegExp(`^${escapeRegExp(mentor.name)}\\b`) });
-}
-
-/** The time checkboxes shown once a mentor with availability is selected. */
-export function mentorTimes(page: Page, mentor: Pick<MentorFixture, "firstName">): Locator {
-  return applicationForm(page)
-    .getByRole("group", { name: new RegExp(`^When could you meet ${escapeRegExp(mentor.firstName)}\\?`) })
-    .getByRole("checkbox");
+/** Clear a checkbox by clicking its label. */
+export async function untick(control: Locator): Promise<void> {
+  if (!(await control.isChecked())) return;
+  const id = await control.getAttribute("id");
+  expect(id, "control needs an id for its <label for>").toBeTruthy();
+  await control.page().locator(`label[for="${id}"]`).first().click();
+  await expect(control).not.toBeChecked();
 }
 
 export interface AboutYou {
@@ -305,20 +516,21 @@ export interface AboutYou {
 
 export async function fillAboutYou(page: Page, about: AboutYou): Promise<void> {
   const form = applicationForm(page);
-  await form.getByRole("textbox", { name: "Full name" }).fill(about.fullName);
-  await form.getByRole("textbox", { name: "Illinois email" }).fill(about.email);
+  await fullNameField(page).fill(about.fullName);
+  await emailField(page).fill(about.email);
   await form.getByRole("combobox", { name: "Year" }).selectOption({ label: about.year ?? "Junior" });
   await form.getByRole("textbox", { name: "Major" }).fill(about.major ?? "Computer Engineering");
 }
 
 export const WORKING_ON = "A marketplace that helps student organizations split event costs.";
 export const QUESTION = "How do I know whether anyone will pay for this before I build more?";
+export const BROAD_AVAILABILITY = "Tuesday and Thursday afternoons; anytime Friday.";
 
 export async function fillProject(page: Page): Promise<void> {
   const form = applicationForm(page);
   await tick(form.getByRole("radio", { name: /^Building\b/ }));
-  await form.getByRole("textbox", { name: "What are you working on or interested in exploring?" }).fill(WORKING_ON);
-  await form.getByRole("textbox", { name: "What specific question or challenge would you like help with?" }).fill(QUESTION);
+  await workingOnField(page).fill(WORKING_ON);
+  await questionField(page).fill(QUESTION);
 }
 
 export async function fillConsents(page: Page): Promise<void> {
@@ -327,33 +539,37 @@ export async function fillConsents(page: Page): Promise<void> {
   await tick(form.getByRole("checkbox", { name: /^I agree that Founders may share my relevant answers/ }));
 }
 
-/** Patrick (with his Thursday window) + Ron (interest only), Ron as first choice. */
-export async function choosePatrickAndRonFirst(page: Page): Promise<void> {
-  const form = applicationForm(page);
-  await tick(mentorCheckbox(page, PATRICK));
-  await tick(mentorTimes(page, PATRICK).first());
-  await tick(mentorCheckbox(page, RON));
-  await tick(form.getByRole("radio", { name: `${RON.name}: First choice` }));
-}
-
 export function submitButton(page: Page): Locator {
   return applicationForm(page).getByRole("button", { name: "Submit application" });
 }
 
-/** The public header's primary CTA — accessible name "Apply for Office Hours" at every width. */
-export function headerApplyLink(page: Page): Locator {
-  return page.getByRole("banner").getByRole("link", { name: "Apply for Office Hours", exact: true });
+/** The confirmation that replaces the form once the server stored the application. */
+export function confirmation(page: Page): Locator {
+  return page.getByRole("region", { name: "Application received" });
 }
+
+/** The error summary shown after a submit with invalid answers. */
+export function errorSummary(page: Page): Locator {
+  return page.getByRole("alert").filter({ hasText: "Please fix the highlighted answers" });
+}
+
+/** The API's rule when a student gives neither a listed time nor broad availability. */
+export const AVAILABILITY_RULE_MESSAGE =
+  "Tell us when you’re generally free during Founders Week (or pick one of the listed times).";
+/** Shown when a chosen mentor has no times yet (Vik, Elliott, Ron): only broad availability helps. */
+export const pendingAvailabilityMessage = (names: string) =>
+  `Tell us when you’re generally free during Founders Week — ${names}’s times aren’t set yet.`;
 
 // ---------------------------------------------------------------------------
 // Information-only guard (Dan Caruso)
 // ---------------------------------------------------------------------------
 
 /** Words that would signal an application/booking flow. Dan Caruso's event must have none. */
-export const CTA_WORDS = /\b(apply|application|express interest|interest form|wait-?list|book(ing)?|reserve|screening)\b/i;
+export const CTA_WORDS =
+  /\b(apply|applying|application|applications|express interest|interest form|wait-?list|book(ing)?|reserve|reservation|sign[\s-]?up|register|registration|rsvp|screening)\b/i;
 
 /** No link or button that starts an application/interest/booking flow, and no such wording. */
-export async function expectInformationOnly(scope: Locator) {
+export async function expectInformationOnly(scope: Locator): Promise<void> {
   for (const control of await scope.getByRole("link").all()) {
     const href = (await control.getAttribute("href")) ?? "";
     expect(href, "no link into the application").not.toMatch(/#apply|\/apply\b|[?&]mentor=/);
@@ -362,5 +578,7 @@ export async function expectInformationOnly(scope: Locator) {
   for (const control of await scope.getByRole("button").all()) {
     expect((await control.innerText()).trim()).not.toMatch(CTA_WORDS);
   }
-  expect(await scope.innerText()).not.toMatch(CTA_WORDS);
+  await expect(scope.getByRole("form")).toHaveCount(0);
+  await expect(scope.getByRole("textbox")).toHaveCount(0);
+  expect(await visibleText(scope)).not.toMatch(CTA_WORDS);
 }
