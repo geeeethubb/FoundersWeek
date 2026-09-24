@@ -155,6 +155,8 @@ export interface DatabaseFailure {
   code: string | null;
   message: string;
   at: string;
+  /** Connection milestones (names and timings only), for diagnosing hangs. */
+  trace?: string[];
 }
 const globalForFailure = globalThis as unknown as { __foundersDbFailure?: DatabaseFailure | null };
 export function lastDatabaseFailure(): DatabaseFailure | null {
@@ -192,7 +194,14 @@ const SETUP_SESSION_SETTINGS = [
 async function connectPostgres(rawUrl: string, schema: string | null, autoMigrate: boolean): Promise<Database> {
   const postgres = (await import("postgres")).default;
   const { url, ssl } = normalizePostgresUrl(rawUrl);
+  const started = Date.now();
+  const trace: string[] = [];
+  const note = (step: string) => void (trace.length < 30 && trace.push(`${step} ${Date.now() - started}ms`));
   const sql = postgres(url, {
+    // Milestone hooks only (no values recorded): server parameters mean startup/auth finished.
+    onparameter: (key: string) => note(`param:${key}`),
+    onclose: () => note("closed"),
+    debug: () => note("query-sent"),
     ssl,
     // Required for transaction-mode poolers (Supabase :6543, Neon -pooler, PgBouncer); harmless elsewhere.
     prepare: false,
@@ -242,7 +251,7 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
   ): Promise<never> => {
     const code = (cause as { code?: string } | undefined)?.code ?? null;
     const message = sanitizeDbMessage(cause instanceof Error ? cause.message : error.message);
-    globalForFailure.__foundersDbFailure = { stage, code, message, at: new Date().toISOString() };
+    globalForFailure.__foundersDbFailure = { stage, code, message, at: new Date().toISOString(), trace: [...trace] };
     console.error(`[db] ${stage} failed${code ? ` (${code})` : ""}: ${message}`);
     sql.end({ timeout: 1 }).catch(() => {});
     throw error;

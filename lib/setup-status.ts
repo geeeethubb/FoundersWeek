@@ -176,6 +176,25 @@ async function probeHandshake(rawUrl: string, host: string, port: number): Promi
   return steps.join("; ");
 }
 
+/** One fresh driver connection with the app's options, before the app connects (ordering test). */
+async function preProbe(rawUrl: string): Promise<string> {
+  try {
+    const postgres = (await import("postgres")).default;
+    const { normalizePostgresUrl } = await import("@/db/migrate-core.mjs");
+    const { url, ssl } = normalizePostgresUrl(rawUrl);
+    const sql = postgres(url, { ssl, prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10, fetch_types: false, onnotice: () => {} });
+    const started = Date.now();
+    const result = await Promise.race([
+      sql.unsafe("select 1").then(() => `pre ok ${Date.now() - started}ms`),
+      new Promise<string>((r) => setTimeout(() => r("pre timed out"), 6000)),
+    ]).catch((e: Error & { code?: string }) => `pre error ${e.code ?? ""} ${sanitizeForProbe(e.message)}`);
+    sql.end({ timeout: 1 }).catch(() => {});
+    return result;
+  } catch (e) {
+    return `pre failed: ${sanitizeForProbe((e as Error).message)}`;
+  }
+}
+
 function sanitizeForProbe(message: string): string {
   return message
     .replace(/postgres(?:ql)?:\/\/\S+/gi, "[connection string]")
@@ -218,12 +237,16 @@ export async function getSetupStatus(): Promise<SetupStatus> {
           : "DATABASE_URL must be a postgres:// or postgresql:// connection string (PGlite can't be used on Vercel).",
     });
   } else {
-    const persistence = await getPersistenceStatus();
-    const failure = lastDatabaseFailure();
     const found = findDatabaseUrl(env);
+    // Only while the database has been failing: a fresh connection first, to test ordering effects.
+    const pre = found && config.kind === "postgres" && lastDatabaseFailure() ? await preProbe(found.url) : null;
+    const mainStarted = Date.now();
+    const persistence = await getPersistenceStatus();
+    const mainMs = Date.now() - mainStarted;
+    const failure = lastDatabaseFailure();
     const probe = !persistence.ready && found && config.kind === "postgres" ? await probeDatabase(found.url) : null;
     const failureNote = failure
-      ? ` — using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}${probe ? `; probe: ${probe}` : ""}`
+      ? ` — using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}; app attempt ${mainMs}ms, trace [${failure.trace?.join(", ") ?? ""}]${pre ? `; ${pre}` : ""}${probe ? `; probe: ${probe}` : ""}`
       : probe
         ? ` — using ${found?.name ?? "?"}; probe: ${probe}`
         : "";
