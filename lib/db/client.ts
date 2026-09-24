@@ -199,6 +199,9 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
     max: Number(process.env.DATABASE_POOL_MAX ?? 3),
     idle_timeout: 20,
     connect_timeout: 10,
+    // Skip the startup array-type lookup: it hangs through the Neon pooler, and no column or
+    // parameter here is a Postgres array.
+    fetch_types: false,
     onnotice: () => {},
   });
   const prelude = schema ? searchPathStatement(schema) : null;

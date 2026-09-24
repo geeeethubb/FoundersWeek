@@ -39,7 +39,7 @@ if (url.startsWith("pglite:")) {
 } else if (url.startsWith("postgres://") || url.startsWith("postgresql://")) {
   const postgres = (await import("postgres")).default;
   const { url: cleanUrl, ssl } = normalizePostgresUrl(url);
-  const sql = postgres(cleanUrl, { ssl, prepare: false, max: 1, onnotice: () => {} });
+  const sql = postgres(cleanUrl, { ssl, prepare: false, max: 1, fetch_types: false, onnotice: () => {} });
   try {
     const applied = await applyMigrations(postgresAdapter(sql), dir, log, { schema });
     console.log(applied.length ? `Applied ${applied.length} migration(s).` : "Database is up to date.");
