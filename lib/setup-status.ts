@@ -4,6 +4,8 @@
  * lengths, connection strings or database host names.
  */
 import "server-only";
+import dns from "node:dns/promises";
+import net from "node:net";
 import { getSite } from "@/content";
 import { getAppSecret, getOrganizerPassword } from "@/lib/config";
 import {
@@ -30,6 +32,55 @@ export interface SetupStatus {
   checks: SetupCheck[];
 }
 
+
+/**
+ * Network probe for a connection string that won't connect. Reports only non-sensitive facts:
+ * provider type, pooled/direct, port, DNS address families and whether a plain TCP connection
+ * to the port succeeds — never the host name or credentials.
+ */
+async function probeDatabase(rawUrl: string): Promise<string> {
+  let host: string;
+  let port: number;
+  try {
+    const u = new URL(rawUrl);
+    host = u.hostname;
+    port = Number(u.port || 5432);
+  } catch {
+    return "connection string is not a valid URL";
+  }
+  const provider = /neon\.tech$/i.test(host)
+    ? `Neon ${/-pooler\./i.test(host) ? "(pooled)" : "(direct)"}`
+    : /pooler\.supabase\.com$/i.test(host)
+      ? "Supabase pooler"
+      : /supabase\.co$/i.test(host)
+        ? "Supabase direct host (IPv6-only — unreachable from Vercel; use the pooler URI)"
+        : /vercel-storage\.com$/i.test(host)
+          ? "Vercel Postgres"
+          : "other host";
+  let dnsNote: string;
+  try {
+    const addresses = await dns.lookup(host, { all: true });
+    const v4 = addresses.filter((a) => a.family === 4).length;
+    const v6 = addresses.filter((a) => a.family === 6).length;
+    dnsNote = `DNS ${v4} IPv4 / ${v6} IPv6`;
+  } catch (error) {
+    dnsNote = `DNS failed (${(error as { code?: string }).code ?? "error"})`;
+  }
+  const started = Date.now();
+  const tcp = await new Promise<string>((resolve) => {
+    const socket = net.connect({ host, port, timeout: 6000 });
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(`TCP ok in ${Date.now() - started}ms`);
+    });
+    socket.once("timeout", () => {
+      socket.destroy();
+      resolve("TCP timed out after 6s");
+    });
+    socket.once("error", (e) => resolve(`TCP error ${(e as { code?: string }).code ?? "unknown"}`));
+  });
+  return `${provider}, port ${port}, ${dnsNote}, ${tcp}`;
+}
 
 export async function getSetupStatus(): Promise<SetupStatus> {
   const checks: SetupCheck[] = [];
@@ -67,9 +118,13 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   } else {
     const persistence = await getPersistenceStatus();
     const failure = lastDatabaseFailure();
+    const found = findDatabaseUrl(env);
+    const probe = !persistence.ready && found && config.kind === "postgres" ? await probeDatabase(found.url) : null;
     const failureNote = failure
-      ? ` — ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}`
-      : "";
+      ? ` — using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}${probe ? `; probe: ${probe}` : ""}`
+      : probe
+        ? ` — using ${found?.name ?? "?"}; probe: ${probe}`
+        : "";
     const via = config.kind === "pglite" ? "local PGlite" : `Postgres via ${source ?? "DATABASE_URL"}`;
     const schema = config.schema ? `, schema "${config.schema}"` : "";
     checks.push(
