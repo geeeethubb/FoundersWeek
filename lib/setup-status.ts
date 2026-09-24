@@ -79,7 +79,96 @@ async function probeDatabase(rawUrl: string): Promise<string> {
     });
     socket.once("error", (e) => resolve(`TCP error ${(e as { code?: string }).code ?? "unknown"}`));
   });
-  return `${provider}, port ${port}, ${dnsNote}, ${tcp}`;
+  const handshake = tcp.startsWith("TCP ok") ? await probeHandshake(rawUrl, host, port) : "";
+  return `${provider}, port ${port}, ${dnsNote}, ${tcp}${handshake ? `, ${handshake}` : ""}`;
+}
+
+/**
+ * Walks the Postgres wire handshake by hand (SSLRequest → TLS → StartupMessage) and reports how far
+ * it gets, then tries the driver without its type lookup. Only step results are returned.
+ */
+async function probeHandshake(rawUrl: string, host: string, port: number): Promise<string> {
+  const tls = await import("node:tls");
+  const u = new URL(rawUrl);
+  const user = decodeURIComponent(u.username);
+  const database = decodeURIComponent(u.pathname.slice(1)) || user;
+  const steps: string[] = [];
+  await new Promise<void>((resolve) => {
+    const socket = net.connect({ host, port });
+    const done = (note: string) => {
+      steps.push(note);
+      socket.destroy();
+      resolve();
+    };
+    const timer = setTimeout(() => done(`handshake stalled after: ${steps.join(" → ") || "connect"}`), 7000);
+    socket.once("error", (e) => {
+      clearTimeout(timer);
+      done(`socket error ${(e as { code?: string }).code ?? ""}`);
+    });
+    socket.once("connect", () => {
+      const ssl = Buffer.alloc(8);
+      ssl.writeInt32BE(8, 0);
+      ssl.writeInt32BE(80877103, 4);
+      socket.write(ssl);
+      socket.once("data", (d) => {
+        steps.push(`SSL reply ${String.fromCharCode(d[0])}`);
+        if (d[0] !== 83) {
+          clearTimeout(timer);
+          return done("server refused SSL");
+        }
+        const started = Date.now();
+        const secure = tls.connect({ socket, servername: host, rejectUnauthorized: false });
+        secure.once("error", (e) => {
+          clearTimeout(timer);
+          done(`TLS error ${(e as { code?: string }).code ?? sanitizeForProbe((e as Error).message)}`);
+        });
+        secure.once("secureConnect", () => {
+          steps.push(`TLS ok ${Date.now() - started}ms`);
+          const params = Buffer.from(`user\0${user}\0database\0${database}\0\0`);
+          const startup = Buffer.alloc(8 + params.length);
+          startup.writeInt32BE(8 + params.length, 0);
+          startup.writeInt32BE(196608, 4);
+          params.copy(startup, 8);
+          secure.write(startup);
+          secure.once("data", (m) => {
+            clearTimeout(timer);
+            const type = String.fromCharCode(m[0]);
+            if (type === "R") done(`startup → auth request ${m.readInt32BE(5)}`);
+            else if (type === "E") {
+              const text = m.toString("utf8", 5).split("\0").find((f) => f.startsWith("M"))?.slice(1) ?? "error";
+              done(`startup → error: ${sanitizeForProbe(text)}`);
+            } else done(`startup → message ${type}`);
+            secure.destroy();
+          });
+        });
+      });
+    });
+  });
+  // The real driver, without its startup type lookup (fetch_types).
+  try {
+    const postgres = (await import("postgres")).default;
+    const { normalizePostgresUrl } = await import("@/db/migrate-core.mjs");
+    const { url, ssl } = normalizePostgresUrl(rawUrl);
+    const sql = postgres(url, { ssl, prepare: false, max: 1, connect_timeout: 8, fetch_types: false, onnotice: () => {} });
+    const started = Date.now();
+    const result = await Promise.race([
+      sql`select 1 as ok`.then(() => `driver (no type lookup) ok ${Date.now() - started}ms`),
+      new Promise<string>((r) => setTimeout(() => r("driver (no type lookup) timed out"), 9000)),
+    ]).catch((e: Error & { code?: string }) => `driver error ${e.code ?? ""} ${sanitizeForProbe(e.message)}`);
+    sql.end({ timeout: 1 }).catch(() => {});
+    steps.push(result);
+  } catch (e) {
+    steps.push(`driver probe failed: ${sanitizeForProbe((e as Error).message)}`);
+  }
+  return steps.join("; ");
+}
+
+function sanitizeForProbe(message: string): string {
+  return message
+    .replace(/postgres(?:ql)?:\/\/\S+/gi, "[connection string]")
+    .replace(/\b(?:[a-z0-9-]+\.)+(?:tech|co|com|net|org|io|dev|app|cloud)\b/gi, "[host]")
+    .replace(/\bep-[a-z0-9-]+\b/gi, "[endpoint]")
+    .slice(0, 160);
 }
 
 export async function getSetupStatus(): Promise<SetupStatus> {
