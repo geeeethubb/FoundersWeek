@@ -144,19 +144,32 @@ async function probeHandshake(rawUrl: string, host: string, port: number): Promi
       });
     });
   });
-  // The real driver, without its startup type lookup (fetch_types).
+  // The real driver in several shapes, to isolate what differs from the app's own connection:
+  // A = the app's exact options + simple-protocol query; B = app options + extended protocol;
+  // C = single connection + simple protocol; D = single connection + extended protocol.
   try {
     const postgres = (await import("postgres")).default;
     const { normalizePostgresUrl } = await import("@/db/migrate-core.mjs");
     const { url, ssl } = normalizePostgresUrl(rawUrl);
-    const sql = postgres(url, { ssl, prepare: false, max: 1, connect_timeout: 8, fetch_types: false, onnotice: () => {} });
-    const started = Date.now();
-    const result = await Promise.race([
-      sql`select 1 as ok`.then(() => `driver (no type lookup) ok ${Date.now() - started}ms`),
-      new Promise<string>((r) => setTimeout(() => r("driver (no type lookup) timed out"), 9000)),
-    ]).catch((e: Error & { code?: string }) => `driver error ${e.code ?? ""} ${sanitizeForProbe(e.message)}`);
-    sql.end({ timeout: 1 }).catch(() => {});
-    steps.push(result);
+    const appOptions = { ssl, prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10, fetch_types: false, onnotice: () => {} };
+    const singleOptions = { ssl, prepare: false, max: 1, connect_timeout: 8, fetch_types: false, onnotice: () => {} };
+    const variants: [string, typeof appOptions | typeof singleOptions, boolean][] = [
+      ["A", appOptions, true],
+      ["B", appOptions, false],
+      ["C", singleOptions, true],
+      ["D", singleOptions, false],
+    ];
+    for (const [name, options, simple] of variants) {
+      const sql = postgres(url, options);
+      const started = Date.now();
+      const query = simple ? sql.unsafe("select 1") : sql.unsafe("select $1::int as ok", [1]);
+      const result = await Promise.race([
+        query.then(() => `${name} ok ${Date.now() - started}ms`),
+        new Promise<string>((r) => setTimeout(() => r(`${name} timed out`), 6000)),
+      ]).catch((e: Error & { code?: string }) => `${name} error ${e.code ?? ""} ${sanitizeForProbe(e.message)}`);
+      sql.end({ timeout: 1 }).catch(() => {});
+      steps.push(result);
+    }
   } catch (e) {
     steps.push(`driver probe failed: ${sanitizeForProbe((e as Error).message)}`);
   }

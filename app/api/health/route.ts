@@ -14,6 +14,8 @@ export async function GET() {
   return Response.json(
     {
       applications: status.applicationsOpen ? "open" : "not-ready",
+      // Which deployment answered (public git commit), so a redeploy can be confirmed.
+      build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
       checks: status.checks.map(({ key, ok, status: s, fix }) => ({ key, ok, status: s, fix })),
     },
     { headers: { "Cache-Control": "no-store" } },
