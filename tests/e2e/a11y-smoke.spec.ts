@@ -1,8 +1,8 @@
 /**
  * Checklist 7 — accessibility smoke test on every public page (desktop 1440 and phone 390):
  * exactly one h1, a main landmark, a working skip link as the first tab stop, headings that don't
- * skip levels, no horizontal overflow, and the header's Apply button reachable by keyboard with a
- * visible focus indicator.
+ * skip levels, no horizontal overflow, no em dashes in the copy, and the header's Apply button
+ * reachable by keyboard with a visible focus indicator.
  */
 import { expect, test } from "@playwright/test";
 import { E2E_BASE_URL } from "./support/env";
@@ -39,6 +39,10 @@ for (const { label, path, status } of PAGES) {
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
     await expect(page.getByRole("main")).toHaveCount(1);
     await expect(page.locator("main#main")).toHaveCount(1);
+
+    // Plain student-org copy: no em dashes, in the text or the page's serialized data.
+    await expect(page.locator("body")).not.toContainText("—");
+    await expect(page).not.toHaveTitle(/—/);
 
     // Headings never skip a level on the way down (h1 → h3 without an h2, etc.).
     const levels = await page

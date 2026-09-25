@@ -23,8 +23,8 @@ export interface MentorFixture {
   /** The single availability window the mentor's Select/Apply action preselects, or null while scheduling. */
   windowId: string | null;
   /**
-   * True when the mentor's times aren't set yet (no window: Vik, Elliott, Ron), so the application
-   * requires broad availability. A published window (Patrick, Arnav, Rishab) is enough on its own.
+   * True when the mentor's times aren't set yet (no window: Vik, Elliott), so the application
+   * requires broad availability. A published window (Patrick, Arnav, Ron, Rishab) is enough on its own.
    */
   timesPending: boolean;
   /** The one availability line on the Office Hours card. */
@@ -63,7 +63,7 @@ export const ARNAV: MentorFixture = {
   company: "Doss",
   windowId: "arnav-mishra-2026-10-02-am",
   timesPending: false,
-  cardLine: "Fri, Oct 2 · Morning, exact window pending",
+  cardLine: "Fri, Oct 2 · 10:00–11:30 AM CT",
   linkedin: "https://www.linkedin.com/in/arnav-mishra/",
   bioFragment: "AI-native alternative to legacy ERP software",
   helpsWith: ["Going from engineer to technical co-founder", "Building B2B and enterprise software"],
@@ -100,9 +100,9 @@ export const RON: MentorFixture = {
   firstName: "Ron",
   role: "Co-Founder",
   company: "Auctus Advisory",
-  windowId: null,
-  timesPending: true,
-  cardLine: "Scheduling in progress",
+  windowId: "ron-lewis-2026-10-01-pm",
+  timesPending: false,
+  cardLine: "Thu, Oct 1 · 2:30–4:30 PM CT",
   linkedin: "https://www.linkedin.com/in/ronlewis20/",
   bioFragment: "repeat entrepreneur and co-founder of Auctus Advisory",
   helpsWith: ["Revenue strategy and optimization", "Financial forecasting and planning"],
@@ -111,6 +111,7 @@ export const RON: MentorFixture = {
 /**
  * The sixth mentor: a confirmed window on Thu, Oct 1, anytime from noon to 5 PM (never Friday), so
  * his "Apply to meet Rishab" preselects that window and, like Patrick's, it's enough on its own.
+ * Organizers split it into ten 25-minute sessions (12:00 to 4:30).
  * No approved topic list: his card shows the first sentence of his bio; his profile shows
  * "Background" chips and a "Good fit for" paragraph instead of "Can help with".
  */
@@ -138,15 +139,34 @@ export const AUVI_LABS_URL = "https://www.auvilabs.com/";
 export const RISHAB_SHOWCASE_SESSION = "Health Innovation: From Therapeutics to Devices";
 /** The public note under Rishab's office-hours window on his profile. */
 export const RISHAB_WINDOW_NOTE =
-  "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.";
+  "Rishab is free anytime during this window, from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 /** Claims never made about Auvi's device (investigational). */
 export const AUVI_CLAIMS = /FDA[\s-]*(approved|cleared)|\bcleared by the FDA\b|commercially available|clinically proven/i;
+
+/** Patrick's office hours are in person: the venue, then the street address, on his profile. */
+export const PATRICK_VENUE = "Espresso Royale at Grainger Library";
+export const PATRICK_ADDRESS = "1301 W Springfield Ave, Urbana, IL 61801";
+
+/** Ron's office hours are in person: the building, then the street address, on his profile. */
+export const RON_VENUE = "Business Instructional Facility (BIF)";
+export const RON_ADDRESS = "515 E. Gregory Drive, Champaign, IL 61820";
+/** The public note under Ron's office-hours window on his profile. */
+export const RON_WINDOW_NOTE =
+  "Ron is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
+/**
+ * Ron is also open to Oct 4, but that's organizer-only: no date, day or hint of it may appear
+ * publicly (Founders Week ends Sat, Oct 3).
+ */
+export const OCT_4 = /\bOct(ober)?\.?\s+4(th)?\b|\b2026-10-04\b|\bSun(day)?,?\s+Oct|open to Oct/i;
 
 /** The six real mentors, in the published order. */
 export const MENTORS: MentorFixture[] = [PATRICK, ARNAV, VIK, ELLIOTT, RON, RISHAB];
 
-/** Mentors whose schedule is still pending (no window yet): Vik, Elliott and Ron. */
+/** Mentors whose schedule is still pending (no window yet): Vik and Elliott. */
 export const PENDING_MENTORS: MentorFixture[] = MENTORS.filter((m) => m.windowId === null);
+
+/** Mentors with a published office-hours window: Patrick, Arnav, Ron and Rishab. */
+export const WINDOW_MENTORS: MentorFixture[] = MENTORS.filter((m) => m.windowId !== null);
 
 /**
  * Fictional demo mentors (content/demo.ts). The main e2e server runs with demo content on, so they
@@ -154,8 +174,74 @@ export const PENDING_MENTORS: MentorFixture[] = MENTORS.filter((m) => m.windowId
  */
 export const DEMO_MENTOR_NAMES = ["Avery Sample", "Jordan Placeholder"];
 
-/** The capacity-1 demo slot used by the organizer capacity test (content/demo.ts). */
+/** The capacity-1 demo slot used by the organizer capacity test (content/demo.ts, 2:00–2:25 PM). */
 export const DEMO_SLOT_ID = "demo-avery-slot-1400";
+
+// ---------------------------------------------------------------------------
+// Office-hours sessions (site.officeHours: 25 minutes, then a 5-minute break)
+// ---------------------------------------------------------------------------
+
+/** The session rule, word for word, wherever it's stated publicly. */
+export const SESSION_RULE = "Each session is 25 minutes, with a 5-minute break between sessions.";
+/** End of the broad-availability hint when none of the chosen mentors lists a time. */
+export const SESSION_LENGTH_HINT = "Sessions are 25 minutes.";
+
+export interface SessionFixture {
+  /** Generated id: "<windowId>-<HHMM>" (stored with appointments). */
+  id: string;
+  /** How organizers and students see it. */
+  label: string;
+  /** Just the time range, e.g. "10:00–10:25 AM CT". */
+  time: string;
+}
+
+/** A window's sessions from literal start/time pairs (ids "<windowId>-<HHMM>"). */
+function sessionsIn(mentor: MentorFixture, day: string, grid: [start: string, time: string][]): SessionFixture[] {
+  return grid.map(([start, time]) => ({ id: `${mentor.windowId}-${start}`, label: `${day} · ${time}`, time }));
+}
+
+/**
+ * Patrick's window (Thu, Oct 1, 10:00–11:30 AM) split into three 25-minute sessions. He agreed to
+ * host one or two, so organizers see a note; the grid itself is never published.
+ */
+export const PATRICK_SESSIONS: SessionFixture[] = sessionsIn(PATRICK, "Thu, Oct 1", [
+  ["1000", "10:00–10:25 AM CT"],
+  ["1030", "10:30–10:55 AM CT"],
+  ["1100", "11:00–11:25 AM CT"],
+]);
+
+/** Rishab's window (Thu, Oct 1, noon to 5 PM): ten sessions, 12:00 to 4:30. */
+export const RISHAB_SESSIONS: SessionFixture[] = sessionsIn(RISHAB, "Thu, Oct 1", [
+  ["1200", "12:00–12:25 PM CT"],
+  ["1230", "12:30–12:55 PM CT"],
+  ["1300", "1:00–1:25 PM CT"],
+  ["1330", "1:30–1:55 PM CT"],
+  ["1400", "2:00–2:25 PM CT"],
+  ["1430", "2:30–2:55 PM CT"],
+  ["1500", "3:00–3:25 PM CT"],
+  ["1530", "3:30–3:55 PM CT"],
+  ["1600", "4:00–4:25 PM CT"],
+  ["1630", "4:30–4:55 PM CT"],
+]);
+
+/** Ron's window (Thu, Oct 1, 2:30–4:30 PM at BIF): four sessions. */
+export const RON_SESSIONS: SessionFixture[] = sessionsIn(RON, "Thu, Oct 1", [
+  ["1430", "2:30–2:55 PM CT"],
+  ["1500", "3:00–3:25 PM CT"],
+  ["1530", "3:30–3:55 PM CT"],
+  ["1600", "4:00–4:25 PM CT"],
+]);
+
+/** Arnav's window (Fri, Oct 2, 10:00–11:30 AM): three sessions. */
+export const ARNAV_SESSIONS: SessionFixture[] = sessionsIn(ARNAV, "Fri, Oct 2", [
+  ["1000", "10:00–10:25 AM CT"],
+  ["1030", "10:30–10:55 AM CT"],
+  ["1100", "11:00–11:25 AM CT"],
+]);
+
+/** What organizers see when they pick one of Patrick's sessions (before anything is booked). */
+export const PATRICK_SESSION_NOTE =
+  "Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to.";
 
 /** The one sentence explaining how matching works — exactly once on /office-hours. */
 export const MATCHING_SENTENCE =
@@ -184,7 +270,7 @@ export const DRAFT_TOPICS: RegExp[] = [/Startup financial planning/, /Communicat
 
 /** Organizer-only notes (content/mentors.ts `organizerNotes`) — stripped before anything renders. */
 export const ORGANIZER_ONLY =
-  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number/i;
+  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number|session grid fits|assign at most two|never publish a session count|also open to Oct|send details later/i;
 
 /** Content-maintenance notes on approved fields (`note`) — never public. */
 export const CONTENT_NOTES =
@@ -609,11 +695,12 @@ export const AVAILABILITY_RULE_MESSAGE =
 /**
  * The first sentences of the "Broad availability" hint. The form adds "Not needed if you tick a time
  * above." when a chosen mentor has a listed time, or "Needed because <names>’s times aren’t set yet."
+ * When none of the chosen mentors lists a time, it ends with SESSION_LENGTH_HINT.
  */
 export const BROAD_AVAILABILITY_ASK = "When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday.";
 /**
- * Shown when a chosen mentor's times aren't set yet (Vik, Elliott, Ron — never a mentor with a listed
- * window, like Rishab): only broad availability helps.
+ * Shown when a chosen mentor's times aren't set yet (Vik, Elliott; never a mentor with a listed
+ * window, like Ron or Rishab): only broad availability helps.
  */
 export const pendingAvailabilityMessage = (names: string) =>
   `Tell us when you’re generally free during Founders Week. ${names}’s times aren’t set yet.`;

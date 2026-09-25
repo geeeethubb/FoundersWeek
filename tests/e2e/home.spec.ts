@@ -2,8 +2,9 @@
  * Checklist 2 — Home (desktop 1440×900 and phone 390×844).
  *   - H1 "Meet the people building what’s next." and the primary "Apply for Office Hours" on the
  *     first screen.
- *   - All six mentors previewed (photo, name, role and company, one availability line); Rishab's
- *     reads "Thu, Oct 1 · 12:00–5:00 PM CT", like Patrick's "Thu, Oct 1 · 10:00–11:30 AM CT".
+ *   - All six mentors previewed (photo, name, role and company, one availability line): Patrick
+ *     "Thu, Oct 1 · 10:00–11:30 AM CT", Arnav "Fri, Oct 2 · 10:00–11:30 AM CT", Ron "Thu, Oct 1 ·
+ *     2:30–4:30 PM CT", Rishab "Thu, Oct 1 · 12:00–5:00 PM CT"; Vik and Elliott "Scheduling in progress".
  *   - Featured events (a 2×2 grid): Dan Caruso's fireside chat, the Sept 29 panel, Arnav's happy
  *     hour, then Founder Failure Lab (Hosted by Founders) — each with its Founders label.
  *   - A link to the full calendar.
@@ -22,6 +23,7 @@ import {
   ARNAV,
   PENDING_MENTORS,
   RISHAB,
+  RON,
 } from "./support/helpers";
 import {
   DAN_TITLE,
@@ -85,7 +87,16 @@ test.describe("Home", () => {
       mentors.getByRole("listitem").filter({ has: page.getByRole("heading", { name, exact: true }) });
     await expect(card(PATRICK.name)).toContainText("Thu, Oct 1");
     await expect(card(PATRICK.name)).toContainText("10:00–11:30 AM CT");
-    await expect(card(ARNAV.name)).toContainText("Fri, Oct 2");
+    // Arnav: his exact Friday window (no longer "Morning, exact window pending").
+    await expect(card(ARNAV.name).locator("time")).toHaveText("Fri, Oct 2");
+    await expect(card(ARNAV.name).locator("time")).toHaveAttribute("datetime", "2026-10-02");
+    await expect(card(ARNAV.name)).toContainText("10:00–11:30 AM CT");
+    await expect(card(ARNAV.name)).not.toContainText(/Morning|pending|to be confirmed/i);
+    // Ron: Thu, Oct 1, 2:30–4:30 PM (and nothing about any other day).
+    await expect(card(RON.name).locator("time")).toHaveText("Thu, Oct 1");
+    await expect(card(RON.name).locator("time")).toHaveAttribute("datetime", "2026-10-01");
+    await expect(card(RON.name)).toContainText("2:30–4:30 PM CT");
+    await expect(card(RON.name)).not.toContainText(/Scheduling in progress|Oct 4/);
     // Rishab: his confirmed window, Thu, Oct 1 from noon to 5 PM (never Oct 2).
     await expect(card(RISHAB.name).locator("time")).toHaveText("Thu, Oct 1");
     await expect(card(RISHAB.name).locator("time")).toHaveAttribute("datetime", "2026-10-01");

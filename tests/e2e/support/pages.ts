@@ -16,6 +16,8 @@ export const PUBLIC_PAGES = [
   "/schedule",
   "/schedule/office-hours-patrick-haddox-2026-10-01-am",
   "/schedule/office-hours-rishab-veldur-2026-10-01",
+  "/schedule/office-hours-ron-lewis-2026-10-01-pm",
+  "/schedule/office-hours-arnav-mishra-2026-10-02-am",
   "/schedule/dan-caruso-fireside-chat",
   "/schedule/how-to-make-10k-a-month-in-college",
   "/schedule/happy-hour-at-legends-with-arnav-mishra",
@@ -70,6 +72,7 @@ export const FAILURE_LAB_SPEAKERS = [
 /**
  * Thursday, Oct 1 program blocks around Rishab's noon–5 PM office-hours window: Pitching (11:45 AM–2:15 PM)
  * and Launching From Illinois (3:00–5:00 PM) overlap it; TechRise (5:00–7:00 PM) starts as it ends.
+ * Ron's 2:30–4:30 PM window overlaps Rishab's and Launching From Illinois, but not Pitching.
  */
 export const PITCHING_PATH = "/schedule/science-and-practice-of-pitching";
 export const PITCHING_TITLE = "The Science and Practice of Pitching";

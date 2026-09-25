@@ -4,15 +4,19 @@
  *     Vikram “Vik” Lakhwara, Elliott Notrica, Ron Lewis and Rishab Veldur — each with a photo
  *     (alt = name), role · company, "Can help with" labels (or, for Rishab, the first sentence of
  *     his bio) and one availability line. No duplicate lineup anywhere on the page.
- *   - The matching sentence appears exactly once.
+ *   - The matching sentence appears exactly once, and so does the session rule ("Each session is 25
+ *     minutes, with a 5-minute break between sessions.").
  *   - Every card's "Select mentor" action prefills that mentor in the form (and Patrick's / Arnav's /
- *     Rishab's window where one is offered); every profile's "Apply to meet …" does the same.
- *     A preselected window is enough on its own; mentors whose times aren't set yet (Vik, Elliott,
- *     Ron) need broad availability, and the form says so.
- *   - Profiles: photo, role, LinkedIn, approved bio and "Can help with" labels — never the internal
- *     basis behind them, organizer notes or draft copy. Rishab: "Background" chips and a "Good fit
- *     for" paragraph instead of "Can help with", his Showcase panel as a separate appearance, and
- *     office hours on Thu, Oct 1 only, 12:00–5:00 PM CT.
+ *     Ron's / Rishab's window); every profile's "Apply to meet …" does the same. A preselected window
+ *     is enough on its own; mentors whose times aren't set yet (Vik, Elliott) need broad
+ *     availability, and the form says so.
+ *   - Profiles: photo, role, LinkedIn, approved bio and "Can help with" labels, never the internal
+ *     basis behind them, organizer notes or draft copy. Mentors with a window state the session
+ *     rule under it. Rishab: "Background" chips and a "Good fit for" paragraph instead of "Can help
+ *     with", his Showcase panel as a separate appearance, and office hours on Thu, Oct 1 only,
+ *     12:00–5:00 PM CT. Patrick: in person at Espresso Royale at Grainger Library, 1301 W
+ *     Springfield Ave. Ron: Thu, Oct 1, 2:30–4:30 PM CT in person at the Business Instructional
+ *     Facility (BIF), 515 E. Gregory Drive, and nothing about his organizer-only Oct 4 availability.
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -35,12 +39,22 @@ import {
   MENTORS,
   mentorCheckbox,
   mentorWindows,
+  OCT_4,
   ONE_ON_ONE,
   ORGANIZER_ONLY,
+  PATRICK,
+  PATRICK_ADDRESS,
+  PATRICK_VENUE,
   preselectionNotice,
   RISHAB,
   RISHAB_SHOWCASE_SESSION,
   RISHAB_WINDOW_NOTE,
+  RON,
+  RON_ADDRESS,
+  RON_VENUE,
+  RON_WINDOW_NOTE,
+  SESSION_LENGTH_HINT,
+  SESSION_RULE,
   visibleText,
   waitForHydration,
   type MentorFixture,
@@ -75,13 +89,14 @@ async function expectPrefilled(page: Page, mentor: MentorFixture) {
   }
   const broad = broadAvailabilityField(page);
   if (mentor.timesPending) {
-    // Times not set yet: broad availability is required, and the hint says why.
+    // Times not set yet: broad availability is required, and the hint says why (and, with no
+    // listed time to tick, how long a session is).
     await expect(broad).toHaveAttribute("aria-required", "true");
     await expect(broad).toHaveAccessibleDescription(
-      `${BROAD_AVAILABILITY_ASK} Needed because ${mentor.firstName}’s times aren’t set yet.`,
+      `${BROAD_AVAILABILITY_ASK} Needed because ${mentor.firstName}’s times aren’t set yet. ${SESSION_LENGTH_HINT}`,
     );
   } else {
-    // The preselected window (Patrick's, Arnav's or Rishab's) is enough on its own.
+    // The preselected window (Patrick's, Arnav's, Ron's or Rishab's) is enough on its own.
     await expect(broad).not.toHaveAttribute("aria-required", "true");
     await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
   }
@@ -150,6 +165,12 @@ test.describe("Office Hours page", () => {
     const text = await visibleText(main);
     expect(countMatches(text, MATCHING_SENTENCE), "the matching sentence").toBe(1);
     expect(countMatches(text, /Founders will match/g), "any matching explanation").toBe(1);
+    // The session rule is stated once, under "How matching works", next to "applying doesn't reserve a time".
+    expect(countMatches(text, SESSION_RULE), "the session rule").toBe(1);
+    const matching = main.getByRole("region", { name: "How matching works", exact: true });
+    await expect(matching).toContainText(
+      `${SESSION_RULE} Appointments are limited, and applying doesn’t reserve a time.`,
+    );
   });
 
   test("stays simple: no internal basis, numbering, priority labels or one-on-one promises", async ({ page }) => {
@@ -160,6 +181,8 @@ test.describe("Office Hours page", () => {
     expect(text).not.toMatch(/\b0\d\s*[/—–-]\s*0\d\b/); // "01 / 05" style counters
     expect(text).not.toMatch(/In priority order/i);
     expect(text).not.toMatch(ONE_ON_ONE);
+    // How many sessions fit in a window is for organizers; the public page never counts them.
+    expect(text).not.toMatch(/\b(\d+|three|four|ten) sessions\b/i);
     // Nothing private in the page or its serialized data either.
     const body = page.locator("body");
     for (const topic of DRAFT_TOPICS) await expect(body).not.toContainText(topic);
@@ -218,6 +241,36 @@ test.describe("Mentor profiles", () => {
         await expect(page.getByRole("region", { name: "Useful for", exact: true })).toHaveCount(0);
       }
       await expect(main).toContainText(mentor.cardLine);
+      // The office-hours block: the window (or "Scheduling in progress"), then the session rule once.
+      const officeHoursBlock = main.locator("header");
+      await expect(officeHoursBlock).toContainText(mentor.cardLine);
+      expect(countMatches(await visibleText(officeHoursBlock), SESSION_RULE), "the session rule, once").toBe(1);
+      expect(await visibleText(main)).not.toMatch(/\b(\d+|three|four|ten) sessions\b/i);
+
+      if (mentor === PATRICK) {
+        // In person at Espresso Royale in Grainger Library, under his Thursday window.
+        await expect(officeHoursBlock).toContainText(`${PATRICK_VENUE}, ${PATRICK_ADDRESS}`);
+        await expect(officeHoursBlock).not.toContainText(/to be confirmed|to be announced/i);
+      }
+      if (mentor === RON) {
+        // In person at BIF: the building, then the street address, under his Thursday window.
+        await expect(officeHoursBlock.locator("time")).toHaveText("Thu, Oct 1");
+        await expect(officeHoursBlock.locator("time")).toHaveAttribute("datetime", "2026-10-01");
+        await expect(officeHoursBlock).toContainText(`${RON_VENUE}, ${RON_ADDRESS}`);
+        await expect(officeHoursBlock).toContainText(RON_WINDOW_NOTE);
+        await expect(officeHoursBlock).not.toContainText(/Scheduling in progress|to be confirmed|to be announced/i);
+        // Every "Apply to meet Ron" preselects his one window.
+        const applyLinks = main.getByRole("link", { name: `Apply to meet ${RON.firstName}`, exact: true });
+        expect(await applyLinks.count()).toBeGreaterThanOrEqual(1);
+        for (const link of await applyLinks.all()) {
+          await expect(link).toHaveAttribute("href", `/office-hours?mentor=${RON.id}&window=${RON.windowId}#apply`);
+        }
+        // His share card and description carry the same window.
+        await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /Thu, Oct 1 · 2:30–4:30 PM CT/);
+      }
+      // Ron's Oct 4 availability is organizer-only: nowhere on any profile, not even in page data.
+      await expect(page.locator("body")).not.toContainText(OCT_4);
+      expect(await page.content()).not.toMatch(OCT_4);
 
       if (mentor === RISHAB) {
         await expect(main.getByRole("link", { name: /^Auvi Labs\b/ })).toHaveAttribute("href", AUVI_LABS_URL);
@@ -232,7 +285,8 @@ test.describe("Mentor profiles", () => {
           "href",
           "/schedule/founders-showcase-day-sessions",
         );
-        await expect(appearances).toContainText("Speaking Fri, Oct 2 · 1:20 PM");
+        // The panel's full time, as on the Showcase program (1:20–1:55 PM).
+        await expect(appearances).toContainText("Speaking Fri, Oct 2 · 1:20–1:55 PM CT");
         await expect(page.locator("body")).not.toContainText(AUVI_CLAIMS);
       }
 

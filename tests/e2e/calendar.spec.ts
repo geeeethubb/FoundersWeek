@@ -9,9 +9,15 @@
  *   - "Founder Failure Lab" on Wednesday, 6:30–8:30 PM CT at CIF Room 1038, "Hosted by Founders":
  *     Register on Luma, speakers linked to LinkedIn, and the overlap with the happy hour on both.
  *   - The university's Friday "Founders Evening Showcase and Reception" stays.
+ *   - Patrick's office hours: Thu, Oct 1, 10:00–11:30 AM CT at Espresso Royale in Grainger Library.
  *   - Rishab's office hours: Thu, Oct 1, 12:00–5:00 PM CT (never Friday), in time order, overlapping
- *     the day's Pitching and Launching From Illinois blocks (TechRise starts as it ends); never
- *     exported to calendars. The office-hours card links every mentor's profile.
+ *     the day's Pitching and Launching From Illinois blocks and Ron's office hours (TechRise starts
+ *     as it ends); never exported to calendars.
+ *   - Ron's office hours: Thu, Oct 1, 2:30–4:30 PM CT at the Business Instructional Facility (BIF),
+ *     overlapping Rishab's window and Launching From Illinois; nothing about Oct 4.
+ *   - Arnav's office hours: Fri, Oct 2, 10:00–11:30 AM CT, during the Showcase Day Sessions.
+ *   - Office-hours pages and the card state the session rule (25 minutes, 5-minute break). The
+ *     office-hours card links every mentor's profile.
  *   - The canceled HERE Apartments afterparty is absent everywhere, and its URL is a 404.
  *   - Filters, search and detail pages still work.
  */
@@ -25,8 +31,16 @@ import {
   horizontalOverflow,
   icsEvents,
   MENTORS,
+  OCT_4,
   ONE_ON_ONE,
+  PATRICK,
+  PATRICK_ADDRESS,
+  PATRICK_VENUE,
   RISHAB,
+  RON,
+  RON_ADDRESS,
+  RON_VENUE,
+  SESSION_RULE,
   unfoldIcs,
   waitForHydration,
 } from "./support/helpers";
@@ -65,9 +79,15 @@ import {
   PANEL_TITLE,
   PITCHING_PATH,
   PITCHING_TITLE,
+  SHOWCASE_PATH,
   SHOWCASE_TITLE,
   TECHRISE_TITLE,
 } from "./support/pages";
+
+const PATRICK_OFFICE_HOURS = `Office hours with ${PATRICK.name}`;
+const RISHAB_OFFICE_HOURS = `Office hours with ${RISHAB.name}`;
+const RON_OFFICE_HOURS = `Office hours with ${RON.name}`;
+const ARNAV_OFFICE_HOURS = `Office hours with ${ARNAV.name}`;
 
 function dayRegion(page: Page, heading: string): Locator {
   return page.getByRole("region", { name: heading, exact: true });
@@ -333,6 +353,43 @@ test.describe("Featured related events", () => {
 });
 
 test.describe("Office hours on the calendar", () => {
+  test("Patrick: office hours on Thu, Oct 1, 10:00–11:30 AM CT at Espresso Royale in Grainger Library; Apply preselects his window", async ({
+    page,
+  }) => {
+    await openCalendar(page);
+    const thursday = dayRegion(page, "Thursday, October 1");
+    const row = entry(thursday, page, PATRICK_OFFICE_HOURS);
+    await expect(row).toHaveCount(1);
+    const start = row.locator("time[datetime]");
+    await expect(start).toHaveAttribute("datetime", "2026-10-01T10:00");
+    await expect(start).toHaveText("10:00 AM");
+    await expect(row).toContainText("to 11:30 AM");
+    await expect(row).toContainText(PATRICK_VENUE);
+    await expect(row).toContainText("Availability window");
+    await expect(row).not.toContainText(/Location to be announced|Time to be announced|to be confirmed/);
+    await expect(row.getByRole("link", { name: `Apply to meet ${PATRICK.firstName}`, exact: true })).toHaveAttribute(
+      "href",
+      `/office-hours?mentor=${PATRICK.id}&window=${PATRICK.windowId}#apply`,
+    );
+
+    await row.getByRole("link", { name: PATRICK_OFFICE_HOURS, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/schedule/office-hours-${PATRICK.windowId}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(PATRICK_OFFICE_HOURS);
+    const main = page.getByRole("main");
+    await expect(main).toContainText("Thursday, October 1");
+    await expect(main).toContainText("10:00–11:30 AM CT");
+    await expect(main).toContainText(`Availability window, not a booked appointment. ${SESSION_RULE}`);
+    await expect(main).toContainText(PATRICK_VENUE);
+    await expect(main).toContainText(PATRICK_ADDRESS);
+    // How many sessions fit in his window is for organizers only. (Other listings below, like the
+    // Pitching block's "3 sessions", are program sessions, not office hours.)
+    const [officeHoursPart] = (await main.innerText()).split("Overlaps with");
+    expect(officeHoursPart).toContain(PATRICK_VENUE);
+    expect(officeHoursPart).not.toMatch(/\b(\d+|three) sessions\b/i);
+    await expect(main).toContainText("Submitting an application doesn’t reserve a time slot.");
+    expect((await page.request.get(`/schedule/office-hours-${PATRICK.windowId}/calendar.ics`)).status()).toBe(404);
+  });
+
   test("Rishab: office hours on Thu, Oct 1, 12:00–5:00 PM CT, in time order; never on Friday; Apply preselects his window", async ({
     page,
   }) => {
@@ -362,11 +419,12 @@ test.describe("Office hours on the calendar", () => {
     expect(titles.indexOf(LAUNCHING_TITLE), "the 3:00 PM block follows the 12:00 PM window").toBeGreaterThan(titles.indexOf(title));
     expect(titles.indexOf(TECHRISE_TITLE), "the 5:00 PM block comes last of the three").toBeGreaterThan(titles.indexOf(LAUNCHING_TITLE));
 
-    // Noon to 5 PM overlaps the Pitching and Launching From Illinois blocks, and both rows say so.
-    // TechRise starts at 5:00 PM, as the window ends: back to back, not an overlap.
+    // Noon to 5 PM overlaps the Pitching and Launching From Illinois blocks and Ron's 2:30 PM
+    // window, and every one of those rows says so. TechRise starts at 5:00 PM, as the window ends:
+    // back to back, not an overlap. (The exact line, without demo content: production-content.spec.ts.)
     const overlapLine = (scope: Locator) => scope.getByText(/^Overlaps with /);
     await expect(overlapLine(row)).toHaveCount(1);
-    for (const other of [PITCHING_TITLE, LAUNCHING_TITLE]) {
+    for (const other of [PITCHING_TITLE, RON_OFFICE_HOURS, LAUNCHING_TITLE]) {
       await expect(overlapLine(row)).toContainText(other);
       await expect(overlapLine(entry(thursday, page, other))).toContainText(title);
     }
@@ -383,12 +441,12 @@ test.describe("Office hours on the calendar", () => {
     const main = page.getByRole("main");
     await expect(main).toContainText("Thursday, October 1");
     await expect(main).toContainText("12:00–5:00 PM CT");
-    await expect(main).toContainText("Availability window, not a booked appointment.");
+    await expect(main).toContainText(`Availability window, not a booked appointment. ${SESSION_RULE}`);
     await expect(main).not.toContainText(/Time to be announced|Exact window to be confirmed/);
     await expect(main).not.toContainText(/Friday, October 2|Fri, Oct 2/);
     const overlaps = main.getByRole("region", { name: "Overlaps with", exact: true });
     await expect(overlaps).toContainText("This time overlaps with other listings.");
-    for (const other of [PITCHING_TITLE, LAUNCHING_TITLE]) {
+    for (const other of [PITCHING_TITLE, RON_OFFICE_HOURS, LAUNCHING_TITLE]) {
       await expect(overlaps.getByRole("heading", { name: other, exact: true })).toHaveCount(1);
     }
     await expect(overlaps.getByRole("heading", { name: TECHRISE_TITLE, exact: true })).toHaveCount(0);
@@ -418,11 +476,103 @@ test.describe("Office hours on the calendar", () => {
     ).toHaveCount(1);
   });
 
+  test("Ron: office hours on Thu, Oct 1, 2:30–4:30 PM CT at BIF, in time order; Apply preselects his window; nothing about Oct 4", async ({
+    page,
+  }) => {
+    await openCalendar(page);
+    const thursday = dayRegion(page, "Thursday, October 1");
+    const row = entry(thursday, page, RON_OFFICE_HOURS);
+    await expect(row).toHaveCount(1);
+    const start = row.locator("time[datetime]");
+    await expect(start).toHaveCount(1);
+    await expect(start).toHaveAttribute("datetime", "2026-10-01T14:30");
+    await expect(start).toHaveText("2:30 PM");
+    await expect(row).toContainText("to 4:30 PM");
+    await expect(row).toContainText(RON_VENUE);
+    await expect(row).toContainText("Availability window");
+    await expect(row).not.toContainText(/Location to be announced|Time to be announced|to be confirmed/);
+    await expect(row).toContainText(`${RON.role}, ${RON.company}`);
+    await expect(row).toContainText("Hosted by Founders");
+    await expect(row.getByRole("link", { name: `Apply to meet ${RON.firstName}`, exact: true })).toHaveAttribute(
+      "href",
+      `/office-hours?mentor=${RON.id}&window=${RON.windowId}#apply`,
+    );
+    // Sorted by start: after Rishab's 12:00 PM window, before the 3:00 PM Launching block.
+    const titles = (await thursday.getByRole("article").getByRole("heading").allInnerTexts()).map((t) => t.trim());
+    expect(titles.indexOf(RON_OFFICE_HOURS)).toBeGreaterThan(titles.indexOf(RISHAB_OFFICE_HOURS));
+    expect(titles.indexOf(LAUNCHING_TITLE)).toBeGreaterThan(titles.indexOf(RON_OFFICE_HOURS));
+    // 2:30–4:30 PM overlaps Rishab's window and Launching From Illinois (3:00 PM); never Pitching
+    // (ends 2:15 PM) or TechRise (5:00 PM).
+    const overlapLine = row.getByText(/^Overlaps with /);
+    for (const other of [RISHAB_OFFICE_HOURS, LAUNCHING_TITLE]) await expect(overlapLine).toContainText(other);
+    for (const other of [PITCHING_TITLE, TECHRISE_TITLE]) await expect(overlapLine).not.toContainText(other);
+    await expect(entry(thursday, page, PITCHING_TITLE)).not.toContainText(RON_OFFICE_HOURS);
+
+    await row.getByRole("link", { name: RON_OFFICE_HOURS, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/schedule/office-hours-${RON.windowId}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(RON_OFFICE_HOURS);
+    const main = page.getByRole("main");
+    await expect(main).toContainText("Thursday, October 1");
+    await expect(main).toContainText("2:30–4:30 PM CT");
+    await expect(main).toContainText(`Availability window, not a booked appointment. ${SESSION_RULE}`);
+    await expect(main).toContainText(RON_VENUE);
+    await expect(main).toContainText(RON_ADDRESS);
+    const overlaps = main.getByRole("region", { name: "Overlaps with", exact: true });
+    for (const other of [RISHAB_OFFICE_HOURS, LAUNCHING_TITLE]) {
+      await expect(overlaps.getByRole("heading", { name: other, exact: true })).toHaveCount(1);
+    }
+    for (const other of [PITCHING_TITLE, TECHRISE_TITLE]) {
+      await expect(overlaps.getByRole("heading", { name: other, exact: true })).toHaveCount(0);
+    }
+    for (const link of await main.getByRole("link", { name: `Apply to meet ${RON.firstName}`, exact: true }).all()) {
+      await expect(link).toHaveAttribute("href", `/office-hours?mentor=${RON.id}&window=${RON.windowId}#apply`);
+    }
+    await expect(main).toContainText("Submitting an application doesn’t reserve a time slot.");
+    // His Oct 4 availability is organizer-only.
+    await expect(page.locator("body")).not.toContainText(OCT_4);
+    expect(await page.content()).not.toMatch(OCT_4);
+    await expect(page.locator("body")).not.toContainText(ONE_ON_ONE);
+    // Office hours are never exported to calendars.
+    expect((await page.request.get(`/schedule/office-hours-${RON.windowId}/calendar.ics`)).status()).toBe(404);
+  });
+
+  test("Arnav: office hours on Fri, Oct 2, 10:00–11:30 AM CT, during the Showcase Day Sessions", async ({ page }) => {
+    await openCalendar(page);
+    const friday = dayRegion(page, "Friday, October 2");
+    const row = entry(friday, page, ARNAV_OFFICE_HOURS);
+    await expect(row).toHaveCount(1);
+    const start = row.locator("time[datetime]");
+    await expect(start).toHaveAttribute("datetime", "2026-10-02T10:00");
+    await expect(start).toHaveText("10:00 AM");
+    await expect(row).toContainText("to 11:30 AM");
+    await expect(row).toContainText("Availability window");
+    await expect(row).not.toContainText(/Morning|exact window pending|Exact times TBA|to be confirmed/i);
+    await expect(row.getByRole("link", { name: `Apply to meet ${ARNAV.firstName}`, exact: true })).toHaveAttribute(
+      "href",
+      `/office-hours?mentor=${ARNAV.id}&window=${ARNAV.windowId}#apply`,
+    );
+    await expect(row.getByText(/^Overlaps with /)).toContainText(SHOWCASE_TITLE);
+    // Only on Friday.
+    await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: ARNAV_OFFICE_HOURS, exact: true }) })).toHaveCount(1);
+
+    await row.getByRole("link", { name: ARNAV_OFFICE_HOURS, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/schedule/office-hours-${ARNAV.windowId}$`));
+    const main = page.getByRole("main");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARNAV_OFFICE_HOURS);
+    await expect(main).toContainText("Friday, October 2");
+    await expect(main).toContainText("10:00–11:30 AM CT");
+    await expect(main).toContainText(`Availability window, not a booked appointment. ${SESSION_RULE}`);
+    const overlaps = main.getByRole("region", { name: "Overlaps with", exact: true });
+    await expect(overlaps.getByRole("heading", { name: SHOWCASE_TITLE, exact: true })).toHaveCount(1);
+    await expect(overlaps.locator(`a[href="${SHOWCASE_PATH}"]`).first()).toBeVisible();
+  });
+
   test("the office-hours card: every mentor, each linked to their profile, and one Apply button", async ({ page }) => {
     // The exact lede ("all six mentors") is checked without demo content in production-content.spec.ts.
     await openCalendar(page);
     const card = page.getByRole("region", { name: "Founders Office Hours", exact: true });
     await expect(card).toContainText("One application covers all");
+    await expect(card).toContainText(SESSION_RULE);
     await expect(card.getByRole("link", { name: "Apply for Office Hours", exact: true })).toHaveAttribute(
       "href",
       "/office-hours#apply",
