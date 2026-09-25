@@ -19,6 +19,7 @@ import {
 import { MentorPortrait } from "@/components/ui/portrait";
 import { APPLICATION_COPY } from "@/lib/applications/constants";
 import { mentorApplyHref, mentorCtaLabel } from "@/lib/mentors";
+import { mentorCta } from "@/lib/mentors-view";
 import { mentorAffiliation, type ScheduleEntry } from "@/lib/schedule/entries";
 import { entryTimeText, LOCATION_FORTHCOMING, locationLines, TIME_FORTHCOMING } from "@/lib/schedule/format";
 import type { MentorHeadshots } from "@/lib/schedule/headshots";
@@ -442,7 +443,7 @@ export function ProgramTimeline({
                   </div>
                   {m.mentor?.acceptingApplications && cta ? (
                     <ButtonLink
-                      href={mentorApplyHref(m.mentorId)}
+                      href={(m.mentor ? mentorCta(m.mentor).href : null) ?? mentorApplyHref(m.mentorId)}
                       variant="secondary"
                       className="min-h-11 w-full shrink-0 bg-surface sm:w-auto"
                     >

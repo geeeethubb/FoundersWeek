@@ -128,7 +128,7 @@ export function MentorCard({ card, priority }: { card: MentorCardView; priority?
           )}
           <Link
             href={card.profileHref}
-            className="inline-flex h-11 items-center text-[0.9375rem] text-text-muted underline decoration-line-strong underline-offset-4 transition-colors duration-150 hover:text-text hover:decoration-charcoal"
+            className="inline-flex h-11 min-w-11 items-center text-[0.9375rem] text-text-muted underline decoration-line-strong underline-offset-4 transition-colors duration-150 hover:text-text hover:decoration-charcoal"
           >
             Profile
             <span className="sr-only">: {card.name}</span>

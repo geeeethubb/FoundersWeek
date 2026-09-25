@@ -92,7 +92,7 @@ const RISHAB_GOOD_FIT =
   "Interested in turning a technical project into a healthcare startup? Rishab’s experience spans engineering, medical-device development, and building a company through Illinois’ entrepreneurship ecosystem.";
 const RISHAB_WINDOW_ID = "rishab-veldur-2026-10-01";
 const RISHAB_WINDOW_NOTE =
-  "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.";
+  "Rishab is free anytime during this window, from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 /** Session length is policy now (site.officeHours), so only the location is still being set. */
 const RISHAB_SESSION_NOTE =
   "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting the location.";

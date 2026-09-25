@@ -186,7 +186,11 @@ function SlotRow({ slot, usage, holders }: { slot: SlotInfo; usage: SlotUsage; h
                 >
                   {h.fullName}
                 </Link>
-                {h.teamName ? <span className="text-xs text-text-subtle">Team {h.teamName}</span> : null}
+                {h.teamName ? (
+                  <span className="text-xs text-text-subtle">
+                    {/^team\b/i.test(h.teamName) ? h.teamName : `Team ${h.teamName}`}
+                  </span>
+                ) : null}
                 <AppointmentStatusBadge status={h.status} />
               </li>
             ))}

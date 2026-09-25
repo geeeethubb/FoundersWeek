@@ -633,7 +633,7 @@ describe("mentor notes (organizer-only)", () => {
         id: RISHAB_WINDOW,
         date: "2026-10-01",
         time: { kind: "exact", start: "12:00", end: "17:00" },
-        note: "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.",
+        note: "Rishab is free anytime during this window, from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
       },
     ]);
     expect(publicMentor.slots).toEqual([]);

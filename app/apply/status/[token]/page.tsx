@@ -93,14 +93,18 @@ export default async function ApplicationStatusPage({ params }: { params: Promis
     const end = utcToZoned(new Date(a.endsAt));
     const date = slot?.date ?? start.date;
     const time = slot ? formatTimeRange(slot.start, slot.end) : formatTimeRange(start.time, end.time);
+    // Sessions generated from a window carry no place: fall back to the mentor's published one.
+    const mentor = mentors.get(a.mentorId);
+    const format = slot?.format ?? mentor?.session.format ?? null;
+    const place =
+      slot?.location ??
+      (mentor?.session.location ? [mentor.session.location, mentor.session.address].filter(Boolean).join(", ") : null);
     return {
       ...a,
       when: `${formatDate(date, "long")} · ${time} ${TZ_LABEL}`,
-      mentorName: mentors.get(a.mentorId)?.name ?? "Your mentor",
-      demo: Boolean(mentors.get(a.mentorId)?.demo),
-      where: [slot?.format ? FORMAT_LABELS[slot.format] : null, slot?.location ?? "Location will be shared by email"]
-        .filter(Boolean)
-        .join(" · "),
+      mentorName: mentor?.name ?? "Your mentor",
+      demo: Boolean(mentor?.demo),
+      where: [format ? FORMAT_LABELS[format] : null, place ?? "Location will be shared by email"].filter(Boolean).join(" · "),
     };
   });
 

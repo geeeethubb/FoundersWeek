@@ -96,7 +96,7 @@ const RISHAB_BIO_SECOND =
 const RISHAB_GOOD_FIT =
   "Interested in turning a technical project into a healthcare startup? Rishab’s experience spans engineering, medical-device development, and building a company through Illinois’ entrepreneurship ecosystem.";
 const RISHAB_WINDOW_NOTE =
-  "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.";
+  "Rishab is free anytime during this window, from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 /** Rishab's window reads like Patrick's ("Thu, Oct 1 · 10:00–11:30 AM CT"). */
 const RISHAB_LINE = "Thu, Oct 1 · 12:00–5:00 PM CT";
 

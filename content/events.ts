@@ -94,9 +94,9 @@ export const events: ScheduleEvent[] = [
       address: "1304 W. Green St., Urbana, IL 61801",
     },
     summary:
-      "A panel led by recent Illinois alum Austin Kennedy, with other recent Illinois alumni. Co-hosted by Founders.",
+      "A panel of recent Illinois alumni, led by Austin Kennedy. Co-hosted by Founders.",
     description:
-      "A panel led by recent Illinois alum Austin Kennedy with other recent Illinois alumni, co-hosted by Founders – Illinois Entrepreneurs.\n\n“How to Make $10K/Month in College” is the event’s title, not a promise of earnings. Check the official event page for details.",
+      "A panel of recent Illinois alumni led by Austin Kennedy, co-hosted by Founders – Illinois Entrepreneurs.\n\n“How to Make $10K/Month in College” is the event’s title, not a promise of earnings. Check the official event page for details.",
     speakers: [{ name: "Austin Kennedy", title: "Recent Illinois alumnus", verified: true }],
     topics: [],
     registration: null,

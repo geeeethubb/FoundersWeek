@@ -18,6 +18,11 @@ import { ArrowRightIcon, CalendarIcon, MapPinIcon } from "@/components/ui/icons"
 import { Container } from "@/components/ui/primitives";
 import { placeRuns, type FeaturedEventView } from "./home-model";
 
+/** "Sept 30" never breaks between the month and the day (a no-break space; the text is unchanged). */
+export function keepDatesTogether(text: string): string {
+  return text.replace(/\b(Jan|Feb|March|April|May|June|July|Aug|Sept|Sep|Oct|Nov|Dec) (\d{1,2})\b/g, "$1\u00a0$2");
+}
+
 export function FeaturedEvents({ events, calendarNote }: { events: FeaturedEventView[]; calendarNote: string | null }) {
   return (
     <section aria-labelledby="events-heading">
@@ -39,7 +44,9 @@ export function FeaturedEvents({ events, calendarNote }: { events: FeaturedEvent
         ) : null}
 
         <div className="mt-8 flex flex-col gap-3 rounded-md bg-surface-subtle px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:px-6">
-          {calendarNote ? <p className="text-[0.9375rem] leading-relaxed text-text-muted">{calendarNote}</p> : null}
+          {calendarNote ? (
+            <p className="text-[0.9375rem] leading-relaxed text-text-muted">{keepDatesTogether(calendarNote)}</p>
+          ) : null}
           <Link
             href="/schedule"
             className="group/cal inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xs text-[0.9375rem] font-semibold text-charcoal underline decoration-accent decoration-2 underline-offset-[6px] sm:self-auto"

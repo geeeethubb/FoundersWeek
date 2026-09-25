@@ -773,10 +773,11 @@ describe("calendar components (public data)", () => {
     expect(t).not.toMatch(RISHAB_PRIVATE);
     expect(imageAlts(html)).toEqual(["Rishab Veldur", "Arnav Mishra", "Patrick Haddox", "Vikram “Vik” Lakhwara"]);
     const links = hrefs(html);
+    // Mentors with one published window get it preselected; Vik (still scheduling) gets the mentor only.
     expect(links.filter((h) => h.includes("#apply"))).toEqual([
-      "/office-hours?mentor=rishab-veldur#apply",
-      "/office-hours?mentor=arnav-mishra#apply",
-      "/office-hours?mentor=patrick-haddox#apply",
+      "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
+      "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
+      "/office-hours?mentor=patrick-haddox&window=patrick-haddox-2026-10-01-am#apply",
       "/office-hours?mentor=vikram-lakhwara#apply",
     ]);
     expect(links).toContain("/office-hours/rishab-veldur");

@@ -140,8 +140,11 @@ export function buildOrganizerDirectory(mentors: Mentor[], rule: SessionRule): O
       end: s.end,
       capacity: s.capacity,
       status: s.status,
-      format: s.format ?? null,
-      location: s.location ?? null,
+      // Generated sessions have no place of their own: use the mentor's published one.
+      format: s.format ?? m.session.format ?? null,
+      location:
+        s.location ??
+        (m.session.location ? [m.session.location, m.session.address].filter(Boolean).join(", ") : null),
       demo: Boolean(m.demo),
       generated,
       label: slotLabel(s),

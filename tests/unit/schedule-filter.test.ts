@@ -258,7 +258,7 @@ describe("production calendar", () => {
       // session rule comes from site.officeHours.
       description:
         "Rishab Veldur (Co-Founder & CEO, Auvi Labs) is available for office hours: Thursday, October 1, 12:00–5:00 PM CT.\n\n" +
-        "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.\n\n" +
+        "Rishab is free anytime during this window, from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside it.\n\n" +
         "Each session is 25 minutes, with a 5-minute break between sessions. " +
         "Appointments are limited. Founders will match applicants by interests and availability, then email selected students to confirm.",
       // No approved topic list: nothing is inferred from his background tags.

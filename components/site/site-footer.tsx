@@ -4,7 +4,7 @@ import { Container } from "@/components/ui/primitives";
 import { BrandLockup } from "./brand";
 
 /** Footer links are 44px-tall tap targets (phones included). */
-const LINK = "inline-flex min-h-11 items-center";
+const LINK = "inline-flex min-h-11 min-w-11 items-center";
 
 /** Minimal footer: logo, links, one student-run attribution. */
 export function SiteFooter() {

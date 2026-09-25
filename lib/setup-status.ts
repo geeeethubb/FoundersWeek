@@ -231,7 +231,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     const schema = config.schema ? `, schema "${config.schema}"` : "";
     checks.push(
       persistence.ready
-        ? { key: "database", ok: true, status: `ok (${via}${schema})${poolNote ? `; note: ${poolNote}` : ""}`, fix: null }
+        ? { key: "database", ok: true, status: `ok (${via}${schema})`, fix: null }
         : {
             key: "database",
             ok: false,
