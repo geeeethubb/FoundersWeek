@@ -135,6 +135,50 @@ export const events: ScheduleEvent[] = [
   },
 
   {
+    // Arnav's Siebel School Speaker Series talk ("Tech Talk @ Siebel"), added at his suggestion.
+    // Official title, title-cased (the listing reads "and other Founder Stories").
+    id: "building-an-ai-native-company",
+    title: "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories",
+    date: "2026-09-30",
+    // The Siebel School calendar lists a 3:30 PM start and no end time (so no calendar export yet).
+    time: { kind: "exact", start: "15:30" },
+    status: "confirmed",
+    types: ["talk"],
+    // A Siebel School talk; no source ties it to Founders or the Founders Week program.
+    involvement: null,
+    foundersPick: false,
+    organizer: "Siebel School of Computing and Data Science",
+    location: {
+      kind: "in-person",
+      venue: "Siebel Center for Computer Science",
+      room: "Room 2405",
+      address: "201 N. Goodwin Ave., Urbana, IL 61801",
+    },
+    summary:
+      "A Siebel School Speaker Series talk by Arnav Mishra, co-founder and CTO of Doss, on the engineering behind an AI-native company.",
+    description:
+      "A Siebel School Speaker Series talk by Arnav Mishra, co-founder and CTO of Doss and one of this week’s office-hours mentors. Doss is building an AI-native ERP, and in his words, the talk explores “the architectural bets we’ve made to account for the future of software, while continuing to serve customers today.”\n\nHe’ll focus on three parts of that build: designing structured data storage for people and AI agents, orchestrating complex business logic across a distributed data layer, and building interfaces that give nontechnical users the flexibility of front-end code. He’ll also share how customer conversations, selling and fundraising shape those technical decisions.",
+    speakers: [{ name: "Arnav Mishra", title: "Co-Founder & CTO, Doss", verified: true, mentorId: "arnav-mishra" }],
+    topics: ["AI-native software", "databases", "distributed systems"],
+    registration: null,
+    links: [{ label: "Event information", url: "https://calendars.illinois.edu/detail/7046?eventId=33563773" }],
+    related: true,
+    sources: [
+      {
+        label: "Siebel School Speaker Series calendar: Arnav Mishra, “Building an AI-Native Company”",
+        url: "https://calendars.illinois.edu/detail/7046?eventId=33563773",
+        note: "Date, 3:30 PM start (no end time in the listing or its calendar file), Room 2405, sponsor, abstract and bio.",
+        checked: "2026-09-25",
+      },
+      {
+        label: "Organizer update: Arnav suggested adding his tech talk at Siebel",
+        note: "From Arnav Mishra, relayed by Founders organizers. Street address from Arnav (for his office hours in the same building), in the calendar’s address style.",
+        checked: "2026-09-25",
+      },
+    ],
+  },
+
+  {
     id: "happy-hour-at-legends-with-arnav-mishra",
     title: "Happy Hour with Arnav Mishra at Legends",
     date: "2026-09-30",
@@ -296,12 +340,21 @@ export const events: ScheduleEvent[] = [
     foundersPick: false,
     organizer: UNIVERSITY,
     location: { kind: "in-person", venue: "Beckman Institute", address: "Urbana" },
-    summary: "A panel discussion and networking at the Beckman Institute.",
-    description: "A panel discussion on launching from Illinois at the Beckman Institute in Urbana, followed by networking.",
-    speakers: [],
+    summary: "A panel discussion and networking at the Beckman Institute. Arnav Mishra of Doss is on the panel.",
+    description:
+      "A panel discussion on launching from Illinois at the Beckman Institute in Urbana, followed by networking.\n\nArnav Mishra, co-founder and CTO of Doss and one of this week’s office-hours mentors, is on the panel.",
+    // Arnav told the organizers he's on this panel (Sept 25). No other panelists were supplied.
+    speakers: [{ name: "Arnav Mishra", title: "Co-Founder & CTO, Doss", verified: true, mentorId: "arnav-mishra" }],
     topics: [],
     registration: null,
-    sources: [AGENDA],
+    sources: [
+      AGENDA,
+      {
+        label: "Organizer update: Arnav Mishra is on this panel",
+        note: "From Arnav Mishra, relayed by Founders organizers.",
+        checked: "2026-09-25",
+      },
+    ],
   },
   {
     id: "techrise-pitch-competition",

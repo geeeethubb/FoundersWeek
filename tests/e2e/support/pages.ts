@@ -23,8 +23,10 @@ export const PUBLIC_PAGES = [
   "/schedule/office-hours-arnav-mishra-2026-10-02-am",
   "/schedule/dan-caruso-fireside-chat",
   "/schedule/how-to-make-10k-a-month-in-college",
+  "/schedule/building-an-ai-native-company",
   "/schedule/happy-hour-at-legends-with-arnav-mishra",
   "/schedule/founder-failure-lab",
+  "/schedule/entrepreneurial-impact-launching-from-illinois",
   "/schedule/techrise-pitch-competition",
   "/schedule/founders-showcase-day-sessions",
   "/schedule/founders-evening-showcase-and-reception",
@@ -56,6 +58,19 @@ export const HAPPY_HOUR_RSVP_URL = "https://partiful.com/e/bUDJZTuCJyBqSeXAsfrN"
 
 /** Wed Sep 30, 3:30–5:00 PM at EnterpriseWorks: inside Elliott's 2:00–5:00 PM office-hours window. */
 export const KICKOFF_TITLE = "Founders Week Kickoff Reception";
+/**
+ * Wed Sep 30, 3:30 PM (no end time in the listing): Arnav Mishra's Siebel School Speaker Series talk,
+ * a related event with no Founders involvement label. The Siebel School's calendar is the source;
+ * with no end time there's nothing to export to a calendar yet.
+ */
+export const AI_TALK_ID = "building-an-ai-native-company";
+export const AI_TALK_PATH = `/schedule/${AI_TALK_ID}`;
+export const AI_TALK_TITLE = "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories";
+export const AI_TALK_VENUE = "Siebel Center for Computer Science";
+export const AI_TALK_ROOM = "Room 2405";
+export const AI_TALK_ADDRESS = "201 N. Goodwin Ave., Urbana, IL 61801";
+export const AI_TALK_ORGANIZER = "Siebel School of Computing and Data Science";
+export const AI_TALK_INFO_URL = "https://calendars.illinois.edu/detail/7046?eventId=33563773";
 /** Wed Sep 30, 6:30–8:30 PM, CIF Room 1038 — hosted by Founders; featured on a light-orange card. */
 export const FAILURE_LAB_ID = "founder-failure-lab";
 export const FAILURE_LAB_PATH = `/schedule/${FAILURE_LAB_ID}`;
@@ -80,6 +95,8 @@ export const FAILURE_LAB_SPEAKERS = [
  */
 export const PITCHING_PATH = "/schedule/science-and-practice-of-pitching";
 export const PITCHING_TITLE = "The Science and Practice of Pitching";
+/** Thu Oct 1, 3:00–5:00 PM at the Beckman Institute; Arnav Mishra is on the panel. */
+export const LAUNCHING_PATH = "/schedule/entrepreneurial-impact-launching-from-illinois";
 export const LAUNCHING_TITLE = "Entrepreneurial Impact: Launching From Illinois";
 export const TECHRISE_PATH = "/schedule/techrise-pitch-competition";
 export const TECHRISE_TITLE = "TechRise Pitch Competition and Panel Discussion";

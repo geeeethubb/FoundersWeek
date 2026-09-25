@@ -17,7 +17,8 @@ import type { Mentor, SourceRef } from "./types";
  * - `organizerNotes` never render publicly (stripped by content/index.ts).
  * - `slots` are specific appointment times. Add them only once times are proposed/confirmed.
  *   Slot and window ids are stored with applications — never rename or reuse them.
- * - Founders Week sessions a mentor speaks at or hosts are linked from content/events.ts (`mentorId`).
+ * - Calendar events a mentor speaks at or hosts (the official program and related events) are linked
+ *   from content/events.ts (`mentorId`).
  * - Headshots live in /public/mentors/<id>.jpg (supplied by Founders organizers).
  *
  * Bios and "can help most with" highlights were written 2026-09-24 at the organizers' request from
@@ -143,12 +144,13 @@ export const mentors: Mentor[] = [
     askMeAbout: null,
     goodFitFor: null,
     session: {
-      format: null,
+      format: "in-person",
       durationMinutes: SESSION_MINUTES,
-      location: null,
+      location: "Atrium, Siebel Center for Computer Science",
+      address: "201 N. Goodwin Ave., Urbana, IL 61801",
       sessionCount: null,
-      confirmed: false,
-      note: "Arnav is holding office hours on Friday, October 2, from 10:00 to 11:30 AM. We’re still setting the location.",
+      confirmed: true,
+      note: "Arnav is holding office hours on Friday, October 2, from 10:00 to 11:30 AM in the atrium of the Siebel Center for Computer Science.",
     },
     availability: [
       {
@@ -163,10 +165,15 @@ export const mentors: Mentor[] = [
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/arnav-mishra/" }],
     acceptingApplications: true,
     organizerNotes:
-      "Window confirmed for Fri Oct 2, 10:00–11:30 AM (organizer update, Sept 24); location pending. Speaking 1:55 PM at the Founders Showcase. Hosting a happy hour at Legends Wed Sep 30, 5–7 PM (invited the Founders community).",
+      "Window confirmed for Fri Oct 2, 10:00–11:30 AM (organizer update, Sept 24). Location from Arnav (Sept 25): the Atrium of the Siebel Center for Computer Science, 201 North Goodwin Avenue, Urbana. Added to the calendar at his suggestion (Sept 25): his Siebel School Speaker Series talk Wed Sep 30, 3:30 PM (Siebel 2405). He also told us he’s on the Entrepreneurial Impact panel Thu Oct 1, 3–5 PM (Beckman Institute), which was already on the calendar; he’s now listed on it. Speaking 1:55 PM Fri at the Founders Showcase. Hosting a happy hour at Legends Wed Sep 30, 5–7 PM (invited the Founders community).",
     sources: [
       BRIEF,
       AGENDA,
+      {
+        label: "Organizer update: office hours in the Atrium, Siebel Center for Computer Science, 201 North Goodwin Avenue, Urbana",
+        note: "From Arnav Mishra, relayed by Founders organizers.",
+        checked: "2026-09-25",
+      },
       {
         label: "DOSS: Arnav Mishra author page",
         url: "https://www.doss.com/resources/authors/arnav-mishra",

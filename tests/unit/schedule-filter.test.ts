@@ -142,6 +142,13 @@ const HAPPY_HOUR = "happy-hour-at-legends-with-arnav-mishra";
 const FAILURE_LAB = "founder-failure-lab";
 const HAPPY_HOUR_TITLE = "Happy Hour with Arnav Mishra at Legends";
 const TECHRISE = "techrise-pitch-competition";
+const IMPACT = "entrepreneurial-impact-launching-from-illinois";
+/** Arnav's Siebel School Speaker Series talk (Wed Sep 30): the listing gives a 3:30 PM start and no end. */
+const SIEBEL_TALK = "building-an-ai-native-company";
+const SIEBEL_TALK_TITLE = "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories";
+const SIEBEL_CALENDAR = "https://calendars.illinois.edu/detail/7046?eventId=33563773";
+const ARNAV_VENUE = "Atrium, Siebel Center for Computer Science";
+const ARNAV_ADDRESS = "201 N. Goodwin Ave., Urbana, IL 61801";
 
 /**
  * The Founders Week Afterparty (Sat Oct 3, HERE Apartments) was canceled and must never appear.
@@ -162,6 +169,9 @@ describe("production calendar", () => {
       ELLIOTT_WED_AM_OH,
       ELLIOTT_WED_PM_OH,
       KICKOFF,
+      // Arnav's Siebel talk also starts at 3:30 PM: the tie keeps content order (the kickoff
+      // reception is listed first).
+      SIEBEL_TALK,
       // Arnav's happy hour starts as the kickoff reception ends (5:00 PM).
       HAPPY_HOUR,
       FAILURE_LAB,
@@ -173,7 +183,7 @@ describe("production calendar", () => {
       RISHAB_OH,
       // Ron's Thursday window (2:30–4:30 PM) starts before Entrepreneurial Impact (3:00 PM).
       RON_OH,
-      "entrepreneurial-impact-launching-from-illinois",
+      IMPACT,
       "techrise-pitch-competition",
       // Arnav's Friday window (10:00–11:30 AM) starts after the Showcase opens (8:00 AM).
       SHOWCASE,
@@ -183,7 +193,7 @@ describe("production calendar", () => {
       "tailgate-and-enterpriseworks-tour",
       "illinois-football-vs-purdue",
     ]);
-    expect(production).toHaveLength(19);
+    expect(production).toHaveLength(20);
     const days = scheduleDays(production);
     expect(days).toEqual(["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"]);
     expect(dateRangeLabel(days[0], days[days.length - 1])).toBe("Mon Sep 28 – Sat Oct 3");
@@ -223,6 +233,152 @@ describe("production calendar", () => {
     expect(byId(HAPPY_HOUR).speakers).toEqual([
       expect.objectContaining({ name: "Arnav Mishra", role: "host", mentorId: "arnav-mishra" }),
     ]);
+  });
+
+  it("lists Arnav's Siebel School talk as a related talk with a 3:30 PM start only, no Founders label and no calendar export", () => {
+    const talk = byId(SIEBEL_TALK);
+    expect(talk).toMatchObject({
+      kind: "event",
+      title: SIEBEL_TALK_TITLE,
+      date: "2026-09-30",
+      status: "confirmed",
+      statusNote: null,
+      types: ["talk"],
+      // A Siebel School Speaker Series talk: nothing ties it to Founders or the Founders Week program.
+      involvement: null,
+      related: true,
+      foundersPick: false,
+      featuredRank: null,
+      organizer: "Siebel School of Computing and Data Science",
+      location: {
+        kind: "in-person",
+        venue: "Siebel Center for Computer Science",
+        room: "Room 2405",
+        address: "201 N. Goodwin Ave., Urbana, IL 61801",
+      },
+      summary:
+        "A Siebel School Speaker Series talk by Arnav Mishra, co-founder and CTO of Doss, on the engineering behind an AI-native company.",
+      registration: null,
+      links: [{ label: "Event information", url: SIEBEL_CALENDAR }],
+      sessions: [],
+      callout: null,
+      sessionRule: null,
+      mentor: null,
+      sortMinutes: 15 * 60 + 30,
+    });
+    // The Siebel School listing (and its calendar file) gives a start and no end: none is invented,
+    // so there is no interval and no calendar export yet.
+    expect(talk.time).toEqual({ kind: "exact", start: "15:30" });
+    expect(talk.startsAt).toBeNull();
+    expect(talk.endsAt).toBeNull();
+    expect(talk.calendar).toEqual({ available: false, reason: "Calendar export opens once an end time is announced." });
+    // The description doesn't restate the time; the When line and the calendar note cover it.
+    expect(talk.description).not.toMatch(/\d{1,2}:\d\d/);
+    // Arnav is the speaker, linked to his office-hours profile.
+    expect(talk.speakers).toEqual([
+      { name: "Arnav Mishra", title: "Co-Founder & CTO, Doss", verified: true, mentorId: "arnav-mishra" },
+    ]);
+    // Displayed text never implies Founders runs or supports it, and uses plain punctuation.
+    const shown = [talk.title, talk.summary, talk.description, talk.organizer].join(" ");
+    expect(shown).not.toMatch(/Founders/);
+    expect(shown).not.toContain("—");
+  });
+
+  it("lists every Arnav appearance in date order: Siebel talk, happy hour host, Impact panelist, Showcase speaker, office hours", () => {
+    const arnav = production.filter(
+      (e) =>
+        e.mentor?.id === "arnav-mishra" ||
+        e.speakers.some((s) => s.mentorId === "arnav-mishra") ||
+        e.sessions.some((s) => s.people.some((p) => p.mentorId === "arnav-mishra")),
+    );
+    expect(arnav.map((e) => [e.id, e.date])).toEqual([
+      [SIEBEL_TALK, "2026-09-30"],
+      [HAPPY_HOUR, "2026-09-30"],
+      [IMPACT, "2026-10-01"],
+      [SHOWCASE, "2026-10-02"],
+      [ARNAV_OH, "2026-10-02"],
+    ]);
+    const role = (id: string) => byId(id).speakers.find((s) => s.mentorId === "arnav-mishra")?.role ?? "speaker";
+    expect([SIEBEL_TALK, HAPPY_HOUR, IMPACT].map(role)).toEqual(["speaker", "host", "speaker"]);
+    // Entrepreneurial Impact (Thu Oct 1, 3–5 PM, Beckman Institute) now names him as a panelist; no
+    // other panelists were supplied.
+    expect(byId(IMPACT)).toMatchObject({
+      time: { kind: "exact", start: "15:00", end: "17:00" },
+      involvement: "week",
+      related: false,
+      location: { kind: "in-person", venue: "Beckman Institute", address: "Urbana" },
+      summary: "A panel discussion and networking at the Beckman Institute. Arnav Mishra of Doss is on the panel.",
+      calendar: { available: true },
+    });
+    expect(byId(IMPACT).speakers).toEqual([
+      { name: "Arnav Mishra", title: "Co-Founder & CTO, Doss", verified: true, mentorId: "arnav-mishra" },
+    ]);
+    expect(byId(IMPACT).description).toBe(
+      "A panel discussion on launching from Illinois at the Beckman Institute in Urbana, followed by networking.\n\n" +
+        "Arnav Mishra, co-founder and CTO of Doss and one of this week’s office-hours mentors, is on the panel.",
+    );
+  });
+
+  it("lists Arnav's office hours once, on Fri Oct 2, 10:00–11:30 AM in the Siebel Center atrium, confirmed", () => {
+    const mine = production.filter((e) => e.mentor?.id === "arnav-mishra");
+    expect(ids(mine)).toEqual([ARNAV_OH]);
+    expect(byId(ARNAV_OH)).toEqual({
+      id: ARNAV_OH,
+      kind: "office-hours",
+      title: "Office hours with Arnav Mishra",
+      date: "2026-10-02",
+      time: { kind: "exact", start: "10:00", end: "11:30" },
+      timeLabel: null,
+      // Time and place are confirmed (the place from Arnav, Sept 25), so there's no status note.
+      status: "confirmed",
+      statusNote: null,
+      types: ["office-hours"],
+      involvement: "hosted",
+      foundersPick: true,
+      organizer: "Founders – Illinois Entrepreneurs",
+      location: { kind: "in-person", venue: ARNAV_VENUE, address: ARNAV_ADDRESS },
+      summary: "By application. Meet Arnav of Doss during Founders Week. Appointments are limited.",
+      // His window note already says it isn't a booked appointment, so that line isn't repeated.
+      description:
+        "Arnav Mishra (Co-Founder & CTO, Doss) is available for office hours: Friday, October 2, 10:00–11:30 AM CT.\n\n" +
+        "Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.\n\n" +
+        "Each session is 25 minutes, with a 5-minute break between sessions. " +
+        "Appointments are limited. Founders will match applicants by interests and availability, then email selected students to confirm.",
+      speakers: [],
+      topics: [],
+      registration: {
+        url: "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
+        label: "Apply to meet Arnav",
+        internal: true,
+      },
+      links: [],
+      sessions: [],
+      featuredRank: 1,
+      related: false,
+      callout: null,
+      sessionRule: "Each session is 25 minutes, with a 5-minute break between sessions.",
+      sources: mentors.find((m) => m.id === "arnav-mishra")!.sources,
+      mentor: {
+        id: "arnav-mishra",
+        name: "Arnav Mishra",
+        firstName: "Arnav",
+        role: "Co-Founder & CTO",
+        company: "Doss",
+        windowId: "arnav-mishra-2026-10-02-am",
+      },
+      demo: false,
+      sortMinutes: 10 * 60,
+      // 10:00 and 11:30 AM CDT (UTC−5).
+      startsAt: "2026-10-02T15:00:00.000Z",
+      endsAt: "2026-10-02T16:30:00.000Z",
+      // Confirmed, and still never exported: selected students get their time by email.
+      calendar: {
+        available: false,
+        reason: "Office hours are by application. Selected students get their confirmed time by email.",
+      },
+    });
+    const text = JSON.stringify({ ...byId(ARNAV_OH), sources: [] });
+    expect(text).not.toMatch(/to be confirmed|to be announced|still setting the location|Scheduling in progress|Express interest/i);
   });
 
   it("only creates office-hours entries for mentors with published windows", () => {
@@ -438,7 +594,7 @@ describe("production calendar", () => {
       TECHRISE,
       FIXTURE_OH,
     ]);
-    expect(withDateOnly).toHaveLength(20);
+    expect(withDateOnly).toHaveLength(21);
     expect(byId(FIXTURE_OH, withDateOnly)).toMatchObject({
       kind: "office-hours",
       title: "Office hours with Fixture Mentor",
@@ -493,6 +649,8 @@ describe("production calendar", () => {
     expect(text).not.toMatch(/student teams|eligibility rule|phone number|Oct 1 and 2/i);
     // And Ron's openness to Oct 4.
     expect(text).not.toMatch(/Oct(ober)?\.? 4\b/i);
+    // And Arnav's organizer note (where his location and extra listings came from).
+    expect(text).not.toMatch(/Location from Arnav|Added to the calendar at his suggestion|now listed on it|Siebel 2405/i);
   });
 
   it("never offers an application or booking for anything but office hours (Dan Caruso included)", () => {
@@ -528,8 +686,20 @@ describe("search", () => {
 
   it("matches speakers, mentors and companies across events and office hours", () => {
     expect(find("Kennedy")).toEqual([PANEL]);
-    expect(find("doss")).toEqual([HAPPY_HOUR, SHOWCASE, ARNAV_OH]);
-    expect(find("arnav")).toEqual([HAPPY_HOUR, SHOWCASE, ARNAV_OH]);
+    // Arnav (and Doss), in date order: his Siebel talk, his happy hour, the Entrepreneurial Impact
+    // panel, the Showcase (his 1:55 PM talk) and his Friday office hours.
+    expect(find("doss")).toEqual([SIEBEL_TALK, HAPPY_HOUR, IMPACT, SHOWCASE, ARNAV_OH]);
+    expect(find("arnav")).toEqual([SIEBEL_TALK, HAPPY_HOUR, IMPACT, SHOWCASE, ARNAV_OH]);
+    expect(ids(filterEntries(production, f({ types: ["talk"], q: "arnav" })))).toEqual([SIEBEL_TALK, SHOWCASE]);
+    expect(ids(filterEntries(production, f({ types: ["panel"], q: "arnav" })))).toEqual([IMPACT, SHOWCASE]);
+    // The Siebel Center: the talk (Room 2405) and Arnav's office hours (the atrium), by venue and
+    // street (written "201 N. Goodwin Ave." in both places).
+    expect(find("siebel")).toEqual([SIEBEL_TALK, ARNAV_OH]);
+    expect(find("goodwin")).toEqual([SIEBEL_TALK, ARNAV_OH]);
+    expect(find("atrium")).toEqual([ARNAV_OH]);
+    expect(find("room 2405")).toEqual([SIEBEL_TALK]);
+    expect(find("siebel school")).toEqual([SIEBEL_TALK]);
+    expect(find("distributed systems")).toEqual([SIEBEL_TALK]);
     expect(find("aerospace")).toEqual([PATRICK_OH, SHOWCASE]);
     expect(find("caruso ventures")).toEqual([DAN]);
     expect(find("zayo")).toEqual([DAN]);
@@ -621,9 +791,15 @@ describe("filters and facets", () => {
       ELLIOTT_WED_AM_OH,
       ELLIOTT_WED_PM_OH,
       KICKOFF,
+      SIEBEL_TALK,
       HAPPY_HOUR,
       FAILURE_LAB,
     ]);
+    // Talks: Dan Caruso's fireside chat, Arnav's Siebel talk and the Showcase day program.
+    expect(ids(filterEntries(production, f({ types: ["talk"] })))).toEqual([DAN, SIEBEL_TALK, SHOWCASE]);
+    expect(ids(filterEntries(production, f({ day: "2026-09-30", types: ["talk"] })))).toEqual([SIEBEL_TALK]);
+    // It's a related event, not a Founders pick.
+    expect(ids(filterEntries(production, f({ day: "2026-09-30", types: ["talk"], view: "picks" })))).toEqual([]);
     expect(ids(filterEntries(production, f({ view: "picks" })))).toEqual([
       DAN,
       PANEL,
@@ -673,7 +849,8 @@ describe("filters and facets", () => {
     // Office hours lead, then the core types, then the other types present in content.
     expect(facets.map((x) => [x.type, x.count])).toEqual([
       ["office-hours", 7],
-      ["talk", 2],
+      // Dan Caruso, Arnav's Siebel talk and the Showcase day program.
+      ["talk", 3],
       ["panel", 7],
       ["networking", 6],
       ["pitch", 2],
@@ -696,11 +873,11 @@ describe("filters and facets", () => {
     expect(filterEntries(production, f({ day: "2026-10-01", view: "picks" }))).toHaveLength(4);
     expect(filterEntries(production, f({ day: "2026-10-02", view: "picks" }))).toHaveLength(2);
     const all = dayCounts(production, days, f());
-    expect(all.all).toBe(19);
+    expect(all.all).toBe(20);
     expect(all.byDay).toEqual({
       "2026-09-28": 1,
       "2026-09-29": 1,
-      "2026-09-30": 5,
+      "2026-09-30": 6,
       "2026-10-01": 7,
       "2026-10-02": 3,
       "2026-10-03": 2,
@@ -718,10 +895,10 @@ describe("filters and facets", () => {
     });
 
     // Facet counts follow the other filters: Thursday has four office-hours windows (Patrick,
-    // Elliott, Rishab, Ron), Wednesday two (both Elliott's).
+    // Elliott, Rishab, Ron), Wednesday two (both Elliott's) and one talk (Arnav's at Siebel).
     expect(typeFacets(production, f({ day: "2026-09-30" })).map((x) => [x.type, x.count])).toEqual([
       ["office-hours", 2],
-      ["talk", 0],
+      ["talk", 1],
       ["panel", 1],
       ["networking", 2],
       ["pitch", 0],
@@ -746,7 +923,7 @@ describe("filters and facets", () => {
       ["types", 1],
     ]);
     const search = relaxations(production, f({ q: "zzz" }));
-    expect(search).toEqual([{ dimension: "q", count: 19, filters: f() }]);
+    expect(search).toEqual([{ dimension: "q", count: 20, filters: f() }]);
     // No office hours on Saturday: clearing the day brings back all seven windows.
     const saturday = f({ day: "2026-10-03", types: ["office-hours"] });
     expect(filterEntries(production, saturday)).toHaveLength(0);
@@ -768,7 +945,8 @@ describe("filters and facets", () => {
 describe("overlaps", () => {
   it("the production calendar's clashes: Elliott's Wednesday afternoon window with the kickoff reception, Wednesday evening, the Thursday windows with the program blocks, and Arnav's Friday window inside the Showcase", () => {
     // Wednesday has two clusters (Elliott's 2–5 PM window with the kickoff reception, then the
-    // happy hour with Failure Lab); Thursday and Friday have one each; other days have none.
+    // happy hour with Failure Lab), with Arnav's start-only Siebel talk on its own between them;
+    // Thursday and Friday have one each; other days have none.
     const clusterCounts: Record<string, number> = { "2026-09-30": 2, "2026-10-01": 1, "2026-10-02": 1 };
     for (const group of groupByDay(production)) {
       const blocks = agendaBlocks(group.entries);
@@ -792,10 +970,18 @@ describe("overlaps", () => {
     expect(ids(overlapsFor(byId(KICKOFF), production))).toEqual([ELLIOTT_WED_PM_OH]);
     expect(entriesOverlap(byId(ELLIOTT_WED_PM_OH), byId(HAPPY_HOUR))).toBe(false);
     expect(entriesOverlap(byId(ELLIOTT_WED_AM_OH), byId(ELLIOTT_WED_PM_OH))).toBe(false);
+    // Arnav's Siebel talk starts at 3:30 PM, inside Elliott's window and as the kickoff reception
+    // starts, but its listing gives no end time. Without an interval it never clusters (no end time is
+    // invented), so it's listed on its own between the two clusters and clashes with nothing.
+    expect(byId(SIEBEL_TALK).endsAt).toBeNull();
+    expect(ids(overlapsFor(byId(SIEBEL_TALK), production))).toEqual([]);
+    expect(entriesOverlap(byId(SIEBEL_TALK), byId(KICKOFF))).toBe(false);
+    expect(entriesOverlap(byId(SIEBEL_TALK), byId(ELLIOTT_WED_PM_OH))).toBe(false);
     const wednesday = agendaBlocks(groupByDay(production).find((g) => g.date === "2026-09-30")!.entries);
     expect(wednesday.map((b) => (b.kind === "single" ? b.entry.id : ids(b.entries)))).toEqual([
       ELLIOTT_WED_AM_OH,
       [ELLIOTT_WED_PM_OH, KICKOFF],
+      SIEBEL_TALK,
       [HAPPY_HOUR, FAILURE_LAB],
     ]);
     const afternoon = wednesday[1];
@@ -807,7 +993,7 @@ describe("overlaps", () => {
       [ELLIOTT_WED_PM_OH]: [{ id: KICKOFF, title: "Founders Week Kickoff Reception" }],
       [KICKOFF]: [{ id: ELLIOTT_WED_PM_OH, title: "Office hours with Elliott Notrica" }],
     });
-    const evening = wednesday[2];
+    const evening = wednesday[3];
     if (evening.kind !== "overlap") throw new Error("expected Wednesday evening's cluster");
     expect(evening.start).toBe("17:00");
     expect(evening.end).toBe("20:30");
@@ -816,7 +1002,6 @@ describe("overlaps", () => {
     // (11:45 AM–2:15 PM), each other, Ron's window (2:30–4:30 PM) and Entrepreneurial Impact
     // (3–5 PM). Patrick's window ends at 11:30 AM, and TechRise starts as their windows end (5 PM):
     // neither is an overlap. (Elliott's TechRise panel, at 6:30 PM, is after his window.)
-    const IMPACT = "entrepreneurial-impact-launching-from-illinois";
     const PITCHING = "science-and-practice-of-pitching";
     expect(ids(overlapsFor(byId(RISHAB_OH), production))).toEqual([PITCHING, ELLIOTT_THU_OH, RON_OH, IMPACT]);
     expect(ids(overlapsFor(byId(ELLIOTT_THU_OH), production))).toEqual([PITCHING, RISHAB_OH, RON_OH, IMPACT]);
@@ -1073,8 +1258,11 @@ describe("program blocks", () => {
         role: "speaker",
       },
     ]);
-    // A plain event (no program) links its host through speakers, not programMentors.
+    // A plain event (no program) links its host or speaker through speakers, not programMentors:
+    // Arnav's happy hour, his Siebel talk and the Entrepreneurial Impact panel.
     expect(programMentors(byId(HAPPY_HOUR))).toEqual([]);
+    expect(programMentors(byId(SIEBEL_TALK))).toEqual([]);
+    expect(programMentors(byId(IMPACT))).toEqual([]);
     expect(mentorProfileHref("vikram-lakhwara")).toBe("/office-hours/vikram-lakhwara");
     expect(mentorProfileHref("elliott-notrica")).toBe("/office-hours/elliott-notrica");
     expect(mentorProfileHref("rishab-veldur")).toBe("/office-hours/rishab-veldur");
@@ -1130,6 +1318,10 @@ describe("display helpers", () => {
     });
     expect(entryStartText(byId(PANEL))).toEqual({ text: "6:00 PM", dateTime: "18:00" });
     expect(entryTimeText(byId(DAN))).toBe("4:00 PM CT");
+    // Arnav's Siebel talk: a 3:30 PM start and no end in the Siebel School listing, so none is invented.
+    expect(agendaTime(byId(SIEBEL_TALK))).toEqual({ main: "3:30 PM", sub: null, start: "15:30", end: null });
+    expect(entryStartText(byId(SIEBEL_TALK))).toEqual({ text: "3:30 PM", dateTime: "15:30" });
+    expect(entryTimeText(byId(SIEBEL_TALK))).toBe("3:30 PM CT");
     expect(entryTimeText(byId(PANEL))).toBe("6:00–8:00 PM CT");
     expect(entryTimeText(byId("tailgate-and-enterpriseworks-tour"))).toBe("Time to be announced");
     // Rishab's window reads like Patrick's.
@@ -1161,7 +1353,16 @@ describe("display helpers", () => {
     expect(locationLines(byId(HAPPY_HOUR).location)).toEqual(["Legends", "6th & Green"]);
     expect(locationSummary(byId(PATRICK_OH).location)).toBe("Espresso Royale at Grainger Library");
     expect(locationLines(byId(PATRICK_OH).location)).toEqual(["Espresso Royale at Grainger Library", "1301 W Springfield Ave, Urbana, IL 61801"]);
-    expect(locationSummary(byId(ARNAV_OH).location)).toBe("Location to be announced");
+    // Arnav's office hours: in person in the Siebel Center atrium, at the address he gave (Sept 25).
+    expect(locationSummary(byId(ARNAV_OH).location)).toBe(ARNAV_VENUE);
+    expect(locationLines(byId(ARNAV_OH).location)).toEqual([ARNAV_VENUE, ARNAV_ADDRESS]);
+    // His Siebel talk: Room 2405 in the same building, as the Siebel School lists it.
+    expect(locationSummary(byId(SIEBEL_TALK).location)).toBe("Siebel Center for Computer Science · Room 2405");
+    expect(locationLines(byId(SIEBEL_TALK).location)).toEqual([
+      "Siebel Center for Computer Science",
+      "Room 2405",
+      "201 N. Goodwin Ave., Urbana, IL 61801",
+    ]);
     expect(locationSummary(byId(RON_OH).location)).toBe("Business Instructional Facility (BIF)");
     expect(locationLines(byId(RON_OH).location)).toEqual([
       "Business Instructional Facility (BIF)",

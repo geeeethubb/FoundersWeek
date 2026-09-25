@@ -13,7 +13,7 @@ import { E2E_BASE_URL, E2E_NODEMO_BASE_URL } from "./tests/e2e/support/env";
  *   - port 3200, distDir .next-e2e: demo content on (the organizer capacity test needs the demo
  *     slot), a fixed organizer password and relaxed rate limits. Every spec runs here except…
  *   - port 3201, distDir .next-e2e-nodemo (`--no-demo`): production content only, exactly as
- *     students see it (six mentors, 15 calendar entries). production-content.spec.ts runs here.
+ *     students see it (six mentors, 20 calendar entries). production-content.spec.ts runs here.
  * Every spec creates its own data with unique e2e-… emails, so a non-empty database is fine.
  *
  * Projects: "desktop" (1440×900) runs everything; "mobile" (390×844, touch) runs every spec whose

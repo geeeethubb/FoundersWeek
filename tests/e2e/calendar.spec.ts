@@ -19,7 +19,14 @@
  *     CT (no overlap) and 2:00–5:00 PM CT (overlapping the Kickoff Reception; the happy hour starts
  *     as it ends); Thu, Oct 1, 12:00–5:00 PM CT (overlapping Pitching, Rishab, Ron and Launching From
  *     Illinois). Each row's "Apply to meet Elliott" preselects that window; never exported.
- *   - Arnav's office hours: Fri, Oct 2, 10:00–11:30 AM CT, during the Showcase Day Sessions.
+ *   - Arnav's office hours: Fri, Oct 2, 10:00–11:30 AM CT, during the Showcase Day Sessions, in
+ *     person in the Atrium of the Siebel Center for Computer Science, 201 N. Goodwin Ave.
+ *   - Arnav's Siebel School Speaker Series talk, "Building an AI-Native Company: …", on Wednesday:
+ *     3:30 PM CT start only (the listing gives no end time), Siebel Center Room 2405, a related event
+ *     with no Founders label, an Event information link to the Siebel School calendar, Arnav linked
+ *     to his profile, and no calendar export until there's an end time.
+ *   - Thursday's "Entrepreneurial Impact: Launching From Illinois" panel lists Arnav, linked to his
+ *     profile.
  *   - Office-hours pages and the card state the session rule (25 minutes, 5-minute break). The
  *     office-hours card links every mentor's profile.
  *   - The canceled HERE Apartments afterparty is absent everywhere, and its URL is a 404.
@@ -28,6 +35,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   ARNAV,
+  ARNAV_ADDRESS,
+  ARNAV_VENUE,
   applicationForm,
   CANCELED_AFTERPARTY,
   ELLIOTT,
@@ -53,6 +62,14 @@ import {
   waitForHydration,
 } from "./support/helpers";
 import {
+  AI_TALK_ADDRESS,
+  AI_TALK_ID,
+  AI_TALK_INFO_URL,
+  AI_TALK_ORGANIZER,
+  AI_TALK_PATH,
+  AI_TALK_ROOM,
+  AI_TALK_TITLE,
+  AI_TALK_VENUE,
   CANCELED_AFTERPARTY_PATH,
   DAN_ADDRESS,
   DAN_CALLOUT,
@@ -80,6 +97,7 @@ import {
   HAPPY_HOUR_RSVP_URL,
   HAPPY_HOUR_TITLE,
   KICKOFF_TITLE,
+  LAUNCHING_PATH,
   LAUNCHING_TITLE,
   PANEL_INFO_URL,
   PANEL_PATH,
@@ -362,6 +380,114 @@ test.describe("Featured related events", () => {
   });
 });
 
+test.describe("Arnav Mishra on the calendar: his Siebel School talk and the Launching From Illinois panel", () => {
+  test("Wednesday 3:30 PM CT: the Siebel talk, start time only, Room 2405, a related event with no Founders label; no calendar export", async ({
+    page,
+  }) => {
+    await openCalendar(page);
+    const wednesday = dayRegion(page, "Wednesday, September 30");
+    const row = entry(wednesday, page, AI_TALK_TITLE);
+    await expect(row).toHaveCount(1);
+    const start = row.locator("time[datetime]");
+    await expect(start).toHaveAttribute("datetime", "2026-09-30T15:30");
+    await expect(start).toHaveText("3:30 PM");
+    // The Siebel School's listing gives no end time, so the row shows none.
+    await expect(row).not.toContainText(/\bto \d{1,2}:\d{2}/);
+    await expect(row).toContainText(`${AI_TALK_VENUE} · ${AI_TALK_ROOM}`);
+    await expect(row).toContainText(ARNAV.name);
+    // A related event: no source ties it to Founders, so no involvement label and no pick.
+    await expect(row).toContainText("Related event");
+    await expect(row).not.toContainText(/by Founders|Part of Founders Week|Founders pick/);
+    await expect(row.getByRole("link", { name: /^Event information/ })).toHaveAttribute("href", AI_TALK_INFO_URL);
+    await expectInformationOnly(row);
+    // Sorted by start: after Elliott's 2:00 PM window, before the 5:00 PM happy hour. (The exact
+    // Wednesday order, without demo content: production-content.spec.ts.)
+    const titles = (await wednesday.getByRole("article").getByRole("heading").allInnerTexts()).map((t) => t.trim());
+    expect(titles.lastIndexOf(ELLIOTT_OFFICE_HOURS), "Elliott's afternoon window is listed").toBeGreaterThanOrEqual(0);
+    expect(titles.indexOf(AI_TALK_TITLE)).toBeGreaterThan(titles.lastIndexOf(ELLIOTT_OFFICE_HOURS));
+    expect(titles.indexOf(HAPPY_HOUR_TITLE)).toBeGreaterThan(titles.indexOf(AI_TALK_TITLE));
+
+    await row.getByRole("link", { name: AI_TALK_TITLE, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${AI_TALK_PATH}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(AI_TALK_TITLE);
+    const main = page.getByRole("main");
+    // The page's own header: label, when, where, organizer and the official listing.
+    const header = main.locator("header").first();
+    await expect(header).toContainText("Related event");
+    await expect(header).not.toContainText(/by Founders|Part of Founders Week|Founders pick/);
+    await expect(header).toContainText("Wednesday, September 30");
+    // A start time labeled CT, and never an end the listing doesn't give.
+    await expect(header.getByText("3:30 PM CT", { exact: true })).toBeVisible();
+    await expect(header).not.toContainText(/3:30\s*(PM\s*)?[–-]/);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /^Wednesday, September 30 · 3:30 PM CT\. /);
+    for (const line of [AI_TALK_VENUE, AI_TALK_ROOM, AI_TALK_ADDRESS, AI_TALK_ORGANIZER]) await expect(header).toContainText(line);
+    const info = header.getByRole("link", { name: /^Event information/ });
+    await expect(info).toHaveAttribute("href", AI_TALK_INFO_URL);
+    await expect(info).toHaveAttribute("target", "_blank");
+    await expect(info).toHaveAttribute("rel", /\bnoopener\b/);
+    expect(new URL(AI_TALK_INFO_URL).hostname).toBe("calendars.illinois.edu");
+    await expectInformationOnly(header);
+    await expect(main.getByRole("region", { name: "About", exact: true })).toContainText("Siebel School Speaker Series");
+
+    // The speaker: Arnav, an office-hours mentor, linked to his profile.
+    const speaker = main.getByRole("region", { name: "Speaker", exact: true });
+    await expect(speaker.getByRole("listitem")).toHaveCount(1);
+    await expect(speaker.getByRole("link", { name: ARNAV.name, exact: true })).toHaveAttribute("href", `/office-hours/${ARNAV.id}`);
+    await expect(speaker).toContainText(`${ARNAV.role}, ${ARNAV.company}`);
+    await expect(speaker).toContainText("Office-hours mentor");
+    // An event, not office hours: no application or booking action.
+    await expect(main.getByRole("link", { name: /^(Apply|Express interest|Select mentor)\b/ })).toHaveCount(0);
+    await expect(main.getByRole("form")).toHaveCount(0);
+
+    // No end time, so no add-to-calendar yet: no buttons, no .ics, not in the week feed.
+    const calendar = main.getByRole("complementary", { name: "Calendar and sharing" });
+    await expect(calendar).toContainText("Calendar export opens once an end time is announced.");
+    await expect(calendar.getByRole("link", { name: /\.ics|Google Calendar/ })).toHaveCount(0);
+    expect((await page.request.get(`${AI_TALK_PATH}/calendar.ics`)).status()).toBe(404);
+    const feed = await fetchIcs(page, "/schedule/calendar.ics");
+    expect(icsEvents(feed).length, "the week feed still has events").toBeGreaterThan(0);
+    expect(unfoldIcs(feed)).not.toContain(`UID:${AI_TALK_ID}@`);
+
+    // The speaker link opens Arnav's profile.
+    await speaker.getByRole("link", { name: ARNAV.name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/office-hours/${ARNAV.id}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARNAV.name);
+  });
+
+  test("Thursday 3:00–5:00 PM CT: Launching From Illinois lists Arnav as a panelist, linked to his profile", async ({ page }) => {
+    await openCalendar(page);
+    const thursday = dayRegion(page, "Thursday, October 1");
+    const row = entry(thursday, page, LAUNCHING_TITLE);
+    await expect(row).toHaveCount(1);
+    await expect(row.locator("time[datetime]")).toHaveAttribute("datetime", "2026-10-01T15:00");
+    await expect(row).toContainText("to 5:00 PM");
+    await expect(row).toContainText("Beckman Institute");
+    await expect(row).toContainText(`${ARNAV.name} of ${ARNAV.company} is on the panel.`);
+
+    await row.getByRole("link", { name: LAUNCHING_TITLE, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${LAUNCHING_PATH}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(LAUNCHING_TITLE);
+    const main = page.getByRole("main");
+    await expect(main).toContainText("Thursday, October 1");
+    await expect(main).toContainText("3:00–5:00 PM CT");
+    await expect(main.getByRole("region", { name: "About", exact: true })).toContainText(
+      `${ARNAV.name}, co-founder and CTO of ${ARNAV.company} and one of this week’s office-hours mentors, is on the panel.`,
+    );
+    // Arnav is the only panelist supplied; he's linked to his profile.
+    const speaker = main.getByRole("region", { name: "Speaker", exact: true });
+    await expect(speaker.getByRole("listitem")).toHaveCount(1);
+    const link = speaker.getByRole("link", { name: ARNAV.name, exact: true });
+    await expect(link).toHaveAttribute("href", `/office-hours/${ARNAV.id}`);
+    await expect(speaker).toContainText(`${ARNAV.role}, ${ARNAV.company}`);
+    await expect(speaker).toContainText("Office-hours mentor");
+    await expect(main.getByRole("link", { name: /^(Apply|Express interest|Select mentor)\b/ })).toHaveCount(0);
+
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`/office-hours/${ARNAV.id}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(ARNAV.name);
+  });
+});
+
 test.describe("Office hours on the calendar", () => {
   test("Patrick: office hours on Thu, Oct 1, 10:00–11:30 AM CT at Espresso Royale in Grainger Library; Apply preselects his window", async ({
     page,
@@ -627,7 +753,9 @@ test.describe("Office hours on the calendar", () => {
     }
   });
 
-  test("Arnav: office hours on Fri, Oct 2, 10:00–11:30 AM CT, during the Showcase Day Sessions", async ({ page }) => {
+  test("Arnav: office hours on Fri, Oct 2, 10:00–11:30 AM CT in the Siebel Center atrium, during the Showcase Day Sessions", async ({
+    page,
+  }) => {
     await openCalendar(page);
     const friday = dayRegion(page, "Friday, October 2");
     const row = entry(friday, page, ARNAV_OFFICE_HOURS);
@@ -636,8 +764,9 @@ test.describe("Office hours on the calendar", () => {
     await expect(start).toHaveAttribute("datetime", "2026-10-02T10:00");
     await expect(start).toHaveText("10:00 AM");
     await expect(row).toContainText("to 11:30 AM");
+    await expect(row).toContainText(ARNAV_VENUE);
     await expect(row).toContainText("Availability window");
-    await expect(row).not.toContainText(/Morning|exact window pending|Exact times TBA|to be confirmed/i);
+    await expect(row).not.toContainText(/Morning|exact window pending|Exact times TBA|to be confirmed|Location to be announced/i);
     await expect(row.getByRole("link", { name: `Apply to meet ${ARNAV.firstName}`, exact: true })).toHaveAttribute(
       "href",
       `/office-hours?mentor=${ARNAV.id}&window=${ARNAV.windowId}#apply`,
@@ -653,9 +782,18 @@ test.describe("Office hours on the calendar", () => {
     await expect(main).toContainText("Friday, October 2");
     await expect(main).toContainText("10:00–11:30 AM CT");
     await expect(main).toContainText(`Availability window, not a booked appointment. ${SESSION_RULE}`);
+    // In person: the Siebel Center atrium, then the street address (from Arnav, Sept 25).
+    const header = main.locator("header").first();
+    await expect(header).toContainText(ARNAV_VENUE);
+    await expect(header).toContainText(ARNAV_ADDRESS);
+    await expect(header).not.toContainText(/Location to be announced|Location is shared with selected students/);
+    await expect(main).toContainText("Submitting an application doesn’t reserve a time slot.");
     const overlaps = main.getByRole("region", { name: "Overlaps with", exact: true });
     await expect(overlaps.getByRole("heading", { name: SHOWCASE_TITLE, exact: true })).toHaveCount(1);
     await expect(overlaps.locator(`a[href="${SHOWCASE_PATH}"]`).first()).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(ORGANIZER_ONLY);
+    // Office hours are never exported to calendars.
+    expect((await page.request.get(`/schedule/office-hours-${ARNAV.windowId}/calendar.ics`)).status()).toBe(404);
   });
 
   test("the office-hours card: every mentor, each linked to their profile, and one Apply button", async ({ page }) => {
@@ -730,11 +868,13 @@ test.describe("Filters, search and detail pages still work", () => {
     await picks.click();
     await expect(picks).toHaveAttribute("aria-pressed", "true");
     await expect(page).toHaveURL(/[?&]view=picks\b/);
-    // Dan Caruso's fireside chat and Arnav's happy hour are picks; the kickoff reception isn't.
+    // Dan Caruso's fireside chat and Arnav's happy hour are picks; the kickoff reception and Arnav's
+    // Siebel talk (a related event) aren't.
     await expect(entry(dayRegion(page, "Monday, September 28"), page, DAN_TITLE)).toBeVisible();
     const wednesday = dayRegion(page, "Wednesday, September 30");
     await expect(entry(wednesday, page, HAPPY_HOUR_TITLE)).toBeVisible();
     await expect(entry(wednesday, page, KICKOFF_TITLE)).toHaveCount(0);
+    await expect(entry(wednesday, page, AI_TALK_TITLE)).toHaveCount(0);
 
     const panels = page.getByRole("group", { name: "Filter by type" }).getByRole("button", { name: /^Panels/ });
     await panels.click();
@@ -772,6 +912,16 @@ test.describe("Filters, search and detail pages still work", () => {
     await expect(page).toHaveURL(/\/schedule$/);
     await expect(search).toHaveValue("");
     await expect(dayRegions(page)).toHaveCount(DAYS.length);
+  });
+
+  test("search “Siebel” finds Arnav's Wednesday talk and his Friday office hours in the Siebel Center atrium", async ({ page }) => {
+    await openCalendar(page);
+    const search = page.getByRole("searchbox", { name: "Search the calendar" });
+    await search.fill("Siebel");
+    await expect(page).toHaveURL(/[?&]q=Siebel\b/);
+    await expect(dayRegions(page).getByRole("heading", { level: 2 })).toHaveText(["Wednesday, September 30", "Friday, October 2"]);
+    await expect(dayRegions(page).getByRole("article").getByRole("heading")).toHaveText([AI_TALK_TITLE, ARNAV_OFFICE_HOURS]);
+    await expect(entry(dayRegion(page, "Friday, October 2"), page, ARNAV_OFFICE_HOURS)).toContainText(ARNAV_VENUE);
   });
 
   test("a row's title opens its detail page; “Calendar” leads back to that day", async ({ page }) => {

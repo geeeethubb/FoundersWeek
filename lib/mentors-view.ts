@@ -11,7 +11,7 @@
  * reviewers. Public UI shows the labels only — never the basis (see `helpLabels`).
  */
 import { AVAILABILITY_KIND_LABELS, type AvailabilityKind } from "@/components/ui/status";
-import type { AppointmentSlot, AvailabilityWindow, Draftable, Mentor, SessionFormat } from "@/content/types";
+import type { AppointmentSlot, AvailabilityWindow, Draftable, Involvement, Mentor, SessionFormat } from "@/content/types";
 import { buildApplicationCatalog, type AvailabilityOption } from "@/lib/applications/catalog";
 import {
   EXACT_TIME_TO_BE_CONFIRMED,
@@ -149,7 +149,7 @@ export function bioFirstSentence(mentor: Pick<Mentor, "bio">): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Founders Week appearances (sessions a mentor speaks at)
+// Appearances (calendar events a mentor speaks at or hosts, official or related)
 // ---------------------------------------------------------------------------
 
 export interface AppearanceView {
@@ -172,6 +172,12 @@ export interface AppearanceView {
   /** "Speaking" · "Moderating" · "Hosting" */
   roleLabel: string;
   venue: string | null;
+  /**
+   * Labels as on the calendar: Founders' involvement (never "Part of Founders Week", the default
+   * there) and "Related event" for events outside the official program.
+   */
+  involvement: Exclude<Involvement, "week"> | null;
+  related: boolean;
 }
 
 export function appearanceView(a: MentorAppearance): AppearanceView {
@@ -187,6 +193,8 @@ export function appearanceView(a: MentorAppearance): AppearanceView {
     dateTime: a.start ? `${a.date}T${a.start}` : a.date,
     roleLabel: a.role === "moderator" ? "Moderating" : a.role === "host" ? "Hosting" : "Speaking",
     venue: a.venue,
+    involvement: a.involvement === "week" ? null : a.involvement,
+    related: a.related,
   };
 }
 

@@ -775,24 +775,55 @@ describe("mentor profile page", () => {
     expect(t).not.toMatch(/one or two/i);
   });
 
-  it("Arnav's profile: Friday 10:00–11:30 AM window, hosting his Wednesday happy hour, then speaking", async () => {
+  it("Arnav's profile: Friday 10:00–11:30 AM window in the Siebel Center atrium, then his Siebel talk, happy hour, panel and Showcase talk in date order", async () => {
     const html = await renderProfile("arnav-mishra");
     const t = text(html);
-    expect(t).toContain(
-      `Office hours Fri, Oct 2 · 10:00–11:30 AM CT ${SESSION_RULE} Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.`,
+    // The window, the session rule, the place (building, then street address), the window's note
+    // and the Apply action.
+    expect(text(officeHoursBlock(html)).replace(/\s+/g, " ").trim()).toBe(
+      `Fri, Oct 2 · 10:00–11:30 AM CT ${SESSION_RULE} Atrium, Siebel Center for Computer Science, 201 N. Goodwin Ave., Urbana, IL 61801 Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it. Apply to meet Arnav`,
     );
-    expect(t).not.toMatch(/exact window pending|before noon/i);
+    expect(t).toContain(
+      `Office hours Fri, Oct 2 · 10:00–11:30 AM CT ${SESSION_RULE} Atrium, Siebel Center for Computer Science, 201 N. Goodwin Ave., Urbana, IL 61801 Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.`,
+    );
+    expect(t).not.toMatch(/exact window pending|before noon|still setting the location/i);
     // His window fits three sessions on the grid; the count is organizer-only.
     expect(t).not.toMatch(/\b(three|3) sessions\b/i);
-    expect(t).toContain("Arnav at Founders Week");
-    expect(anchor(html, "/schedule/happy-hour-at-legends-with-arnav-mishra")).toMatch(
-      /Hosting Wed, Sep 30 · 5:00–7:00 PM CT[\s\S]*Happy Hour with Arnav Mishra at Legends/,
+    const appearances = section(html, "at-founders-week")!;
+    expect(text(/<h2\b[^>]*>([\s\S]*?)<\/h2>/.exec(appearances)![1]).trim()).toBe("Arnav at Founders Week");
+    expect(hrefs(appearances)).toEqual([
+      "/schedule/building-an-ai-native-company",
+      "/schedule/happy-hour-at-legends-with-arnav-mishra",
+      "/schedule/entrepreneurial-impact-launching-from-illinois",
+      "/schedule/founders-showcase-day-sessions",
+    ]);
+    // The Siebel School listing gives a 3:30 PM start and no end: the start alone, labeled CT. It's
+    // outside the official program, so it carries the calendar's "Related event" label.
+    expect(text(anchor(appearances, "/schedule/building-an-ai-native-company")!).trim()).toBe(
+      "Speaking Wed, Sep 30 · 3:30 PM CT Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories Siebel Center for Computer Science Related event",
+    );
+    expect(appearances).toContain('<time dateTime="2026-09-30T15:30">');
+    // His happy hour: supported by Founders and a related event, labeled as on the calendar.
+    expect(text(anchor(appearances, "/schedule/happy-hour-at-legends-with-arnav-mishra")!).trim()).toBe(
+      "Hosting Wed, Sep 30 · 5:00–7:00 PM CT Happy Hour with Arnav Mishra at Legends Legends Supported by Founders Related event",
+    );
+    expect(text(anchor(appearances, "/schedule/entrepreneurial-impact-launching-from-illinois")!).trim()).toBe(
+      "Speaking Thu, Oct 1 · 3:00–5:00 PM CT Entrepreneurial Impact: Launching From Illinois Beckman Institute",
     );
     // Arnav's session title comes from the calendar (content/events.ts), punctuated either way.
     expect(text(anchor(html, "/schedule/founders-showcase-day-sessions")!)).toMatch(
       /Speaking Fri, Oct 2 · 1:55–2:25 PM CT From Idea to Scale(?: — |: )Building Doss[:,] Lessons from an Illini Founder Founders Showcase Day Sessions · Illinois Conference Center/,
     );
-    expect(t.indexOf("Hosting Wed, Sep 30")).toBeLessThan(t.indexOf("Speaking Fri, Oct 2"));
+    const order = [
+      "Speaking Wed, Sep 30 · 3:30 PM CT",
+      "Hosting Wed, Sep 30 · 5:00–7:00 PM CT",
+      "Speaking Thu, Oct 1 · 3:00–5:00 PM CT",
+      "Speaking Fri, Oct 2 · 1:55–2:25 PM CT",
+    ].map((label) => text(appearances).indexOf(label));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // His office hours stay in the header, not in the appearances.
+    expect(text(appearances)).not.toMatch(/Office hours|Atrium/);
   });
 
   it("Elliott's profile: his three windows (Wed, Sep 30 twice; Thu, Oct 1), apply without preselecting one, and his TechRise panel", async () => {
@@ -926,11 +957,20 @@ describe("mentor profile page", () => {
   it("shows the place only once it's set (building, then street address)", () => {
     const patrick = getMentors().find((m) => m.id === "patrick-haddox")!;
     const ron = getMentors().find((m) => m.id === "ron-lewis")!;
+    const arnav = getMentors().find((m) => m.id === "arnav-mishra")!;
     expect(officeHoursPlace(patrick)).toEqual({ venue: "Espresso Royale at Grainger Library", address: "1301 W Springfield Ave, Urbana, IL 61801" });
     expect(officeHoursPlace(ron)).toEqual({
       venue: "Business Instructional Facility (BIF)",
       address: "515 E. Gregory Drive, Champaign, IL 61820",
     });
+    // From Arnav (Sept 25); the street address is abbreviated like the event addresses.
+    expect(officeHoursPlace(arnav)).toEqual({
+      venue: "Atrium, Siebel Center for Computer Science",
+      address: "201 N. Goodwin Ave., Urbana, IL 61801",
+    });
+    // Elliott's and Rishab's places are still being set, so no place renders for them.
+    expect(officeHoursPlace(getMentors().find((m) => m.id === "elliott-notrica")!)).toBeNull();
+    expect(officeHoursPlace(getMentors().find((m) => m.id === "rishab-veldur")!)).toBeNull();
     const buildingOnly = renderToStaticMarkup(
       createElement(OfficeHoursLines, {
         lines: availabilityLines(patrick),

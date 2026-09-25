@@ -355,7 +355,7 @@ describe("social image models (public data)", () => {
     );
   });
 
-  it("Arnav's office-hours calendar entry: Fri, Oct 2, 10:00–11:30 AM CT, place to be announced", () => {
+  it("Arnav's office-hours calendar entry: Fri, Oct 2, 10:00–11:30 AM CT in the Atrium, Siebel Center for Computer Science", () => {
     const site = getSite();
     expect(eventCardModel(entry("office-hours-arnav-mishra-2026-10-02-am"), site)).toEqual({
       label: "Founders Week 2026 · Calendar",
@@ -368,13 +368,63 @@ describe("social image models (public data)", () => {
       people: [],
       morePeople: 0,
       when: "10:00–11:30 AM CT",
-      where: "Location to be announced",
+      where: "Atrium, Siebel Center for Computer Science",
       cta: "Apply for Office Hours",
-      alt: "Office hours with Arnav Mishra: Friday, Oct 2, 10:00–11:30 AM CT, Location to be announced. Founders × Founders Week.",
+      alt: "Office hours with Arnav Mishra: Friday, Oct 2, 10:00–11:30 AM CT, Atrium, Siebel Center for Computer Science. Founders × Founders Week.",
     });
+    expect(eventCardModel(entry("office-hours-arnav-mishra-2026-10-02-am"), closed()).cta).toBeNull();
     expect(JSON.stringify(eventCardModel(entry("office-hours-arnav-mishra-2026-10-02-am"), site))).not.toMatch(
-      /Morning|before noon|pending/i,
+      /Morning|before noon|pending|to be announced/i,
     );
+  });
+
+  it("Arnav's Siebel talk card: Wed, Sept 30, 3:30 PM CT (start only), Room 2405, no Founders label, no CTA", () => {
+    const site = getSite();
+    const talk = eventCardModel(entry("building-an-ai-native-company"), site);
+    expect(talk).toEqual({
+      label: "Founders Week 2026 · Calendar",
+      weekday: "Wednesday",
+      day: "30",
+      month: "September",
+      // A Siebel School talk: no source ties it to Founders or the Founders Week program.
+      involvement: null,
+      status: null,
+      title: "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories",
+      people: [{ name: "Arnav Mishra", title: "Co-Founder & CTO, Doss" }],
+      morePeople: 0,
+      // The listing has no end time, so none is shown.
+      when: "3:30 PM CT",
+      where: "Siebel Center for Computer Science, Room 2405",
+      cta: null,
+      alt: "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories: Wednesday, Sept 30, 3:30 PM CT, Siebel Center for Computer Science, Room 2405. Founders × Founders Week.",
+    });
+    expect(JSON.stringify(talk)).not.toMatch(/Hosted|Co-hosted|Supported|Part of Founders Week|apply/i);
+
+    // Wednesday in start-time order: Elliott's two windows, then the kickoff reception (3:30–5 PM)
+    // and the talk, which both start at 3:30 (content order on the tie) and overlap Elliott's
+    // 2–5 PM window, then the happy hour and Founder Failure Lab.
+    expect(
+      getScheduleEntries()
+        .filter((e) => e.date === "2026-09-30")
+        .map((e) => [e.id, eventCardModel(e, site).when]),
+    ).toEqual([
+      ["office-hours-elliott-notrica-2026-09-30-am", "9:00 AM–12:00 PM CT"],
+      ["office-hours-elliott-notrica-2026-09-30-pm", "2:00–5:00 PM CT"],
+      ["founders-week-kickoff-reception", "3:30–5:00 PM CT"],
+      ["building-an-ai-native-company", "3:30 PM CT"],
+      ["happy-hour-at-legends-with-arnav-mishra", "5:00–7:00 PM CT"],
+      ["founder-failure-lab", "6:30–8:30 PM CT"],
+    ]);
+
+    // Arnav is on the Entrepreneurial Impact panel (Thu Oct 1), the only panelist supplied.
+    expect(eventCardModel(entry("entrepreneurial-impact-launching-from-illinois"), site)).toMatchObject({
+      involvement: { label: "Part of Founders Week", tone: "neutral" },
+      people: [{ name: "Arnav Mishra", title: "Co-Founder & CTO, Doss" }],
+      morePeople: 0,
+      when: "3:00–5:00 PM CT",
+      where: "Beckman Institute",
+      cta: null,
+    });
   });
 
   it("a date-only office-hours entry (fixture mentor): Thursday, Oct 1, time and place to be announced", () => {
@@ -401,6 +451,7 @@ describe("social image models (public data)", () => {
     expect(titleFontSize("Fireside Chat with Dan Caruso")).toBe(62);
     expect(titleFontSize("How to Make $10K/Month in College")).toBe(62);
     expect(titleFontSize("TechRise Pitch Competition and Panel Discussion")).toBe(52);
+    expect(titleFontSize("Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories")).toBe(44);
     expect(titleFontSize("Tailgate")).toBe(72);
   });
 });
@@ -460,6 +511,9 @@ describe("social image assets and rendering", () => {
     await isPng(await renderEventCard(eventCardModel(entry("office-hours-patrick-haddox-2026-10-01-am"), site)));
     await isPng(await renderMentorCard(mentorCardModel(getMentor("rishab-veldur")!, site)));
     await isPng(await renderEventCard(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), site)));
+    // The longest title on the calendar (Arnav's Siebel talk) and Arnav's office hours with a venue.
+    await isPng(await renderEventCard(eventCardModel(entry("building-an-ai-native-company"), site)));
+    await isPng(await renderEventCard(eventCardModel(entry("office-hours-arnav-mishra-2026-10-02-am"), site)));
     // A date-only window, and a mentor without a headshot (initials are drawn).
     await isPng(await renderMentorCard(mentorCardModel(DATE_ONLY_MENTOR, site)));
     await isPng(await renderEventCard(eventCardModel(dateOnlyEntry(), site)));
@@ -731,8 +785,9 @@ describe("sitemap and robots", () => {
     expect(urls).toContain("https://founders.example.edu/schedule/office-hours-rishab-veldur-2026-10-01");
     expect(urls).toHaveLength(3 + getMentors().length + getScheduleEntries().length);
     expect(urls).toContain("https://founders.example.edu/schedule/office-hours-ron-lewis-2026-10-01-pm");
-    // Three public pages, six mentor profiles and nineteen calendar entries.
-    expect([getMentors().length, getScheduleEntries().length, urls.length]).toEqual([6, 19, 28]);
+    expect(urls).toContain("https://founders.example.edu/schedule/building-an-ai-native-company");
+    // Three public pages, six mentor profiles and twenty calendar entries (Arnav's Siebel talk included).
+    expect([getMentors().length, getScheduleEntries().length, urls.length]).toEqual([6, 20, 29]);
     for (const w of ["2026-09-30-am", "2026-09-30-pm", "2026-10-01-pm"]) {
       expect(urls).toContain(`https://founders.example.edu/schedule/office-hours-elliott-notrica-${w}`);
     }

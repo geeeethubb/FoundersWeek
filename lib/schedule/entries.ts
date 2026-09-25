@@ -349,9 +349,15 @@ export interface MentorAppearance {
   end: string | null;
   role: "speaker" | "moderator" | "host";
   venue: string | null;
+  /** The entry's Founders involvement and related-event flag, labeled as on the calendar. */
+  involvement: Involvement | null;
+  related: boolean;
 }
 
-/** Founders Week sessions a mentor speaks at, from verified speaker links (`mentorId`). */
+/**
+ * Calendar events a mentor speaks at or hosts (the official program and related events), from
+ * verified speaker links (`mentorId`).
+ */
 export function mentorAppearances(entries: ScheduleEntry[], mentorId: string): MentorAppearance[] {
   const out: MentorAppearance[] = [];
   for (const entry of entries) {
@@ -369,6 +375,8 @@ export function mentorAppearances(entries: ScheduleEntry[], mentorId: string): M
         end: entry.time.kind === "exact" ? (entry.time.end ?? null) : null,
         role: s.role ?? "speaker",
         venue,
+        involvement: entry.involvement,
+        related: entry.related,
       });
     }
     for (const session of entry.sessions) {
@@ -383,6 +391,8 @@ export function mentorAppearances(entries: ScheduleEntry[], mentorId: string): M
         end: session.end,
         role: p.role ?? "speaker",
         venue,
+        involvement: entry.involvement,
+        related: entry.related,
       });
     }
   }

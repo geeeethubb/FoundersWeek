@@ -3,9 +3,11 @@
  * checks what students would see: the office-hours card (every mentor, one Apply button), a strictly
  * chronological agenda with accurate labels, mentor photos on office-hours rows, program-block
  * disclosure wiring, that Dan Caruso's fireside chat never offers any application or booking, that
- * Arnav hosts (not speaks at) his Wednesday happy hour with an external RSVP, that Rishab's
- * Thursday window reads 12:00–5:00 PM CT and Ron's 2:30–4:30 PM CT at BIF (and a date-only window
- * never invents a time), that the
+ * Arnav hosts (not speaks at) his Wednesday happy hour with an external RSVP, that his Siebel School
+ * talk is a related event with a 3:30 PM start only (no Founders label, no calendar file), that he's a
+ * panelist at Entrepreneurial Impact, that his Friday window is in the Siebel Center atrium, that
+ * Rishab's Thursday window reads 12:00–5:00 PM CT and Ron's 2:30–4:30 PM CT at BIF (and a date-only
+ * window never invents a time), that the
  * session rule (from site.officeHours) is said once per page, that small stacked links are 44px tap
  * targets and names never break, and that the canceled Founders Week Afterparty (HERE Apartments)
  * never appears.
@@ -58,6 +60,13 @@ const ELLIOTT_WED_AM_OH = "office-hours-elliott-notrica-2026-09-30-am";
 const ELLIOTT_WED_PM_OH = "office-hours-elliott-notrica-2026-09-30-pm";
 const ELLIOTT_THU_OH = "office-hours-elliott-notrica-2026-10-01-pm";
 const KICKOFF = "founders-week-kickoff-reception";
+/** Arnav's Siebel School Speaker Series talk (Wed Sep 30): the listing gives a 3:30 PM start and no end. */
+const SIEBEL_TALK = "building-an-ai-native-company";
+const SIEBEL_TALK_TITLE = "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories";
+const SIEBEL_CALENDAR = "https://calendars.illinois.edu/detail/7046?eventId=33563773";
+const ARNAV_VENUE = "Atrium, Siebel Center for Computer Science";
+const ARNAV_ADDRESS = "201 N. Goodwin Ave., Urbana, IL 61801";
+const ARNAV_APPLY = "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply";
 
 /**
  * A synthetic mentor whose only window is date-only (time still to be confirmed). No real mentor
@@ -306,6 +315,8 @@ describe("calendar components (public data)", () => {
       "Office hours with Elliott Notrica",
       "Office hours with Elliott Notrica",
       "Founders Week Kickoff Reception",
+      // Arnav's Siebel talk also starts at 3:30 PM (content order on the tie).
+      SIEBEL_TALK_TITLE,
       HAPPY_HOUR_TITLE,
       "Founder Failure Lab",
       "Office hours with Patrick Haddox",
@@ -331,7 +342,8 @@ describe("calendar components (public data)", () => {
     // Office hours (Elliott three times, Patrick, Rishab, Ron, Arnav) + Founder Failure Lab (badge,
     // not its summary).
     expect(t.match(/Hosted by Founders(?!\.)/g)).toHaveLength(8);
-    expect(t.match(/Related event/g)).toHaveLength(3);
+    // Dan Caruso, the Sep 29 panel, Arnav's happy hour and his Siebel talk (which has no Founders label).
+    expect(t.match(/Related event/g)).toHaveLength(4);
     expect(t).not.toContain("Part of Founders Week");
     // Office-hours windows: Elliott's three, Patrick's, Rishab's, Ron's and Arnav's are all exact.
     expect(t.match(/Availability window/g)).toHaveLength(7);
@@ -341,6 +353,7 @@ describe("calendar components (public data)", () => {
     // and Rishab's Thursday windows with the two program blocks they run through, each other and
     // Ron's window (never with Patrick's window or TechRise), Ron's window with theirs and
     // Entrepreneurial Impact, and Arnav's Friday window inside the Showcase day program (both ways).
+    // Arnav's Siebel talk has no end time, so it has no interval and no overlap note.
     const overlapNotes = [...html.matchAll(/Overlaps with.*?<\/p>/g)].map((m) => text(m[0]).trim());
     expect(overlapNotes).toEqual([
       "Overlaps with Founders Week Kickoff Reception", // Elliott, Wed 2–5 PM
@@ -371,6 +384,18 @@ describe("calendar components (public data)", () => {
     expect(t).toContain(
       "12:00 PM to 5:00 PM Office hours with Elliott Notrica Location to be announced Elliott Notrica Founder & CEO, Symbio Bioculinary (mentor profile) Hosted by Founders Availability window Overlaps with The Science and Practice of Pitching, Office hours with Rishab Veldur, Office hours with Ron Lewis and Entrepreneurial Impact: Launching From Illinois Apply to meet Elliott",
     );
+    // Arnav's Siebel talk: a 3:30 PM start with no "to" line (no end time is invented), Room 2405,
+    // a related event with no Founders label and no overlap note, then the happy hour.
+    expect(t).toContain(
+      `Overlaps with Office hours with Elliott Notrica 3:30 PM ${SIEBEL_TALK_TITLE} Siebel Center for Computer Science · Room 2405 A Siebel School Speaker Series talk by Arnav Mishra, co-founder and CTO of Doss, on the engineering behind an AI-native company. Related event Event information (opens in new tab) 5:00 PM to 7:00 PM ${HAPPY_HOUR_TITLE}`,
+    );
+    // Arnav's Friday window: in the Siebel Center atrium, no longer "Location to be announced".
+    expect(t).toContain(
+      `10:00 AM to 11:30 AM Office hours with Arnav Mishra ${ARNAV_VENUE} Arnav Mishra Co-Founder & CTO, Doss (mentor profile) Hosted by Founders Availability window Overlaps with Founders Showcase Day Sessions Apply to meet Arnav`,
+    );
+    expect(hrefs(html)).toContain(`/schedule/${SIEBEL_TALK}`);
+    expect(hrefs(html)).toContain(SIEBEL_CALENDAR);
+    expect(hrefs(html)).toContain(ARNAV_APPLY);
     expect(hrefs(html).filter((h) => h.startsWith("/office-hours?mentor=elliott-notrica"))).toEqual([
       "/office-hours?mentor=elliott-notrica&window=elliott-notrica-2026-09-30-am#apply",
       "/office-hours?mentor=elliott-notrica&window=elliott-notrica-2026-09-30-pm#apply",
@@ -538,15 +563,106 @@ describe("calendar components (public data)", () => {
     expect(links).toContain(`/schedule/${HAPPY_HOUR}/calendar.ics`);
     const google = links.find((h) => h.startsWith("https://calendar.google.com/"))!;
     expect(new URL(google).searchParams.get("dates")).toBe("20260930T170000/20260930T190000");
-    // Same-day context: the kickoff reception and Founder Failure Lab (which overlaps).
+    // Same-day context: the kickoff reception, Arnav's Siebel talk and Founder Failure Lab (which overlaps).
     expect(t).toContain("Also on Wednesday, September 30");
     expect(links).toContain("/schedule/founders-week-kickoff-reception");
+    expect(links).toContain(`/schedule/${SIEBEL_TALK}`);
     expect(links).toContain("/schedule/founder-failure-lab");
     // Supported by Founders; never an application or the canceled afterparty.
     expectNoApplication(html);
     expect(t).toContain("Supported by Founders");
     expect(t).not.toMatch(/Co-hosted by Founders|Part of Founders Week/);
     expectNoCanceledAfterparty(html);
+    expect(t).not.toMatch(PRIVATE);
+    expectCalmStyling(html);
+  });
+
+  it("Arnav's Siebel talk row: 3:30 PM, Room 2405, a related event with no Founders label, no application", () => {
+    const html = render(createElement(AgendaRow, { entry: entry(SIEBEL_TALK), headshots: headshots() }));
+    const t = text(html);
+    expect(t).toContain(`3:30 PM ${SIEBEL_TALK_TITLE} Siebel Center for Computer Science · Room 2405`);
+    // Start only: no end time is invented.
+    expect([...html.matchAll(/<time dateTime="([^"]+)"/g)].map((m) => m[1])).toEqual(["2026-09-30T15:30"]);
+    expect(t).not.toMatch(/3:30 PM to|3:30–/);
+    expect(t).toContain("Related event");
+    expect(t).not.toMatch(/Hosted by Founders|Co-hosted by Founders|Supported by Founders|Part of Founders Week|Founders pick/);
+    expect(t).not.toContain("Overlaps with");
+    expect(hrefs(html)).toEqual([`/schedule/${SIEBEL_TALK}`, SIEBEL_CALENDAR]);
+    expect(html).toContain(`href="${SIEBEL_CALENDAR}" target="_blank" rel="noopener noreferrer"`);
+    expectNoApplication(html);
+    expectCalmStyling(html);
+  });
+
+  it("Arnav's Siebel talk page: Wed 3:30 PM CT start only, Room 2405, Arnav as speaker, no calendar file, no Founders label", async () => {
+    const html = render(await EventPage({ params: Promise.resolve({ id: SIEBEL_TALK }) }));
+    const t = text(html);
+    const own = ownText(t);
+    expect(html).toMatch(new RegExp(`<h1[^>]*>${SIEBEL_TALK_TITLE}</h1>`));
+    expect(own).toContain(`Related event ${SIEBEL_TALK_TITLE}`);
+    // It's the Siebel School's talk: no involvement label, not a pick, and no mention of Founders.
+    expect(own).not.toMatch(/Founders/);
+    expect(t).toContain(
+      "When Wednesday, September 30 3:30 PM CT Where Siebel Center for Computer Science Room 2405 201 N. Goodwin Ave., Urbana, IL 61801 Organizer Siebel School of Computing and Data Science Event information (opens in new tab)",
+    );
+    expect(own).not.toMatch(/3:30 PM to|3:30–|Time to be announced/);
+    // The abstract is quoted as the Siebel School lists it, and the page says there's no end time.
+    expect(t).toContain(
+      "in his words, the talk explores “the architectural bets we’ve made to account for the future of software, while continuing to serve customers today.”",
+    );
+    expect(t).toContain("Calendar export opens once an end time is announced.");
+    expect(t).not.toContain("listing gives");
+    // Speaker: Arnav, with his photo, linked to his office-hours profile.
+    expect(html).toMatch(/<h2 id="speakers-heading"[^>]*>Speaker<\/h2>/);
+    expect(t).toContain("Speaker Arnav Mishra Office-hours mentor Co-Founder & CTO, Doss");
+    expect(imageAlts(html)).toEqual(["Arnav Mishra"]);
+    const links = hrefs(html);
+    expect(links).toContain("/office-hours/arnav-mishra");
+    expect(html).toContain(`href="${SIEBEL_CALENDAR}" target="_blank" rel="noopener noreferrer"`);
+    // No end time yet: no calendar file, and it says why.
+    expect(t).toContain("Add to calendar Calendar export opens once an end time is announced.");
+    expect(links.some((h) => h.endsWith(".ics") || h.startsWith("https://calendar.google.com/"))).toBe(false);
+    // Without an end time it has no overlap section; the rest of Wednesday is listed by start time,
+    // the 2–5 PM window and the 3:30 PM kickoff reception included.
+    expect(t).not.toContain("Overlaps with");
+    const sameDay = t.slice(t.indexOf("Also on Wednesday, September 30"));
+    expect(sameDay).toMatch(
+      /^Also on Wednesday, September 30 See the full day 9:00 AM Office hours with Elliott Notrica .* 2:00 PM Office hours with Elliott Notrica .* 3:30 PM Founders Week Kickoff Reception EnterpriseWorks 5:00 PM Happy Hour with Arnav Mishra at Legends .* 6:30 PM Founder Failure Lab /,
+    );
+    for (const id of [ELLIOTT_WED_AM_OH, ELLIOTT_WED_PM_OH, KICKOFF, HAPPY_HOUR, "founder-failure-lab"]) {
+      expect(links.filter((h) => h === `/schedule/${id}`), id).toHaveLength(1);
+    }
+    expectNoApplication(html);
+    expectNoCanceledAfterparty(html);
+    expect(t).not.toMatch(PRIVATE);
+    expectCalmStyling(html);
+
+    const meta = await generateMetadata({ params: Promise.resolve({ id: SIEBEL_TALK }) });
+    expect(meta.title).toBe(SIEBEL_TALK_TITLE);
+    expect(meta.description).toBe(
+      "Wednesday, September 30 · 3:30 PM CT. A Siebel School Speaker Series talk by Arnav Mishra, co-founder and CTO of Doss, on the engineering behind an AI-native company.",
+    );
+  });
+
+  it("the Entrepreneurial Impact page lists Arnav as a panelist, linked to his profile", async () => {
+    const html = render(await EventPage({ params: Promise.resolve({ id: IMPACT }) }));
+    const t = text(html);
+    expect(html).toMatch(/<h1[^>]*>Entrepreneurial Impact: Launching From Illinois<\/h1>/);
+    expect(t).toContain("When Thursday, October 1 3:00–5:00 PM CT Where Beckman Institute Urbana");
+    expect(t).toContain(
+      "Arnav Mishra, co-founder and CTO of Doss and one of this week’s office-hours mentors, is on the panel.",
+    );
+    // He's the only panelist supplied, so the heading is singular.
+    expect(html).toMatch(/<h2 id="speakers-heading"[^>]*>Speaker<\/h2>/);
+    expect(t).toContain("Speaker Arnav Mishra Office-hours mentor Co-Founder & CTO, Doss");
+    expect(imageAlts(html)).toEqual(["Arnav Mishra"]);
+    const links = hrefs(html);
+    expect(links).toContain("/office-hours/arnav-mishra");
+    // Confirmed with exact times: calendar export stays available.
+    expect(links).toContain(`/schedule/${IMPACT}/calendar.ics`);
+    // The official program block keeps its label; Founders doesn't run it.
+    expect(ownText(t)).toContain("Part of Founders Week");
+    expect(ownText(t)).not.toMatch(/Hosted by Founders|Co-hosted by Founders|Supported by Founders|Related event/);
+    expectNoApplication(html);
     expect(t).not.toMatch(PRIVATE);
     expectCalmStyling(html);
   });
@@ -858,26 +974,45 @@ describe("calendar components (public data)", () => {
     expect(links.some((h) => h.startsWith("/apply"))).toBe(false);
   });
 
-  it("Arnav's office-hours page: Fri Oct 2, 10:00–11:30 AM CT, the session rule once, and the Showcase overlap", async () => {
+  it("Arnav's office-hours page: Fri Oct 2, 10:00–11:30 AM CT in the Siebel Center atrium, the session rule once, and the Showcase overlap", async () => {
     const html = render(await EventPage({ params: Promise.resolve({ id: ARNAV_OH }) }));
     const t = text(html);
     expect(html).toMatch(/<h1[^>]*>Office hours with Arnav Mishra<\/h1>/);
+    expect(t).toContain("Hosted by Founders Availability window Office hours with Arnav Mishra");
+    // Time and place are confirmed: the atrium and the street address Arnav gave (Sept 25).
     expect(t).toContain(
-      `When Friday, October 2 10:00–11:30 AM CT Availability window, not a booked appointment. ${RULE} Where Location to be announced`,
+      `When Friday, October 2 10:00–11:30 AM CT Availability window, not a booked appointment. ${RULE} Where ${ARNAV_VENUE} ${ARNAV_ADDRESS} Hosted by Founders – Illinois Entrepreneurs`,
     );
     expect(count(t, RULE)).toBe(1);
     expect(count(t, "Each session is")).toBe(1);
     // His window fits three sessions on the grid; the count is organizer-only.
     expect(ownText(t)).not.toMatch(/\b(\d+|three) sessions\b/i);
     expect(ownText(t)).not.toMatch(/Morning|before noon|Exact window to be confirmed|Exact times TBA/);
-    expect(t).toContain(
-      "Arnav is holding office hours on Friday, October 2, from 10:00 to 11:30 AM. We’re still setting the location.",
+    // The old "still setting the location" note is gone, and nothing is left to be announced.
+    expect(ownText(t)).not.toMatch(
+      /still setting the location|Location to be announced|Location is shared with selected students|to be confirmed|Scheduling in progress|Express interest/i,
     );
+    expect(t).toContain("Arnav Mishra Co-Founder & CTO, Doss More about Arnav");
     expect(t).toContain("Submitting an application doesn’t reserve a time slot.");
+    expect(t).toContain("Appointments are limited.");
     // Honest overlap: the window sits inside the Showcase day program (8:00 AM–5:30 PM).
     expect(t).toContain("Overlaps with This time overlaps with another listing. 8:00 AM Founders Showcase Day Sessions");
-    expect(hrefs(html)).toContain("/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply");
+    // Office hours never export to calendars, even once confirmed, and the page says why.
+    expect(t).toContain("Office hours are by application. Selected students get their confirmed time by email.");
+    const links = hrefs(html);
+    expect(links.some((h) => h.endsWith(".ics") || h.startsWith("https://calendar.google.com/"))).toBe(false);
+    expect(links.filter((h) => h.includes("#apply"))).toEqual([ARNAV_APPLY]);
+    expect(links).toContain("/office-hours/arnav-mishra");
+    expect(imageAlts(html)).toEqual(["Arnav Mishra"]);
+    expect(t).not.toMatch(/Location from Arnav|Added to the calendar at his suggestion|now listed on it/);
+    expect(t).not.toMatch(PRIVATE);
     expectCalmStyling(html);
+
+    const meta = await generateMetadata({ params: Promise.resolve({ id: ARNAV_OH }) });
+    expect(meta.title).toBe("Office hours with Arnav Mishra");
+    expect(meta.description).toBe(
+      "Friday, October 2 · 10:00–11:30 AM CT. By application. Meet Arnav of Doss during Founders Week. Appointments are limited.",
+    );
   });
 
   it("a part-of-day office-hours window (fixture): 'Exact window to be confirmed' and no session rule yet", () => {
@@ -950,16 +1085,29 @@ describe("calendar components (public data)", () => {
   });
 
   it("the agenda preview and pending-mentor block stay public and link correctly", () => {
-    // The first six entries: Monday, Tuesday, then Wednesday through the happy hour (Elliott's two
-    // windows come before the kickoff reception).
-    const first = getScheduleEntries().slice(0, 6);
-    expect(first.map((e) => e.id)).toEqual([DAN, PANEL, ELLIOTT_WED_AM_OH, ELLIOTT_WED_PM_OH, KICKOFF, HAPPY_HOUR]);
+    // The first seven entries: Monday, Tuesday, then Wednesday through the happy hour (Elliott's two
+    // windows come before the kickoff reception, and Arnav's Siebel talk shares its 3:30 PM start).
+    const first = getScheduleEntries().slice(0, 7);
+    expect(first.map((e) => e.id)).toEqual([
+      DAN,
+      PANEL,
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
+      KICKOFF,
+      SIEBEL_TALK,
+      HAPPY_HOUR,
+    ]);
     const preview = render(createElement(AgendaPreview, { entries: first }));
     expect(text(preview)).toContain("Mon Sep 28 4:00 PM Fireside Chat with Dan Caruso");
     expect(text(preview)).toContain(
       "Wed Sep 30 9:00 AM Office hours with Elliott Notrica Location to be announced · Founder & CEO, Symbio Bioculinary Hosted by Founders Availability window Wed Sep 30 2:00 PM Office hours with Elliott Notrica",
     );
+    // The Siebel talk carries only the related-event label (no Founders involvement, not a pick).
+    expect(text(preview)).toContain(
+      `Wed Sep 30 3:30 PM Founders Week Kickoff Reception EnterpriseWorks Wed Sep 30 3:30 PM ${SIEBEL_TALK_TITLE} Siebel Center for Computer Science · Room 2405 Related event Wed Sep 30 5:00 PM`,
+    );
     expect(text(preview)).toContain(`Wed Sep 30 5:00 PM ${HAPPY_HOUR_TITLE} Legends Supported by Founders Related event Founders pick`);
+    expect(hrefs(preview)).toContain(`/schedule/${SIEBEL_TALK}`);
     expect(hrefs(preview)).toContain(`/schedule/${HAPPY_HOUR}`);
     expect(hrefs(preview)).toContain(`/schedule/${ELLIOTT_WED_AM_OH}`);
     expect(hrefs(preview)).toContain(`/schedule/${ELLIOTT_WED_PM_OH}`);

@@ -5,14 +5,16 @@
  *   (e.g. a Draft badge in draft preview), `className`, `children`.
  * - `LabelList` — a short list of plain labels ("Can help with"). Labels only: the internal basis
  *   of an expertise item is never passed in.
- * - `AppearanceList` — Founders Week sessions the mentor speaks at or hosts, each linking to its
- *   calendar entry ("Speaking Fri, Oct 2 · 1:55–2:25 PM CT" · title · program block).
+ * - `AppearanceList` — calendar events the mentor speaks at or hosts, each linking to its calendar
+ *   entry ("Speaking Fri, Oct 2 · 1:55–2:25 PM CT" · title · program block · venue), with the
+ *   calendar's labels (Founders' involvement, "Related event" outside the official program).
  * - `OfficeHoursLines` — the mentor's published windows/slots as plain lines, or "Scheduling in
  *   progress", then the session rule ("Each session is 25 minutes, …", from `site.officeHours`;
  *   never a session count), the place once it's set (building, then street address) and the
  *   public note from content. Never implies a booking.
  */
 import Link from "next/link";
+import { InvolvementBadge, RelatedBadge } from "@/components/ui/badge";
 import { ClockIcon, MapPinIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { SCHEDULING_IN_PROGRESS_LABEL } from "@/lib/mentors";
@@ -103,6 +105,12 @@ export function AppearanceList({ appearances }: { appearances: AppearanceView[] 
               <p className="mt-1 text-sm leading-snug text-text-subtle">
                 {[a.context, a.venue].filter(Boolean).join(" · ")}
               </p>
+            ) : null}
+            {a.involvement || a.related ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                {a.involvement ? <InvolvementBadge involvement={a.involvement} /> : null}
+                {a.related ? <RelatedBadge /> : null}
+              </div>
             ) : null}
           </Link>
         </li>

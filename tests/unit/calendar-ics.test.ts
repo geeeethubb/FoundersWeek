@@ -33,6 +33,9 @@ const workshop = byId("demo-customer-discovery-workshop", withDemo);
 const HAPPY_HOUR = "happy-hour-at-legends-with-arnav-mishra";
 const HAPPY_HOUR_TITLE = "Happy Hour with Arnav Mishra at Legends";
 const happyHour = byId(HAPPY_HOUR);
+/** Arnav's Siebel School talk: the listing gives a 3:30 PM start and no end time. */
+const SIEBEL_TALK = "building-an-ai-native-company";
+const siebelTalk = byId(SIEBEL_TALK);
 const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
 const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
@@ -113,6 +116,23 @@ describe("calendar eligibility", () => {
       available: false,
       reason: "Calendar export opens once an end time is announced.",
     });
+    // Arnav's Siebel talk: confirmed for 3:30 PM, but the Siebel School listing (and its .ics) has no
+    // end time, so there's no interval and nothing to export.
+    expect(siebelTalk).toMatchObject({
+      date: "2026-09-30",
+      time: { kind: "exact", start: "15:30" },
+      status: "confirmed",
+      startsAt: null,
+      endsAt: null,
+    });
+    expect(siebelTalk.calendar).toEqual({
+      available: false,
+      reason: "Calendar export opens once an end time is announced.",
+    });
+    expect(googleCalendarUrl(siebelTalk, SITE)).toBeNull();
+    const talkIcs = buildIcsCalendar([siebelTalk], { siteUrl: SITE, now: NOW });
+    expect(talkIcs).not.toContain("BEGIN:VEVENT");
+    expect(talkIcs).not.toContain("20260930T153000");
     expect(byId("tailgate-and-enterpriseworks-tour").calendar.available).toBe(false);
     expect(byId("illinois-football-vs-purdue").calendar.available).toBe(false);
     const oh = byId("office-hours-patrick-haddox-2026-10-01-am").calendar;
@@ -121,8 +141,9 @@ describe("calendar eligibility", () => {
     expect(byId("demo-canceled-session", withDemo).calendar.available).toBe(false);
   });
 
-  it("never exports office hours: Rishab's exact noon–5 PM window, Ron's confirmed window, Elliott's three windows, and a date-only window", () => {
-    expect(production).toHaveLength(19);
+  it("never exports office hours: Rishab's exact noon–5 PM window, Ron's and Arnav's confirmed windows, Elliott's three windows, and a date-only window", () => {
+    // Thirteen events (Arnav's Siebel talk included) and seven office-hours windows.
+    expect(production).toHaveLength(20);
     const officeHours = production.filter((e) => e.kind === "office-hours");
     expect(officeHours.map((e) => e.id)).toEqual([
       ELLIOTT_WED_AM_OH,
@@ -167,6 +188,27 @@ describe("calendar eligibility", () => {
     expect(ronIcs).not.toContain(RON_OH);
     expect(ronIcs).not.toContain("20261001T143000");
     expect(ronIcs).not.toContain("Business Instructional Facility");
+
+    // Arnav's window is confirmed too (Atrium, Siebel Center for Computer Science) and likewise
+    // stays out of calendar files.
+    const arnavOfficeHours = byId(ARNAV_OH);
+    expect(arnavOfficeHours).toMatchObject({
+      date: "2026-10-02",
+      time: { kind: "exact", start: "10:00", end: "11:30" },
+      status: "confirmed",
+      location: {
+        kind: "in-person",
+        venue: "Atrium, Siebel Center for Computer Science",
+        address: "201 N. Goodwin Ave., Urbana, IL 61801",
+      },
+      startsAt: "2026-10-02T15:00:00.000Z",
+      endsAt: "2026-10-02T16:30:00.000Z",
+    });
+    const arnavIcs = buildIcsCalendar([arnavOfficeHours], { siteUrl: SITE, now: NOW });
+    expect(arnavIcs).not.toContain("BEGIN:VEVENT");
+    expect(arnavIcs).not.toContain(ARNAV_OH);
+    expect(arnavIcs).not.toContain("20261002T100000");
+    expect(arnavIcs).not.toContain("Siebel");
 
     // Elliott's three exact windows (Wed 9–noon and 2–5, Thu noon–5) are planned, not bookings,
     // and none of them is exported.
@@ -326,8 +368,16 @@ describe("calendar.ics routes (public data)", () => {
     expect(body).toContain(`URL:https://founders.example.edu/schedule/${HAPPY_HOUR}`);
   });
 
-  it("has no .ics for the canceled afterparty, forthcoming events or office hours", async () => {
-    for (const id of ["founders-week-afterparty", "dan-caruso-fireside-chat", PATRICK_OH, RISHAB_OH, RON_OH, ARNAV_OH]) {
+  it("has no .ics for the canceled afterparty, start-only or forthcoming events, or office hours", async () => {
+    for (const id of [
+      "founders-week-afterparty",
+      "dan-caruso-fireside-chat",
+      SIEBEL_TALK,
+      PATRICK_OH,
+      RISHAB_OH,
+      RON_OH,
+      ARNAV_OH,
+    ]) {
       const res = await get(id);
       expect(res.status, id).toBe(404);
       expect(await res.text(), id).toBe("No calendar file is available for this event.");
@@ -343,6 +393,8 @@ describe("calendar.ics routes (public data)", () => {
     // Office hours (Rishab's noon–5 PM window included) never reach the feed.
     expect(body).not.toContain("office-hours-");
     expect(body).not.toContain("SUMMARY:Office hours");
+    // Nor does Arnav's start-only Siebel talk.
+    expect(body).not.toContain(`UID:${SIEBEL_TALK}@founders-week`);
   });
 });
 
@@ -405,6 +457,10 @@ describe("all-events feed", () => {
     expect(unfold(feed)).not.toContain("DTSTART;TZID=America/Chicago:20261001T120000");
     expect(unfold(feed)).not.toContain("SUMMARY:Office hours with Rishab Veldur");
     expect(feed).not.toContain("dan-caruso-fireside-chat@");
+    expect(feed).not.toContain(`${SIEBEL_TALK}@`);
+    // 3:30 PM on Sept 30 is the kickoff reception's start; the talk adds no second event at that time.
+    expect(unfold(feed).match(/DTSTART;TZID=America\/Chicago:20260930T153000/g)).toHaveLength(1);
+    expect(unfold(feed)).toContain("UID:founders-week-kickoff-reception@founders-week");
     expect(feed).not.toContain("tailgate-and-enterpriseworks-tour@");
     expect(feed).not.toContain("illinois-football-vs-purdue@");
     expect(feed).not.toContain("office-hours-");
@@ -487,7 +543,9 @@ describe("googleCalendarUrl", () => {
 
   it("returns null for entries that can't be exported", () => {
     expect(googleCalendarUrl(dan, SITE)).toBeNull();
+    expect(googleCalendarUrl(siebelTalk, SITE)).toBeNull();
     expect(googleCalendarUrl(byId(PATRICK_OH), SITE)).toBeNull();
+    expect(googleCalendarUrl(byId(ARNAV_OH), SITE)).toBeNull();
     expect(googleCalendarUrl(rishabOfficeHours, SITE)).toBeNull();
   });
 });

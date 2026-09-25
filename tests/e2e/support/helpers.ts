@@ -204,6 +204,16 @@ export const PATRICK_ADDRESS = "1301 W Springfield Ave, Urbana, IL 61801";
 export const PATRICK_WINDOW_NOTE =
   "Patrick is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 
+/**
+ * Arnav's office hours are in person (from Arnav, Sept 25): the Siebel Center atrium, then the
+ * street address as he gave it, on his profile and his calendar listing.
+ */
+export const ARNAV_VENUE = "Atrium, Siebel Center for Computer Science";
+export const ARNAV_ADDRESS = "201 N. Goodwin Ave., Urbana, IL 61801";
+/** The public note under Arnav's office-hours window on his profile. */
+export const ARNAV_WINDOW_NOTE =
+  "Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
+
 /** The note on each of Elliott's three windows: identical, so his profile shows it once, under all three. */
 export const ELLIOTT_WINDOW_NOTE =
   "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.";
@@ -378,7 +388,7 @@ export const DRAFT_TOPICS: RegExp[] = [/Startup financial planning/, /Communicat
 
 /** Organizer-only notes (content/mentors.ts `organizerNotes`) — stripped before anything renders. */
 export const ORGANIZER_ONLY =
-  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number|Open to hosting all three|as long as they fit in the window|also open to Oct|send details later|From his email|available anytime after 9 AM|Organizers set his windows|22 sessions in all|Location not set yet/i;
+  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number|Open to hosting all three|as long as they fit in the window|also open to Oct|send details later|From his email|available anytime after 9 AM|Organizers set his windows|22 sessions in all|Location not set yet|Location from Arnav|Added to the calendar at his suggestion|now listed on it/i;
 
 /** Content-maintenance notes on approved fields (`note`) — never public. */
 export const CONTENT_NOTES =

@@ -26,6 +26,13 @@ const RON_OH = "office-hours-ron-lewis-2026-10-01-pm";
 const ELLIOTT_WED_AM_OH = "office-hours-elliott-notrica-2026-09-30-am";
 const ELLIOTT_WED_PM_OH = "office-hours-elliott-notrica-2026-09-30-pm";
 const ELLIOTT_THU_OH = "office-hours-elliott-notrica-2026-10-01-pm";
+const ARNAV = "arnav-mishra";
+const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
+/** Arnav's Siebel School Speaker Series talk ("Tech Talk @ Siebel"), Wed Sep 30. */
+const SIEBEL_TALK = "building-an-ai-native-company";
+const SIEBEL_TALK_URL = "https://calendars.illinois.edu/detail/7046?eventId=33563773";
+const IMPACT_PANEL = "entrepreneurial-impact-launching-from-illinois";
+const ARNAV_SPEAKER = { name: "Arnav Mishra", title: "Co-Founder & CTO, Doss", verified: true, mentorId: ARNAV };
 /** The organizers' approved bio, verbatim. */
 const RISHAB_BIO =
   "Rishab is the co-founder and CEO of Auvi Labs, a UIUC spinout developing wearable ultrasound technology to help detect problems with dialysis access earlier. With a background in engineering at Illinois, he helped build a company that placed second in the 2024 Cozad New Venture Challenge.";
@@ -400,9 +407,25 @@ describe("content", () => {
       time: { kind: "exact", start: "10:00", end: "11:30" },
       note: "Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
     });
-    expect(arnav.session.durationMinutes).toBe(site.officeHours.sessionMinutes);
-    expect(arnav.session.note).toBe(
-      "Arnav is holding office hours on Friday, October 2, from 10:00 to 11:30 AM. We’re still setting the location.",
+    // In person in the Atrium of the Siebel Center for Computer Science (from Arnav, Sept 25). Time
+    // and place are set, so his session is confirmed; it's still a window students apply to.
+    expect(arnav.session).toEqual({
+      format: "in-person",
+      durationMinutes: site.officeHours.sessionMinutes,
+      location: "Atrium, Siebel Center for Computer Science",
+      address: "201 N. Goodwin Ave., Urbana, IL 61801",
+      sessionCount: null,
+      confirmed: true,
+      note: "Arnav is holding office hours on Friday, October 2, from 10:00 to 11:30 AM in the atrium of the Siebel Center for Computer Science.",
+    });
+    expect(schedulingStatus(arnav)).toBe("available");
+    expect(mentorCtaLabel(arnav)).toBe("Apply to meet Arnav");
+    // The place is cited (Arnav, relayed by the organizers), and no "still setting the location" copy is left.
+    expect(arnav.sources.map((s) => s.label)).toContain(
+      "Organizer update: office hours in the Atrium, Siebel Center for Computer Science, 201 North Goodwin Avenue, Urbana",
+    );
+    expect(JSON.stringify([arnav.session, arnav.availability])).not.toMatch(
+      /still setting|to be (announced|confirmed)|pending/i,
     );
 
     // Ron: Thu Oct 1, 2:30–4:30 PM at BIF (organizer update, Sept 24). Time and place are set, so
@@ -620,6 +643,96 @@ describe("content", () => {
     expect(hh.sources.map((s) => s.url)).toContain("https://partiful.com/e/bUDJZTuCJyBqSeXAsfrN");
   });
 
+  it("lists Arnav's Siebel School talk (Wed Sep 30, Room 2405): 3:30 PM start only, related, no Founders label", () => {
+    const talk = events.find((e) => e.id === SIEBEL_TALK)!;
+    expect(talk).toMatchObject({
+      title: "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories",
+      date: "2026-09-30",
+      // The Siebel School listing (and its calendar file) gives a 3:30 PM start and no end time.
+      time: { kind: "exact", start: "15:30" },
+      status: "confirmed",
+      types: ["talk"],
+      // A Siebel School Speaker Series talk: no source ties it to Founders or the Founders Week
+      // program, so it carries no involvement label and is listed as a related event.
+      involvement: null,
+      related: true,
+      foundersPick: false,
+      organizer: "Siebel School of Computing and Data Science",
+      location: {
+        kind: "in-person",
+        venue: "Siebel Center for Computer Science",
+        room: "Room 2405",
+        address: "201 N. Goodwin Ave., Urbana, IL 61801",
+      },
+      registration: null,
+      links: [{ label: "Event information", url: SIEBEL_TALK_URL }],
+    });
+    // No end time is invented, and it isn't featured.
+    expect(talk.time.kind === "exact" && talk.time.end).toBeFalsy();
+    expect(talk.featured).toBeUndefined();
+    expect(talk.speakers).toEqual([ARNAV_SPEAKER]);
+    // Cited to the Siebel School calendar and to Arnav's own suggestion.
+    expect(talk.sources.map((s) => s.url ?? null)).toEqual([SIEBEL_TALK_URL, null]);
+    expect(talk.sources.map((s) => s.checked)).toEqual(["2026-09-25", "2026-09-25"]);
+    // The quoted line is the listing's abstract, verbatim.
+    expect(talk.description).toContain(
+      "“the architectural bets we’ve made to account for the future of software, while continuing to serve customers today.”",
+    );
+    // The copy claims no Founders role and restates no time: the When line and the calendar note
+    // cover the start-only time.
+    const copy = [talk.summary, talk.description].join(" ");
+    expect(copy).not.toMatch(/Founders|hosted by|supported by/i);
+    expect(copy.match(/\d{1,2}:\d\d\s*[AP]M/g)).toBeNull();
+    expect(talk.description.split("\n\n")).toHaveLength(2);
+
+    // On the calendar: no involvement badge, a related event, and no export until an end time is announced.
+    const entry = buildScheduleEntries({ events, mentors, site }).find((e) => e.id === SIEBEL_TALK)!;
+    expect(entry).toMatchObject({
+      kind: "event",
+      involvement: null,
+      related: true,
+      featuredRank: null,
+      registration: null,
+      startsAt: null,
+      endsAt: null,
+      calendar: { available: false, reason: "Calendar export opens once an end time is announced." },
+    });
+    expect(entry.speakers).toEqual([ARNAV_SPEAKER]);
+
+    // The speaker link is checked: without Arnav in the mentor list, validation fails loudly.
+    expect(() =>
+      validateContent({ events, mentors: mentors.filter((m) => m.id !== ARNAV), forbidDemo: true }),
+    ).toThrow(/\(building-an-ai-native-company\): speaker "Arnav Mishra" links to unknown mentor "arnav-mishra"/);
+  });
+
+  it("lists Arnav on the Entrepreneurial Impact panel (Thu Oct 1, 3–5 PM, Beckman Institute), no other panelists invented", () => {
+    const panel = events.find((e) => e.id === IMPACT_PANEL)!;
+    expect(panel).toMatchObject({
+      title: "Entrepreneurial Impact: Launching From Illinois",
+      date: "2026-10-01",
+      time: { kind: "exact", start: "15:00", end: "17:00" },
+      status: "confirmed",
+      involvement: "week",
+      location: { kind: "in-person", venue: "Beckman Institute", address: "Urbana" },
+      registration: null,
+    });
+    // Only Arnav was supplied (he told the organizers on Sept 25).
+    expect(panel.speakers).toEqual([ARNAV_SPEAKER]);
+    expect(panel.summary).toBe(
+      "A panel discussion and networking at the Beckman Institute. Arnav Mishra of Doss is on the panel.",
+    );
+    expect(panel.description).toBe(
+      "A panel discussion on launching from Illinois at the Beckman Institute in Urbana, followed by networking.\n\nArnav Mishra, co-founder and CTO of Doss and one of this week’s office-hours mentors, is on the panel.",
+    );
+    expect(panel.sources.map((s) => s.label)).toEqual([
+      "Founders Week agenda",
+      "Organizer update: Arnav Mishra is on this panel",
+    ]);
+    expect(() =>
+      validateContent({ events, mentors: mentors.filter((m) => m.id !== ARNAV), forbidDemo: true }),
+    ).toThrow(/\(entrepreneurial-impact-launching-from-illinois\): speaker "Arnav Mishra" links to unknown mentor "arnav-mishra"/);
+  });
+
   it("keeps Dan Caruso's fireside chat information-only: blurb, LinkedIn, private-session note, no sign-up", () => {
     const dan = events.find((e) => e.id === DAN)!;
     const [blurb, ...rest] = dan.description.split(/\n\s*\n/);
@@ -683,7 +796,9 @@ describe("content", () => {
 
   it("builds office-hours entries from mentor windows", () => {
     const entries = buildScheduleEntries({ events, mentors, site });
-    expect(entries).toHaveLength(19);
+    // Thirteen events (Arnav's Siebel talk included) and seven office-hours windows.
+    expect(entries).toHaveLength(20);
+    expect(entries.filter((e) => e.kind === "event")).toHaveLength(13);
     const oh = entries.filter((e) => e.kind === "office-hours");
     // Only mentors with published windows get entries (Vik is still scheduling). Elliott's two
     // Wednesday windows come first; on Oct 1, Patrick's morning window, then Elliott's and Rishab's
@@ -745,18 +860,32 @@ describe("content", () => {
       "Elliott Notrica (Founder & CEO, Symbio Bioculinary) is available for office hours: Wednesday, September 30, 2:00–5:00 PM CT.",
       "Elliott Notrica (Founder & CEO, Symbio Bioculinary) is available for office hours: Thursday, October 1, 12:00–5:00 PM CT.",
     ]);
+    // Arnav's window has a confirmed time and place (the Atrium of the Siebel Center, from Arnav on
+    // Sept 25), so his entry is confirmed, in person. It's still applied to, not booked.
     expect(oh[6]).toMatchObject({
+      id: ARNAV_OH,
       date: "2026-10-02",
       time: { kind: "exact", start: "10:00", end: "11:30" },
       timeLabel: null,
-      status: "planned",
-      location: { kind: "tba", note: "Location is shared with selected students once confirmed." },
+      status: "confirmed",
+      statusNote: null,
+      location: {
+        kind: "in-person",
+        venue: "Atrium, Siebel Center for Computer Science",
+        address: "201 N. Goodwin Ave., Urbana, IL 61801",
+      },
       registration: {
         url: "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
         label: "Apply to meet Arnav",
         internal: true,
       },
     });
+    expect(oh[6].description.split("\n\n")).toEqual([
+      "Arnav Mishra (Co-Founder & CTO, Doss) is available for office hours: Friday, October 2, 10:00–11:30 AM CT.",
+      "Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
+      expect.stringMatching(/^Each session is 25 minutes, with a 5-minute break between sessions\. Appointments are limited\./),
+    ]);
+    expect(oh[6].description).not.toMatch(/still setting|to be announced/i);
     // Ron's window has a confirmed time and place (BIF), so his entry is confirmed, in person.
     expect(oh[5]).toMatchObject({
       date: "2026-10-01",
@@ -799,7 +928,7 @@ describe("content", () => {
     // A date-only window (a future mentor's) has no time yet, so it sorts after the day's timed
     // entries and nothing is invented for it.
     const withDateOnly = buildScheduleEntries({ events, mentors: [...mentors, DATE_ONLY_MENTOR], site });
-    expect(withDateOnly).toHaveLength(20);
+    expect(withDateOnly).toHaveLength(21);
     expect(withDateOnly.filter((e) => e.date === "2026-10-01").map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
       "science-and-practice-of-pitching",
@@ -862,16 +991,67 @@ describe("content", () => {
     // Calendar export: confirmed exact events only — the happy hour included.
     expect(entries.find((e) => e.id === "how-to-make-10k-a-month-in-college")!.calendar.available).toBe(true);
     expect(entries.find((e) => e.id === HAPPY_HOUR)!.calendar.available).toBe(true);
-    // Dan's chat has a start time but no announced end, so it can't be exported yet.
-    expect(entries.find((e) => e.id === DAN)!.calendar).toEqual({
-      available: false,
-      reason: "Calendar export opens once an end time is announced.",
-    });
+    // Dan's chat and Arnav's Siebel talk have a start time but no announced end, so neither can be
+    // exported yet.
+    for (const id of [DAN, SIEBEL_TALK]) {
+      expect(entries.find((e) => e.id === id)!.calendar, id).toEqual({
+        available: false,
+        reason: "Calendar export opens once an end time is announced.",
+      });
+    }
 
-    // Mentors on stage (or hosting) are linked from the agenda, chronologically.
-    expect(mentorAppearances(entries, "arnav-mishra")).toEqual([
-      expect.objectContaining({ entryId: HAPPY_HOUR, sessionTitle: null, start: "17:00", end: "19:00", role: "host", venue: "Legends" }),
-      expect.objectContaining({ entryId: "founders-showcase-day-sessions", start: "13:55", role: "speaker" }),
+    // Mentors on stage (or hosting) are linked from the agenda, chronologically. Arnav has four
+    // appearances: his Siebel talk and his Legends happy hour (Wed), the Entrepreneurial Impact
+    // panel (Thu) and his Showcase session (Fri). His Friday office hours aren't an appearance.
+    expect(mentorAppearances(entries, ARNAV)).toEqual([
+      {
+        entryId: SIEBEL_TALK,
+        entryTitle: "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories",
+        date: "2026-09-30",
+        sessionTitle: null,
+        start: "15:30",
+        end: null, // the listing gives no end time
+        role: "speaker",
+        venue: "Siebel Center for Computer Science",
+        involvement: null,
+        related: true,
+      },
+      {
+        entryId: HAPPY_HOUR,
+        entryTitle: HAPPY_HOUR_TITLE,
+        date: "2026-09-30",
+        sessionTitle: null,
+        start: "17:00",
+        end: "19:00",
+        role: "host",
+        venue: "Legends",
+        involvement: "supported",
+        related: true,
+      },
+      {
+        entryId: IMPACT_PANEL,
+        entryTitle: "Entrepreneurial Impact: Launching From Illinois",
+        date: "2026-10-01",
+        sessionTitle: null,
+        start: "15:00",
+        end: "17:00",
+        role: "speaker",
+        venue: "Beckman Institute",
+        involvement: "week",
+        related: false,
+      },
+      {
+        entryId: SHOWCASE,
+        entryTitle: "Founders Showcase Day Sessions",
+        date: "2026-10-02",
+        sessionTitle: "From Idea to Scale: Building Doss, Lessons from an Illini Founder",
+        start: "13:55",
+        end: "14:25",
+        role: "speaker",
+        venue: "Illinois Conference Center",
+        involvement: "week",
+        related: false,
+      },
     ]);
     expect(mentorAppearances(entries, "patrick-haddox").map((a) => a.sessionTitle)).toEqual([
       "Next Generation Industrial, Manufacturing and Space Tech",
@@ -887,6 +1067,8 @@ describe("content", () => {
         end: "18:50",
         role: "speaker",
         venue: "EnterpriseWorks",
+        involvement: "week",
+        related: false,
       },
     ]);
     expect(mentorAppearances(entries, "ron-lewis")).toHaveLength(0);
@@ -901,6 +1083,8 @@ describe("content", () => {
         end: "13:55",
         role: "speaker",
         venue: "Illinois Conference Center",
+        involvement: "week",
+        related: false,
       },
     ]);
     // Chronological order

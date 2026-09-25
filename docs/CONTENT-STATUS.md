@@ -1,6 +1,6 @@
 # Content status: missing assets and unconfirmed details
 
-Last reviewed: 2026-09-23. The site renders everything below with honest copy ("Time to be announced",
+Last reviewed: 2026-09-25. The site renders everything below with honest copy ("Time to be announced",
 "Scheduling in progress", "To be confirmed"). Nothing has been guessed.
 
 ## Priorities
@@ -42,7 +42,11 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
 
 **Arnav Mishra** (Co-Founder & CTO, Doss)
 - Window: Fri Oct 2, 10:00–11:30 AM CT (confirmed by the organizers on Sept 24; earlier only "before
-  noon" was known). Sessions follow the 25-minute rule; location is pending.
+  noon" was known). Sessions follow the 25-minute rule. In person in the Atrium of the Siebel Center for
+  Computer Science, 201 N. Goodwin Ave., Urbana (from Arnav, Sept 25; he wrote "201 North Goodwin Avenue").
+- Added to the calendar at his suggestion (Sept 25): his Siebel School Speaker Series talk (Wed Sep 30). He
+  also told us he's on the Entrepreneurial Impact panel (Thu Oct 1), which was already on the calendar; he's
+  now listed on it. See Events.
 - Background and expertise come from his role and Founders Showcase talk listing. Mentor-confirmed
   topics are not supplied.
 
@@ -104,13 +108,27 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
   - The 70% / 43% / 29% figures are from CB Insights, "The top 9 reasons startups fail" (March 2026):
     431 VC-backed startups that shut down since 2023; the description credits CB Insights.
   It overlaps Arnav's happy hour (5–7 PM); the calendar shows both.
+- **Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories** (Wed Sep 30,
+  3:30 PM, Siebel Center for Computer Science, Room 2405): Arnav Mishra's Siebel School Speaker Series talk,
+  added at his suggestion (Sept 25; he called it "Tech Talk @ Siebel"). Details from the Siebel School
+  calendar (https://calendars.illinois.edu/detail/7046?eventId=33563773). The listing and its calendar file
+  give no end time, so calendar export waits for one. Nothing ties it to Founders or the Founders Week
+  program, so it has no involvement label; it's marked as a related event (on Arnav's profile too). Street
+  address from Arnav, abbreviated like the other event addresses. It starts at the same time as the kickoff
+  reception. With no end time it isn't flagged as an overlap (the calendar never invents an end); both are
+  listed.
+- **Entrepreneurial Impact: Launching From Illinois** (Thu Oct 1, 3–5 PM, Beckman Institute): Arnav told the
+  organizers he's on the panel (Sept 25). He's listed as a panelist and linked to his profile. No other
+  panelists were supplied.
 - **Tailgate and EnterpriseWorks Tour** and **Illinois Football vs. Purdue** (Sat Oct 3): times are not
   in the supplied agenda. The listing states that tickets are not included.
 - The **Founders Week Afterparty** (Sat Oct 3, HERE Apartments) was **canceled** and removed from the site.
   The university's Friday **Founders Evening Showcase and Reception** is a separate event and remains.
-- Street addresses were supplied for Dan Caruso's chat and the Sept 29 panel only; other venues show
-  building names as given. No map links.
-- Speakers are listed by name only, as in the agenda. Affiliations were not supplied, apart from those in session titles.
+- Street addresses come from the organizers (Dan Caruso's chat, the Sept 29 panel, Founder Failure Lab)
+  or from Arnav (the Siebel talk). Other venues show building names as given. No map links.
+- Program speakers are listed by name only, as in the agenda (affiliations only where a session title
+  gives one). Speaker titles elsewhere come from each event's cited sources or, for mentors, their
+  mentor record.
 
 ## Demo content
 

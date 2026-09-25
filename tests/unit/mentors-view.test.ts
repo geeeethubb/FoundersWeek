@@ -574,7 +574,10 @@ describe("Founders Week appearances", () => {
     const entries = getScheduleEntries();
     const byMentor = appearancesByMentor(entries, getMentors());
     expect(Object.keys(byMentor)).toEqual(MENTOR_IDS);
-    expect(byMentor["arnav-mishra"][1]).toEqual(
+    // Arnav's Showcase talk is his last appearance, after his Wednesday talk and happy hour and
+    // Thursday's panel.
+    expect(byMentor["arnav-mishra"]).toHaveLength(4);
+    expect(byMentor["arnav-mishra"][3]).toEqual(
       expect.objectContaining({
         href: "/schedule/founders-showcase-day-sessions",
         // The session title comes from the calendar (content/events.ts), punctuated either way.
@@ -586,6 +589,8 @@ describe("Founders Week appearances", () => {
         dateTime: "2026-10-02T13:55",
         roleLabel: "Speaking",
         venue: "Illinois Conference Center",
+        involvement: null,
+        related: false,
       }),
     );
     expect(byMentor["patrick-haddox"].map((a) => a.title)).toEqual([
@@ -596,10 +601,28 @@ describe("Founders Week appearances", () => {
     expect(byMentor["ron-lewis"]).toEqual([]);
   });
 
-  it("shows Arnav hosting his Wednesday happy hour first, then his Showcase talk", () => {
-    const views = mentorAppearanceViews(getScheduleEntries(), "arnav-mishra");
-    expect(views).toHaveLength(2);
+  it("shows Arnav's appearances in date order: his Siebel talk and happy hour (Wed), the Entrepreneurial Impact panel (Thu), then his Showcase talk", () => {
+    const entries = getScheduleEntries();
+    const views = mentorAppearanceViews(entries, "arnav-mishra");
+    expect(views).toHaveLength(4);
+    // The Siebel School listing gives a 3:30 PM start and no end, so no end time is shown.
     expect(views[0]).toEqual({
+      key: "building-an-ai-native-company::15:30",
+      href: "/schedule/building-an-ai-native-company",
+      title: "Building an AI-Native Company: Databases, Distributed Systems, and Other Founder Stories",
+      context: null,
+      date: "2026-09-30",
+      dateShort: "Wed, Sep 30",
+      timeLabel: "3:30 PM CT",
+      startLabel: "3:30 PM",
+      dateTime: "2026-09-30T15:30",
+      roleLabel: "Speaking",
+      venue: "Siebel Center for Computer Science",
+      // No Founders involvement, outside the official program: "Related event", as on the calendar.
+      involvement: null,
+      related: true,
+    });
+    expect(views[1]).toEqual({
       key: "happy-hour-at-legends-with-arnav-mishra::17:00",
       href: "/schedule/happy-hour-at-legends-with-arnav-mishra",
       title: "Happy Hour with Arnav Mishra at Legends",
@@ -611,11 +634,117 @@ describe("Founders Week appearances", () => {
       dateTime: "2026-09-30T17:00",
       roleLabel: "Hosting",
       venue: "Legends",
+      // Supported by Founders, and a related event: both labels, as on the calendar.
+      involvement: "supported",
+      related: true,
     });
-    // Role, date and the full time range, labeled CT.
+    expect(views[2]).toEqual({
+      key: "entrepreneurial-impact-launching-from-illinois::15:00",
+      href: "/schedule/entrepreneurial-impact-launching-from-illinois",
+      title: "Entrepreneurial Impact: Launching From Illinois",
+      context: null,
+      date: "2026-10-01",
+      dateShort: "Thu, Oct 1",
+      timeLabel: "3:00–5:00 PM CT",
+      startLabel: "3:00 PM",
+      dateTime: "2026-10-01T15:00",
+      roleLabel: "Speaking",
+      venue: "Beckman Institute",
+      // Official program ("Part of Founders Week"): no label, as on the calendar.
+      involvement: null,
+      related: false,
+    });
+    expect(views[3].href).toBe("/schedule/founders-showcase-day-sessions");
+    // Role, date and the time labeled CT: the full range, or the start alone when no end is published.
     expect(views.map(appearanceLabel)).toEqual([
+      "Speaking Wed, Sep 30 · 3:30 PM CT",
       "Hosting Wed, Sep 30 · 5:00–7:00 PM CT",
+      "Speaking Thu, Oct 1 · 3:00–5:00 PM CT",
       "Speaking Fri, Oct 2 · 1:55–2:25 PM CT",
+    ]);
+    // His office hours are a calendar entry of their own (Fri, Oct 2, 10:00 to 11:30 AM), in person in
+    // the Siebel Center atrium, never an appearance.
+    const officeHours = entries.filter((e) => e.kind === "office-hours" && e.mentor?.id === "arnav-mishra");
+    expect(officeHours.map((e) => [e.id, e.date, e.time, e.status, e.location])).toEqual([
+      [
+        officeHoursEntryId({ id: "arnav-mishra-2026-10-02-am" }),
+        "2026-10-02",
+        { kind: "exact", start: "10:00", end: "11:30" },
+        "confirmed",
+        {
+          kind: "in-person",
+          venue: "Atrium, Siebel Center for Computer Science",
+          address: "201 N. Goodwin Ave., Urbana, IL 61801",
+        },
+      ],
+    ]);
+    expect(officeHours[0].statusNote).toBeNull();
+    expect(officeHours[0].registration).toEqual({
+      url: "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
+      label: "Apply to meet Arnav",
+      internal: true,
+    });
+    expect(views.map((v) => v.href)).not.toContain(`/schedule/${officeHours[0].id}`);
+  });
+
+  it("lists Arnav's Siebel School talk by its start alone: no invented end, no calendar export, no Founders label", () => {
+    const talk = getScheduleEntries().find((e) => e.id === "building-an-ai-native-company")!;
+    expect(talk).toMatchObject({
+      kind: "event",
+      date: "2026-09-30",
+      status: "confirmed",
+      types: ["talk"],
+      organizer: "Siebel School of Computing and Data Science",
+      location: {
+        kind: "in-person",
+        venue: "Siebel Center for Computer Science",
+        room: "Room 2405",
+        address: "201 N. Goodwin Ave., Urbana, IL 61801",
+      },
+      registration: null,
+      links: [{ label: "Event information", url: "https://calendars.illinois.edu/detail/7046?eventId=33563773" }],
+    });
+    // Start only (the listing and its calendar file give no end), so no interval and no export yet.
+    expect(talk.time).toEqual({ kind: "exact", start: "15:30" });
+    expect(talk.startsAt).toBeNull();
+    expect(talk.endsAt).toBeNull();
+    expect(talk.calendar).toEqual({ available: false, reason: "Calendar export opens once an end time is announced." });
+    // A Siebel School talk: nothing ties it to Founders, so no involvement label; it's a related event.
+    expect(talk.involvement).toBeNull();
+    expect(talk.related).toBe(true);
+    expect(talk.foundersPick).toBe(false);
+    expect(talk.featuredRank).toBeNull();
+    // Arnav is its verified speaker, linked to his profile.
+    expect(talk.speakers).toEqual([
+      { name: "Arnav Mishra", title: "Co-Founder & CTO, Doss", verified: true, mentorId: "arnav-mishra" },
+    ]);
+    expect(`${talk.summary} ${talk.description}`).not.toContain("—");
+    expect(`${talk.summary} ${talk.description}`).not.toMatch(/\b(hosted|co-hosted|supported) by Founders\b/i);
+    expect(talk.description).not.toMatch(/3:30\s*(PM)?\s*[–-]\s*\d/);
+  });
+
+  it("labels appearances as the calendar does: Founders' involvement (never “Part of Founders Week”) and related events", () => {
+    const base = {
+      entryId: "e",
+      entryTitle: "E",
+      date: "2026-10-02",
+      sessionTitle: null,
+      start: "13:00",
+      end: "14:00",
+      role: "speaker",
+      venue: null,
+    } as const;
+    expect(appearanceView({ ...base, involvement: "week", related: false })).toMatchObject({ involvement: null, related: false });
+    expect(appearanceView({ ...base, involvement: "hosted", related: false })).toMatchObject({ involvement: "hosted", related: false });
+    expect(appearanceView({ ...base, involvement: "supported", related: true })).toMatchObject({ involvement: "supported", related: true });
+    expect(appearanceView({ ...base, involvement: null, related: true })).toMatchObject({ involvement: null, related: true });
+    // Only Arnav's two related events carry labels; every other appearance is in the official program.
+    const labeled = Object.entries(appearancesByMentor(getScheduleEntries(), getMentors())).flatMap(([id, views]) =>
+      views.filter((v) => v.involvement || v.related).map((v) => [id, v.href, v.involvement, v.related]),
+    );
+    expect(labeled).toEqual([
+      ["arnav-mishra", "/schedule/building-an-ai-native-company", null, true],
+      ["arnav-mishra", "/schedule/happy-hour-at-legends-with-arnav-mishra", "supported", true],
     ]);
   });
 
@@ -627,6 +756,8 @@ describe("Founders Week appearances", () => {
       sessionTitle: null,
       role: "speaker",
       venue: null,
+      involvement: null,
+      related: false,
     } as const;
     expect(appearanceLabel(appearanceView({ ...base, start: "13:20", end: "13:55" }))).toBe(
       "Speaking Fri, Oct 2 · 1:20–1:55 PM CT",
@@ -636,10 +767,20 @@ describe("Founders Week appearances", () => {
     );
     expect(appearanceLabel(appearanceView({ ...base, start: "13:55", end: null }))).toBe("Speaking Fri, Oct 2 · 1:55 PM CT");
     expect(appearanceLabel(appearanceView({ ...base, start: null, end: null, role: "host" }))).toBe("Hosting Fri, Oct 2");
-    // Every published appearance of every mentor carries its end time and CT.
+    // Every published appearance of every mentor carries its time and CT: the full range, except
+    // Arnav's Siebel School talk, whose listing gives only a 3:30 PM start (no end is invented).
+    const startOnly: [string, string][] = [];
     for (const views of Object.values(appearancesByMentor(getScheduleEntries(), getMentors()))) {
-      for (const v of views) expect(appearanceLabel(v)).toMatch(/ · \d{1,2}:\d{2}( [AP]M)?–\d{1,2}:\d{2} [AP]M CT$/);
+      for (const v of views) {
+        if (/–/.test(v.timeLabel ?? "")) {
+          expect(appearanceLabel(v)).toMatch(/ · \d{1,2}:\d{2}( [AP]M)?–\d{1,2}:\d{2} [AP]M CT$/);
+        } else {
+          expect(appearanceLabel(v)).toMatch(/ · \d{1,2}:\d{2} [AP]M CT$/);
+          startOnly.push([v.href, appearanceLabel(v)]);
+        }
+      }
     }
+    expect(startOnly).toEqual([["/schedule/building-an-ai-native-company", "Speaking Wed, Sep 30 · 3:30 PM CT"]]);
   });
 
   it("links Elliott to the TechRise Cohort 2 panel", () => {
@@ -675,6 +816,8 @@ describe("Founders Week appearances", () => {
         dateTime: "2026-10-02T13:20",
         roleLabel: "Speaking",
         venue: "Illinois Conference Center",
+        involvement: null,
+        related: false,
       },
     ]);
     expect(appearanceLabel(views[0])).toBe("Speaking Fri, Oct 2 · 1:20–1:55 PM CT");
@@ -1196,6 +1339,7 @@ describe("session details", () => {
 
   it("says plainly what isn't known yet", () => {
     expect(sessionSummary(patrick.session)).toBe(`In person · ${minutes} min`);
+    expect(sessionSummary(arnav.session)).toBe(`In person · ${minutes} min`);
     expect(sessionSummary(rishab.session)).toBe(`${minutes} min · Format to be confirmed`);
     expect(sessionSummary(tbaMentor.session)).toBe("Format and length to be confirmed");
     expect(sessionSummary(jordan.session)).toBe("Virtual · Length to be confirmed");
@@ -1223,6 +1367,18 @@ describe("session details", () => {
       { label: "Format", value: "In person", known: true },
       { label: "Length", value: `${minutes} minutes`, known: true },
       { label: "Location", value: "Business Instructional Facility (BIF), 515 E. Gregory Drive, Champaign, IL 61820", known: true },
+      { label: "Sessions", value: "To be confirmed", known: false },
+    ]);
+    // Arnav's place is set (from Arnav, Sept 25): the Siebel Center atrium, with the street address as he gave it.
+    expect(arnav.session).toMatchObject({ format: "in-person", confirmed: true });
+    expect(sessionDetails(arnav.session)).toEqual([
+      { label: "Format", value: "In person", known: true },
+      { label: "Length", value: `${minutes} minutes`, known: true },
+      {
+        label: "Location",
+        value: "Atrium, Siebel Center for Computer Science, 201 N. Goodwin Ave., Urbana, IL 61801",
+        known: true,
+      },
       { label: "Sessions", value: "To be confirmed", known: false },
     ]);
     expect(sessionDetails(tbaMentor.session)).toEqual([

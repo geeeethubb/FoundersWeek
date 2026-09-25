@@ -5,11 +5,13 @@
  *   - /office-hours: exactly six mentor cards, in the published order, each with a loaded photo —
  *     two columns from desktop width, so six make three full rows.
  *   - Home: exactly six mentor previews, in order — one row of six on wide screens.
- *   - Calendar: 19 entries across 6 days (Mon Sep 28 – Sat Oct 3), with office hours for Elliott
+ *   - Calendar: 20 entries across 6 days (Mon Sep 28 – Sat Oct 3), with office hours for Elliott
  *     (9:00 AM–12:00 PM and 2:00–5:00 PM) on Wed, Sep 30; Patrick (10:00–11:30 AM, Espresso Royale
  *     at Grainger Library), Elliott and Rishab (both 12:00–5:00 PM) and Ron (2:30–4:30 PM, BIF) on
- *     Thu, Oct 1; and Arnav (10:00–11:30 AM) on Fri, Oct 2, each sorted by start between the day's
- *     program blocks, with exact overlap lines; the office-hours card covers "all six mentors",
+ *     Thu, Oct 1; and Arnav (10:00–11:30 AM, in the Siebel Center atrium) on Fri, Oct 2, each sorted
+ *     by start between the day's program blocks, with exact overlap lines. Wednesday also lists
+ *     Arnav's Siebel School talk (3:30 PM, no end time, a related event with no Founders label),
+ *     and Thursday's Launching From Illinois panel names him. The office-hours card covers "all six mentors",
  *     three across on desktop, states the session rule and says only Vik is still being scheduled;
  *     nothing marked Demo.
  */
@@ -17,6 +19,7 @@ import { expect, test, type Locator } from "@playwright/test";
 import { E2E_NODEMO_BASE_URL } from "./support/env";
 import {
   ARNAV,
+  ARNAV_VENUE,
   DEMO_MENTOR_NAMES,
   ELLIOTT,
   expectHeadshot,
@@ -31,6 +34,9 @@ import {
   waitForHydration,
 } from "./support/helpers";
 import {
+  AI_TALK_ROOM,
+  AI_TALK_TITLE,
+  AI_TALK_VENUE,
   DAN_TITLE,
   DAYS,
   EVENING_SHOWCASE_TITLE,
@@ -109,16 +115,16 @@ test.describe("Production content (no demo)", () => {
     for (const name of DEMO_MENTOR_NAMES) await expect(page.locator("body")).not.toContainText(name);
   });
 
-  test("calendar: 19 entries across 6 days, Mon Sep 28 – Sat Oct 3; no demo events", async ({ page }) => {
+  test("calendar: 20 entries across 6 days, Mon Sep 28 – Sat Oct 3; no demo events", async ({ page }) => {
     await page.goto("/schedule");
     await waitForHydration(page.getByRole("searchbox", { name: "Search the calendar" }));
     const days = page.getByRole("region", { name: /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), / });
     await expect(days.getByRole("heading", { level: 2 })).toHaveText(DAYS.map((d) => d.heading));
-    await expect(days.getByRole("article")).toHaveCount(19);
-    for (const title of [DAN_TITLE, PANEL_TITLE, HAPPY_HOUR_TITLE, FAILURE_LAB_TITLE, EVENING_SHOWCASE_TITLE]) {
+    await expect(days.getByRole("article")).toHaveCount(20);
+    for (const title of [DAN_TITLE, PANEL_TITLE, AI_TALK_TITLE, HAPPY_HOUR_TITLE, FAILURE_LAB_TITLE, EVENING_SHOWCASE_TITLE]) {
       await expect(days.getByRole("heading", { name: title, exact: true })).toHaveCount(1);
     }
-    await expect(page.getByRole("main")).toContainText("19 events over 6 days");
+    await expect(page.getByRole("main")).toContainText("20 events over 6 days");
 
     // Seven office-hours listings, one per window: Elliott's two on Wednesday; Patrick's, Elliott's,
     // Rishab's and Ron's on Thursday; Arnav's on Friday.
@@ -142,14 +148,16 @@ test.describe("Production content (no demo)", () => {
       scope.getByRole("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
     const overlapLine = (scope: Locator, title: string) => row(scope, title).getByText(/^Overlaps with /);
 
-    // Wednesday, sorted by start: Elliott 9:00 AM and 2:00 PM, the 3:30 PM Kickoff Reception, the
-    // 5:00 PM happy hour and the 6:30 PM Failure Lab. His location isn't set yet.
+    // Wednesday, sorted by start: Elliott 9:00 AM and 2:00 PM, the 3:30 PM Kickoff Reception and
+    // Arnav's 3:30 PM Siebel talk (in content order), the 5:00 PM happy hour and the 6:30 PM Failure
+    // Lab. Elliott's location isn't set yet.
     const wednesday = page.getByRole("region", { name: "Wednesday, September 30", exact: true });
     const wednesdayRows = wednesday.getByRole("article");
     await expect(wednesdayRows.getByRole("heading")).toHaveText([
       elliott,
       elliott,
       KICKOFF_TITLE,
+      AI_TALK_TITLE,
       HAPPY_HOUR_TITLE,
       FAILURE_LAB_TITLE,
     ]);
@@ -157,9 +165,19 @@ test.describe("Production content (no demo)", () => {
       "2026-09-30T09:00",
       "2026-09-30T14:00",
       "2026-09-30T15:30",
+      "2026-09-30T15:30",
       "2026-09-30T17:00",
       "2026-09-30T18:30",
     ]);
+    // Arnav's talk: a 3:30 PM start and no end time (the Siebel School's listing gives none), Room
+    // 2405 of the Siebel Center, marked as a related event with no Founders label and no pick.
+    const talk = row(wednesday, AI_TALK_TITLE);
+    await expect(talk.locator("time[datetime]")).toHaveText("3:30 PM");
+    await expect(talk).not.toContainText(/\bto \d{1,2}:\d{2}/);
+    await expect(talk).toContainText(`${AI_TALK_VENUE} · ${AI_TALK_ROOM}`);
+    await expect(talk).toContainText("Related event");
+    await expect(talk).not.toContainText(/by Founders|Part of Founders Week|Founders pick/);
+    await expect(talk).toContainText(ARNAV.name);
     const [elliottMorning, elliottAfternoon] = [wednesdayRows.nth(0), wednesdayRows.nth(1)];
     await expect(elliottMorning).toContainText("to 12:00 PM");
     await expect(elliottAfternoon).toContainText("to 5:00 PM");
@@ -202,6 +220,7 @@ test.describe("Production content (no demo)", () => {
     await expect(row(thursday, rishab)).toContainText("to 5:00 PM");
     await expect(row(thursday, ron)).toContainText("to 4:30 PM");
     await expect(row(thursday, ron)).toContainText("Business Instructional Facility (BIF)");
+    await expect(row(thursday, LAUNCHING_TITLE)).toContainText(`${ARNAV.name} of ${ARNAV.company} is on the panel.`);
 
     // Overlaps, exactly. Elliott and Rishab (both noon–5 PM) cover each other, Pitching (until
     // 2:15 PM), Ron (2:30–4:30 PM) and Launching From Illinois (3:00–5:00 PM); Ron misses Pitching;
@@ -223,6 +242,9 @@ test.describe("Production content (no demo)", () => {
     await expect(friday.getByRole("article").getByRole("heading")).toHaveText([SHOWCASE_TITLE, arnav, EVENING_SHOWCASE_TITLE]);
     await expect(row(friday, arnav).locator("time[datetime]")).toHaveAttribute("datetime", "2026-10-02T10:00");
     await expect(row(friday, arnav)).toContainText("to 11:30 AM");
+    // In person in the Siebel Center atrium (from Arnav, Sept 25).
+    await expect(row(friday, arnav)).toContainText(ARNAV_VENUE);
+    await expect(row(friday, arnav)).not.toContainText(/Location to be announced/);
     await expect(overlapLine(friday, arnav)).toHaveText(`Overlaps with ${SHOWCASE_TITLE}`);
     await expect(overlapLine(friday, SHOWCASE_TITLE)).toHaveText(`Overlaps with ${arnav}`);
     await expect(overlapLine(friday, EVENING_SHOWCASE_TITLE)).toHaveCount(0);

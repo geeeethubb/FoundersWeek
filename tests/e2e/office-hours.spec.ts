@@ -20,12 +20,19 @@
  *     Facility (BIF), 515 E. Gregory Drive, and nothing about his organizer-only Oct 4 availability.
  *     Elliott: three windows (Wed, Sep 30, 9:00 AM–12:00 PM and 2:00–5:00 PM CT; Thu, Oct 1,
  *     12:00–5:00 PM CT) with their shared note once, and "Apply to meet Elliott", with no window
- *     preselected.
+ *     preselected. Arnav: Fri, Oct 2, 10:00–11:30 AM CT in person at the Atrium, Siebel Center for
+ *     Computer Science, 201 N. Goodwin Ave., and his appearances in time order: his Siebel
+ *     School talk (Wed, 3:30 PM CT, no end time), his happy hour, the Launching From Illinois panel
+ *     (Thu) and his Friday Showcase talk.
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
   applicationForm,
   applicationHeading,
+  ARNAV,
+  ARNAV_ADDRESS,
+  ARNAV_VENUE,
+  ARNAV_WINDOW_NOTE,
   AUVI_CLAIMS,
   AUVI_LABS_URL,
   BROAD_AVAILABILITY_ASK,
@@ -68,6 +75,16 @@ import {
   waitForHydration,
   type MentorFixture,
 } from "./support/helpers";
+import {
+  AI_TALK_PATH,
+  AI_TALK_TITLE,
+  HAPPY_HOUR_PATH,
+  HAPPY_HOUR_TITLE,
+  LAUNCHING_PATH,
+  LAUNCHING_TITLE,
+  SHOWCASE_PATH,
+  SHOWCASE_TITLE,
+} from "./support/pages";
 
 function mentorGrid(page: Page) {
   return page.getByRole("region", { name: "Who you can meet" });
@@ -315,6 +332,45 @@ test.describe("Mentor profiles", () => {
           "content",
           /Available Wed, Sept 30, 9:00 AM–12:00 PM CT, and 2 more times\.$/,
         );
+      }
+      if (mentor === ARNAV) {
+        // In person in the Siebel Center atrium (from Arnav, Sept 25): the place, then the street
+        // address, under his Friday window, with the window's own note.
+        await expect(officeHoursBlock.locator("time")).toHaveText("Fri, Oct 2");
+        await expect(officeHoursBlock.locator("time")).toHaveAttribute("datetime", "2026-10-02");
+        await expect(officeHoursBlock).toContainText(`${ARNAV_VENUE}, ${ARNAV_ADDRESS}`);
+        await expect(officeHoursBlock).toContainText(ARNAV_WINDOW_NOTE);
+        await expect(officeHoursBlock).not.toContainText(/Scheduling in progress|to be confirmed|to be announced|still setting/i);
+        // Every "Apply to meet Arnav" preselects his one window.
+        const applyLinks = main.getByRole("link", { name: `Apply to meet ${ARNAV.firstName}`, exact: true });
+        expect(await applyLinks.count()).toBeGreaterThanOrEqual(1);
+        for (const link of await applyLinks.all()) {
+          await expect(link).toHaveAttribute("href", `/office-hours?mentor=${ARNAV.id}&window=${ARNAV.windowId}#apply`);
+        }
+        // His appearances, in time order, each linked to its calendar page: the Siebel School talk
+        // (a 3:30 PM start and no end time), his happy hour, the Launching From Illinois panel and
+        // his Friday Showcase talk.
+        const appearances = page.getByRole("region", { name: `${ARNAV.firstName} at Founders Week`, exact: true });
+        const items = appearances.getByRole("link");
+        expect(await items.evaluateAll((els) => els.map((el) => el.getAttribute("href")))).toEqual([
+          AI_TALK_PATH,
+          HAPPY_HOUR_PATH,
+          LAUNCHING_PATH,
+          SHOWCASE_PATH,
+        ]);
+        await expect(items.locator("time")).toHaveText([
+          "Speaking Wed, Sep 30 · 3:30 PM CT",
+          "Hosting Wed, Sep 30 · 5:00–7:00 PM CT",
+          "Speaking Thu, Oct 1 · 3:00–5:00 PM CT",
+          "Speaking Fri, Oct 2 · 1:55–2:25 PM CT",
+        ]);
+        await expect(items.nth(0)).toContainText(AI_TALK_TITLE);
+        await expect(items.nth(0)).toContainText("Siebel Center for Computer Science");
+        await expect(items.nth(1)).toContainText(HAPPY_HOUR_TITLE);
+        await expect(items.nth(2)).toContainText(LAUNCHING_TITLE);
+        await expect(items.nth(2)).toContainText("Beckman Institute");
+        await expect(items.nth(3)).toContainText("From Idea to Scale: Building Doss, Lessons from an Illini Founder");
+        await expect(items.nth(3)).toContainText(SHOWCASE_TITLE);
       }
       // Ron's Oct 4 availability is organizer-only: nowhere on any profile, not even in page data.
       await expect(page.locator("body")).not.toContainText(OCT_4);
