@@ -40,7 +40,8 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
   Personal bio and mentor-confirmed topics are not supplied.
 
 **Arnav Mishra** (Co-Founder & CTO, Doss)
-- Fri Oct 2, before noon. The exact window, duration, session count and location are pending.
+- Window: Fri Oct 2, 10:00–11:30 AM CT (confirmed by the organizers on Sept 24; earlier only "before
+  noon" was known). Sessions follow the 25-minute rule; location is pending.
 - Background and expertise come from his role and Founders Showcase talk listing. Mentor-confirmed
   topics are not supplied.
 
@@ -53,7 +54,9 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
 - On Thursday's TechRise Cohort 2 panel (linked on his profile).
 
 **Ron Lewis** (Co-Founder, Auctus Advisory)
-- Scheduling in progress: date, time and format are pending.
+- Window: Thu Oct 1, 2:30–4:30 PM CT, in person at the Business Instructional Facility (BIF), 515 E.
+  Gregory Drive, Champaign (organizer update, Sept 24). He's also open to Oct 4; that is an
+  organizer-only note until the organizers send details. Nothing about Oct 4 is published.
 - Bio published as supplied by organizers. Expertise is taken from that bio.
 - Suggested topics (revenue strategy, startup financial planning, communicating business progress to
   stakeholders) are **draft, not published**. Set `askMeAbout.status` to `"approved"` once he confirms.

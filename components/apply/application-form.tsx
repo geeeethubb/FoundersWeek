@@ -34,7 +34,13 @@ import {
   type SubmitFailure,
 } from "@/lib/applications/api-contract";
 import type { ApplicationCatalog } from "@/lib/applications/catalog";
-import { LIMITS, PARTICIPATION_OPTIONS, STAGE_OPTIONS, YEAR_OPTIONS } from "@/lib/applications/constants";
+import {
+  LIMITS,
+  PARTICIPATION_OPTIONS,
+  STAGE_OPTIONS,
+  YEAR_OPTIONS,
+  type SessionLength,
+} from "@/lib/applications/constants";
 import { isBlankDraft, parseDraft, serializeDraft, toDraftValues } from "@/lib/applications/draft";
 import {
   mergePrefill,
@@ -97,6 +103,8 @@ export interface ApplicationFormProps {
   draftKey: string;
   /** Set when submissions are closed: the form is shown for preview but disabled. */
   closed: { title: string; message: string } | null;
+  /** The session rule (`site.officeHours`), said next to the times and on the confirmation. */
+  officeHours: SessionLength;
 }
 
 type Banner = { tone: "danger" | "warning"; title: string; message: string; retry: boolean };
@@ -153,6 +161,7 @@ export function ApplicationForm({
   prefill,
   draftKey,
   closed,
+  officeHours,
 }: ApplicationFormProps) {
   const validate = useMemo(() => createValidator(catalog, emailDomains), [catalog, emailDomains]);
 
@@ -585,6 +594,7 @@ export function ApplicationForm({
           email={snap.email.trim().toLowerCase()}
           statusUrl={result.statusUrl}
           mentorNames={names}
+          officeHours={officeHours}
           replay={result.replay}
         />
       </div>
@@ -752,6 +762,7 @@ export function ApplicationForm({
               presentations={presentations}
               state={state}
               errors={visibleErrors}
+              officeHours={officeHours}
               onToggleOption={toggleOption}
               onNotesChange={(value) => {
                 setState((prev) => ({ ...prev, availabilityNotes: value }));
@@ -814,7 +825,8 @@ export function ApplicationForm({
               spellCheck={false}
               placeholder="https://"
               value={state.link}
-              maxLength={LIMITS.link}
+              // No maxLength: truncating a pasted link would store it broken. An over-long link gets
+              // the schema's "Keep links under … characters." error instead.
               onChange={(e) => update("link", e.target.value)}
               onBlur={() => {
                 const normalized = normalizeLink(state.link);

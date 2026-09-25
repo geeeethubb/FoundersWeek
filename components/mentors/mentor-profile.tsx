@@ -6,15 +6,22 @@
  * - `LabelList` — a short list of plain labels ("Can help with"). Labels only: the internal basis
  *   of an expertise item is never passed in.
  * - `AppearanceList` — Founders Week sessions the mentor speaks at or hosts, each linking to its
- *   calendar entry ("Speaking Fri, Oct 2 · 1:55 PM" · title · program block).
+ *   calendar entry ("Speaking Fri, Oct 2 · 1:55–2:25 PM CT" · title · program block).
  * - `OfficeHoursLines` — the mentor's published windows/slots as plain lines, or "Scheduling in
- *   progress", plus the public note from content. Never implies a booking.
+ *   progress", then the session rule ("Each session is 25 minutes, …", from `site.officeHours`;
+ *   never a session count), the place once it's set (building, then street address) and the
+ *   public note from content. Never implies a booking.
  */
 import Link from "next/link";
-import { ClockIcon } from "@/components/ui/icons";
+import { ClockIcon, MapPinIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { SCHEDULING_IN_PROGRESS_LABEL } from "@/lib/mentors";
-import { appearanceShortLabel, type AppearanceView, type AvailabilityLine } from "@/lib/mentors-view";
+import {
+  appearanceLabel,
+  type AppearanceView,
+  type AvailabilityLine,
+  type OfficeHoursPlace,
+} from "@/lib/mentors-view";
 
 export function ProfileSection({
   id,
@@ -87,7 +94,7 @@ export function AppearanceList({ appearances }: { appearances: AppearanceView[] 
             className="group -mx-3 block rounded-sm px-3 py-4 transition-colors duration-150 hover:bg-surface-subtle"
           >
             <p className="text-sm text-text-muted">
-              <time dateTime={a.dateTime}>{appearanceShortLabel(a)}</time>
+              <time dateTime={a.dateTime}>{appearanceLabel(a)}</time>
             </p>
             <p className="mt-1 font-medium leading-snug text-text underline decoration-transparent underline-offset-4 transition-colors duration-150 group-hover:decoration-charcoal">
               {a.title}
@@ -106,10 +113,16 @@ export function AppearanceList({ appearances }: { appearances: AppearanceView[] 
 
 export function OfficeHoursLines({
   lines,
+  sessionRule = null,
+  place = null,
   note,
   className,
 }: {
   lines: AvailabilityLine[];
+  /** `sessionRuleLine(mentor, site.officeHours)`: one short line under the window lines, or null. */
+  sessionRule?: string | null;
+  /** `officeHoursPlace(mentor)`: where the office hours happen, or null while it isn't set. */
+  place?: OfficeHoursPlace | null;
   note: string | null;
   className?: string;
 }) {
@@ -132,6 +145,22 @@ export function OfficeHoursLines({
           {SCHEDULING_IN_PROGRESS_LABEL}
         </p>
       )}
+      {/* Indented under the line text (past the clock icon): a detail of those times. */}
+      {sessionRule ? <p className="mt-1 pl-6 text-sm leading-snug text-text-muted">{sessionRule}</p> : null}
+      {place ? (
+        <p className="mt-2 flex items-start gap-2 text-base leading-snug text-text">
+          <MapPinIcon className="mt-0.5 size-4 shrink-0 text-text-subtle" />
+          <span>
+            {place.venue}
+            {place.address ? (
+              <>
+                <span className="sr-only">, </span>
+                <span className="mt-0.5 block text-sm text-text-muted">{place.address}</span>
+              </>
+            ) : null}
+          </span>
+        </p>
+      ) : null}
       {note ? <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-muted">{note}</p> : null}
     </div>
   );

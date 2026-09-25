@@ -22,6 +22,7 @@ const HEALTH_PANEL = "Health Innovation: From Therapeutics to Devices";
 const RISHAB = "rishab-veldur";
 const RISHAB_WINDOW = "rishab-veldur-2026-10-01";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
+const RON_OH = "office-hours-ron-lewis-2026-10-01-pm";
 /** The organizers' approved bio, verbatim. */
 const RISHAB_BIO =
   "Rishab is the co-founder and CEO of Auvi Labs, a UIUC spinout developing wearable ultrasound technology to help detect problems with dialysis access earlier. With a background in engineering at Illinois, he helped build a company that placed second in the 2024 Cozad New Venture Challenge.";
@@ -63,6 +64,24 @@ const DATE_ONLY_MENTOR: Mentor = {
   sources: [{ label: "Test fixture" }],
 };
 const FIXTURE_OH = "office-hours-fixture-date-only-2026-10-01";
+
+/** A part-of-day window ("Friday morning, before noon"), like Arnav's before it became exact on Sept 24. */
+const PART_OF_DAY_MENTOR: Mentor = {
+  ...DATE_ONLY_MENTOR,
+  id: "fixture-part-of-day",
+  name: "Fixture Morning",
+  firstName: "Morning",
+  session: { ...DATE_ONLY_MENTOR.session, note: undefined },
+  availability: [
+    {
+      id: "fixture-part-of-day-2026-10-02-am",
+      date: "2026-10-02",
+      time: { kind: "part-of-day", part: "morning", before: "12:00" },
+      label: "Friday morning, before noon · Exact window pending",
+    },
+  ],
+};
+const PART_OF_DAY_OH = "office-hours-fixture-part-of-day-2026-10-02-am";
 
 /** The LinkedIn profiles the organizers supplied, in display order. */
 const LINKEDIN: Record<string, string> = {
@@ -216,10 +235,11 @@ describe("content", () => {
     expect(rishab.askMeAbout).toBeNull();
     expect(rishab.goodFitFor).toMatchObject({ status: "approved", value: [RISHAB_GOOD_FIT] });
     expect(rishab.goodFitFor!.value[0]).toMatch(/^[A-Z].*\.$/);
-    // Session details aren't set yet: nothing is invented.
+    // Sessions follow the site-wide rule (25 minutes today); format, location and how many
+    // sessions he holds aren't set, so nothing is invented.
     expect(rishab.session).toMatchObject({
       format: null,
-      durationMinutes: null,
+      durationMinutes: site.officeHours.sessionMinutes,
       location: null,
       sessionCount: null,
       confirmed: false,
@@ -238,9 +258,9 @@ describe("content", () => {
       note: "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.",
     });
     expect(rishab.session.note).toBe(
-      "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.",
+      "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting the location.",
     );
-    // A window, not a confirmed session: length and location are still open.
+    // A window, not a confirmed session: the location is still open (session length is the site rule).
     expect(rishab.session.confirmed).toBe(false);
     expect(rishab.organizerNotes).toMatch(/Window locked for Thu Oct 1, anytime 12–5 PM \(organizer update, Sept 24\)/);
     expect(rishab.availability.some((w) => w.date === "2026-10-02")).toBe(false);
@@ -369,13 +389,40 @@ describe("content", () => {
     expect(arnav.company).toBe("Doss");
     expect(arnav.role).toBe("Co-Founder & CTO");
     expect(arnav.slots).toHaveLength(0);
-    expect(arnav.availability[0]).toMatchObject({
+    // Exact since the organizer update on Sept 24; the id is unchanged because applications store it.
+    expect(arnav.availability).toHaveLength(1);
+    expect(arnav.availability[0]).toEqual({
+      id: "arnav-mishra-2026-10-02-am",
       date: "2026-10-02",
-      time: { kind: "part-of-day", part: "morning", before: "12:00" },
+      time: { kind: "exact", start: "10:00", end: "11:30" },
+      note: "Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
     });
+    expect(arnav.session.durationMinutes).toBe(site.officeHours.sessionMinutes);
+    expect(arnav.session.note).toBe(
+      "Arnav is holding office hours on Friday, October 2, from 10:00 to 11:30 AM. We’re still setting the location.",
+    );
 
+    // Ron: Thu Oct 1, 2:30–4:30 PM at BIF (organizer update, Sept 24). Time and place are set, so
+    // his session is confirmed; it's still a window students apply to, not a booking.
     const ron = mentors.find((m) => m.id === "ron-lewis")!;
-    expect(ron).toMatchObject({ role: "Co-Founder", company: "Auctus Advisory", availability: [], slots: [] });
+    expect(ron).toMatchObject({ role: "Co-Founder", company: "Auctus Advisory", slots: [] });
+    expect(ron.availability).toEqual([
+      {
+        id: "ron-lewis-2026-10-01-pm",
+        date: "2026-10-01",
+        time: { kind: "exact", start: "14:30", end: "16:30" },
+        note: "Ron is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
+      },
+    ]);
+    expect(ron.session).toEqual({
+      format: "in-person",
+      durationMinutes: site.officeHours.sessionMinutes,
+      location: "Business Instructional Facility (BIF)",
+      address: "515 E. Gregory Drive, Champaign, IL 61820",
+      sessionCount: null,
+      confirmed: true,
+      note: "Ron is holding office hours on Thursday, October 1, from 2:30 to 4:30 PM at the Business Instructional Facility (BIF).",
+    });
     // Ron's suggested topics are still a draft pending his confirmation (never public).
     expect(ron.askMeAbout).toMatchObject({ status: "draft" });
     expect(ron.askMeAbout?.value).toEqual([
@@ -383,8 +430,15 @@ describe("content", () => {
       "Startup financial planning",
       "Communicating business progress to stakeholders",
     ]);
-    expect(schedulingStatus(ron)).toBe("in-progress");
-    expect(mentorCtaLabel(ron)).toBe("Express interest");
+    expect(schedulingStatus(ron)).toBe("available");
+    expect(mentorCtaLabel(ron)).toBe("Apply to meet Ron");
+    expect(applyHref({ mentorId: "ron-lewis", optionKind: "window", optionId: "ron-lewis-2026-10-01-pm" })).toBe(
+      "/office-hours?mentor=ron-lewis&window=ron-lewis-2026-10-01-pm#apply",
+    );
+    // His openness to Oct 4 is organizer-only: never in any public field.
+    expect(ron.organizerNotes).toMatch(/also open to Oct 4/);
+    const ronPublicCopy = JSON.stringify([ron.bio, ron.expertise, ron.goodFitFor, ron.session, ron.availability]);
+    expect(ronPublicCopy).not.toMatch(/Oct(ober)?\.? 4\b|Sunday/i);
 
     const vikram = mentors.find((m) => m.id === "vikram-lakhwara")!;
     // Title verified against Stakehouse's own team page.
@@ -401,6 +455,8 @@ describe("content", () => {
     expect(vikram.slots).toEqual([]);
     expect(vikram.organizerNotes).toMatch(/Wednesday through Saturday/);
     expect(vikram.bio?.value).not.toMatch(/Wednesday|Saturday|commitment/i);
+    // Vik and Elliott are the only mentors still scheduling.
+    expect(schedulingStatus(vikram)).toBe("in-progress");
     expect(mentorCtaLabel(vikram)).toBe("Express interest");
     expect(mentorCtaLabel(patrick)).toBe("Apply to meet Patrick");
 
@@ -418,6 +474,10 @@ describe("content", () => {
     });
     expect(schedulingStatus(elliott)).toBe("in-progress");
     expect(mentorCtaLabel(elliott)).toBe("Express interest");
+    expect(mentors.filter((m) => schedulingStatus(m) === "in-progress").map((m) => m.id)).toEqual([
+      "vikram-lakhwara",
+      "elliott-notrica",
+    ]);
 
     // The Founders Week Afterparty (Sat Oct 3, HERE Apartments) was canceled: it must not exist
     // anywhere in the data. (Arnav's Wednesday happy hour at Legends is a separate, real event.)
@@ -473,6 +533,23 @@ describe("content", () => {
     });
     expect(panel.featured?.rank).toBe(3);
     expect(site.applications.deadline).toBeNull();
+  });
+
+  it("says an unannounced time once: the Saturday descriptions don't repeat \"Time to be announced\"", () => {
+    const saturday = events.filter((e) => e.date === "2026-10-03");
+    expect(saturday.map((e) => e.id)).toEqual(["tailgate-and-enterpriseworks-tour", "illinois-football-vs-purdue"]);
+    for (const e of saturday) {
+      expect(e.time, e.id).toEqual({ kind: "tba" });
+      // The event page shows "Time to be announced" under When; this note matches it, so it isn't repeated.
+      expect(e.statusNote, e.id).toBe("Time to be announced.");
+      expect([e.summary, e.description].join(" "), e.id).not.toMatch(/time|announced|agenda doesn’t list/i);
+    }
+    expect(saturday[0].description).toBe(
+      "A Founders Week tailgate at Atkins Patio & Lawn, with a tour of EnterpriseWorks.",
+    );
+    expect(saturday[1].description).toBe(
+      "Illinois vs. Purdue at Memorial Stadium, listed on the Founders Week agenda.\n\nThis listing doesn’t include admission or tickets.",
+    );
   });
 
   it("keeps em dashes out of every public event string (production and demo)", () => {
@@ -578,25 +655,71 @@ describe("content", () => {
 
   it("builds office-hours entries from mentor windows", () => {
     const entries = buildScheduleEntries({ events, mentors, site });
-    expect(entries).toHaveLength(15);
+    expect(entries).toHaveLength(16);
     const oh = entries.filter((e) => e.kind === "office-hours");
-    // Only mentors with published windows get entries (Vik, Elliott and Ron are still scheduling).
-    // Rishab's Oct 1 window (noon–5 PM) follows Patrick's morning window.
+    // Only mentors with published windows get entries (Vik and Elliott are still scheduling).
+    // On Oct 1, Patrick's morning window, then Rishab's (noon–5 PM), then Ron's (2:30–4:30 PM).
     expect(oh.map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
       RISHAB_OH,
+      RON_OH,
       "office-hours-arnav-mishra-2026-10-02-am",
     ]);
     expect(oh.every((e) => !e.calendar.available)).toBe(true);
-    // Arnav's "Friday morning, before noon" has no exact interval.
-    expect(oh.map((e) => e.startsAt)).toEqual(["2026-10-01T15:00:00.000Z", "2026-10-01T17:00:00.000Z", null]);
-    expect(oh.map((e) => e.endsAt)).toEqual(["2026-10-01T16:30:00.000Z", "2026-10-01T22:00:00.000Z", null]);
+    // All four windows are exact: Ron's Thursday is 2:30–4:30 PM CT (19:30–21:30Z) and Arnav's
+    // Friday is 10:00–11:30 AM CT (15:00–16:30Z).
+    expect(oh.map((e) => e.startsAt)).toEqual([
+      "2026-10-01T15:00:00.000Z",
+      "2026-10-01T17:00:00.000Z",
+      "2026-10-01T19:30:00.000Z",
+      "2026-10-02T15:00:00.000Z",
+    ]);
+    expect(oh.map((e) => e.endsAt)).toEqual([
+      "2026-10-01T16:30:00.000Z",
+      "2026-10-01T22:00:00.000Z",
+      "2026-10-01T21:30:00.000Z",
+      "2026-10-02T16:30:00.000Z",
+    ]);
+    expect(oh[3]).toMatchObject({
+      date: "2026-10-02",
+      time: { kind: "exact", start: "10:00", end: "11:30" },
+      timeLabel: null,
+      status: "planned",
+      location: { kind: "tba", note: "Location is shared with selected students once confirmed." },
+      registration: {
+        url: "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
+        label: "Apply to meet Arnav",
+        internal: true,
+      },
+    });
+    // Ron's window has a confirmed time and place (BIF), so his entry is confirmed, in person.
+    expect(oh[2]).toMatchObject({
+      date: "2026-10-01",
+      time: { kind: "exact", start: "14:30", end: "16:30" },
+      timeLabel: null,
+      status: "confirmed",
+      statusNote: null,
+      location: {
+        kind: "in-person",
+        venue: "Business Instructional Facility (BIF)",
+        address: "515 E. Gregory Drive, Champaign, IL 61820",
+      },
+      registration: {
+        url: "/office-hours?mentor=ron-lewis&window=ron-lewis-2026-10-01-pm#apply",
+        label: "Apply to meet Ron",
+        internal: true,
+      },
+    });
+    expect(oh[2].description.split("\n\n")[0]).toBe(
+      "Ron Lewis (Co-Founder, Auctus Advisory) is available for office hours: Thursday, October 1, 2:30–4:30 PM CT.",
+    );
+    expect(oh[2].description).not.toMatch(/Oct(ober)?\.? 4\b|Sunday/i);
     expect(oh.every((e) => e.featuredRank === 1 && e.registration?.url.startsWith("/office-hours?"))).toBe(true);
     expect(oh[1]).toMatchObject({
       date: "2026-10-01",
       time: { kind: "exact", start: "12:00", end: "17:00" },
       timeLabel: null,
-      // A window, not a confirmed session (length and location are still being set).
+      // A window, not a confirmed session (the location is still being set).
       status: "planned",
       registration: {
         url: "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
@@ -611,11 +734,12 @@ describe("content", () => {
     // A date-only window (a future mentor's) has no time yet, so it sorts after the day's timed
     // entries and nothing is invented for it.
     const withDateOnly = buildScheduleEntries({ events, mentors: [...mentors, DATE_ONLY_MENTOR], site });
-    expect(withDateOnly).toHaveLength(16);
+    expect(withDateOnly).toHaveLength(17);
     expect(withDateOnly.filter((e) => e.date === "2026-10-01").map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
       "science-and-practice-of-pitching",
       RISHAB_OH,
+      RON_OH,
       "entrepreneurial-impact-launching-from-illinois",
       TECHRISE,
       FIXTURE_OH,
@@ -636,11 +760,30 @@ describe("content", () => {
       },
     });
 
+    // A part-of-day window has no exact interval: nothing is invented for it, and it sorts at the
+    // earliest start of its part of day (morning: 6:00, before the 8:00 Showcase).
+    const withMorning = buildScheduleEntries({ events, mentors: [...mentors, PART_OF_DAY_MENTOR], site });
+    expect(withMorning.filter((e) => e.date === "2026-10-02").map((e) => e.id)).toEqual([
+      PART_OF_DAY_OH,
+      "founders-showcase-day-sessions",
+      "office-hours-arnav-mishra-2026-10-02-am",
+      "founders-evening-showcase-and-reception",
+    ]);
+    expect(withMorning.find((e) => e.id === PART_OF_DAY_OH)).toMatchObject({
+      time: { kind: "part-of-day", part: "morning", before: "12:00" },
+      timeLabel: "Friday morning, before noon · Exact window pending",
+      startsAt: null,
+      endsAt: null,
+      sessionRule: null,
+      calendar: { available: false },
+    });
+
     // Featured order: office hours, then Dan Caruso, the Sep 29 panel, Arnav's happy hour and
     // Founder Failure Lab.
     expect(featuredEntries(entries).map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
       RISHAB_OH,
+      RON_OH,
       "office-hours-arnav-mishra-2026-10-02-am",
       DAN,
       "how-to-make-10k-a-month-in-college",

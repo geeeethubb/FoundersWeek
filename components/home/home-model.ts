@@ -123,6 +123,26 @@ export function addressText(location: EventLocation): string | null {
   return location.kind === "in-person" || location.kind === "hybrid" ? (location.address ?? null) : null;
 }
 
+/** The room of an in-person or hybrid event ("Auditorium (Room 1025)"), else null. */
+export function roomText(location: EventLocation): string | null {
+  return location.kind === "in-person" || location.kind === "hybrid" ? (location.room ?? null) : null;
+}
+
+/**
+ * The place line split around the room, so the room can be kept whole: "Beckman Institute, " +
+ * "Auditorium (Room 1025)" (`keep`). On a phone the room then moves to the next line intact instead
+ * of leaving "1025)" on its own.
+ */
+export function placeRuns(place: string, room: string | null): { text: string; keep: boolean }[] {
+  const at = room ? place.lastIndexOf(room) : -1;
+  if (!room || at < 0) return [{ text: place, keep: false }];
+  return [
+    { text: place.slice(0, at), keep: false },
+    { text: room, keep: true },
+    { text: place.slice(at + room.length), keep: false },
+  ].filter((run) => run.text);
+}
+
 // ---------------------------------------------------------------------------
 // Mentor previews
 // ---------------------------------------------------------------------------
@@ -134,6 +154,8 @@ export type PreviewAvailability =
       date: string;
       /** "10:00–11:30 AM CT" · "Morning, before noon CT" · "Exact time to be confirmed" */
       time: string;
+      /** True for an exact time range ("10:00–11:30 AM CT"), which is shown unbroken. */
+      exact: boolean;
       /** For <time dateTime>. */
       dateTime: ISODate;
       /** Further published windows beyond the first. */
@@ -175,6 +197,7 @@ export function previewAvailability(mentor: Pick<Mentor, "availability" | "slots
     known: true,
     date: shortDate(first.date),
     time: first.time.kind === "tba" ? EXACT_TIME_TO_BE_CONFIRMED : timeText(first.time),
+    exact: first.time.kind === "exact",
     dateTime: first.date,
     more: windows.length - 1,
   };
@@ -226,7 +249,10 @@ export interface FeaturedEventView {
   time: string;
   /** Local "2026-09-28T16:00" (or the date) for <time dateTime>. */
   dateTime: string;
+  /** "Beckman Institute, Auditorium (Room 1025)" */
   place: string;
+  /** "Auditorium (Room 1025)": shown unbroken inside `place` (see `placeRuns`). */
+  room: string | null;
   address: string | null;
 }
 
@@ -240,6 +266,7 @@ export function featuredEventView(entry: ScheduleEntry): FeaturedEventView {
     time: timeText(entry.time),
     dateTime: entry.time.kind === "exact" ? `${entry.date}T${entry.time.start}` : entry.date,
     place: placeText(entry.location),
+    room: roomText(entry.location),
     address: addressText(entry.location),
   };
 }

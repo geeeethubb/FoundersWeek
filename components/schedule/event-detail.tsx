@@ -28,6 +28,14 @@ import { cn } from "@/lib/cn";
 import { numberWord } from "@/lib/words";
 import { MentorMarker, SessionList } from "./program-sessions";
 
+/**
+ * Small stacked links (a speaker's name, a mentor's session time): the link box is a 44px-tall tap
+ * target, and negative margins hand the extra height back so the lines keep their spacing. Pair
+ * with the text size's line height: `TAP_BASE` for 16px/1.375 text, `TAP_SM` for 14px.
+ */
+const TAP_BASE = "-my-[11px] inline-flex min-h-11 items-center";
+const TAP_SM = "-my-3 inline-flex min-h-11 items-center";
+
 function sameText(a: string, b: string) {
   const norm = (s: string) => s.replace(/\.$/, "").trim().toLowerCase();
   return norm(a) === norm(b);
@@ -73,10 +81,15 @@ export function EventFacts({ entry, className }: { entry: ScheduleEntry; classNa
   const loc = entry.location;
   const locationNote =
     loc.kind === "tba" && loc.note && !sameText(loc.note, LOCATION_FORTHCOMING) ? loc.note : null;
+  // Office hours: what the window is, then how sessions run inside it (the session rule, from
+  // site.officeHours via the entry; said once on the page).
   const timeNote = isOfficeHours
-    ? entry.time.kind === "exact"
-      ? "Availability window, not a booked appointment."
-      : "Exact window to be confirmed."
+    ? [
+        entry.time.kind === "exact" ? "Availability window, not a booked appointment." : "Exact window to be confirmed.",
+        entry.sessionRule,
+      ]
+        .filter(Boolean)
+        .join(" ")
     : entry.status !== "canceled" && entry.statusNote && !sameText(entry.statusNote, TIME_FORTHCOMING)
       ? entry.statusNote
       : null;
@@ -273,7 +286,10 @@ export function SpeakerList({
                 {s.mentorId ? (
                   <Link
                     href={mentorProfileHref(s.mentorId)}
-                    className="underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
+                    className={cn(
+                      TAP_BASE,
+                      "underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent",
+                    )}
                   >
                     {s.name}
                   </Link>
@@ -282,7 +298,10 @@ export function SpeakerList({
                     href={s.profileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
+                    className={cn(
+                      TAP_BASE,
+                      "gap-1 underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent",
+                    )}
                   >
                     {s.name}
                     <ArrowUpRightIcon className="size-3.5 text-text-subtle" />
@@ -401,14 +420,20 @@ export function ProgramTimeline({
                       <p>
                         <Link
                           href={mentorProfileHref(m.mentorId)}
-                          className="font-medium text-text underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
+                          className={cn(
+                            TAP_BASE,
+                            "whitespace-nowrap font-medium text-text underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent",
+                          )}
                         >
                           {name}
                         </Link>
                       </p>
                       {affiliation ? <p className="text-sm text-text-muted">{affiliation}</p> : null}
                       <p className="mt-0.5 text-sm text-text-subtle tabular">
-                        <a href={`#${m.anchor}`} className="underline decoration-line-strong underline-offset-4 hover:text-text">
+                        <a
+                          href={`#${m.anchor}`}
+                          className={cn(TAP_SM, "underline decoration-line-strong underline-offset-4 hover:text-text")}
+                        >
                           {sessionTimeLabel(m)}
                         </a>
                         {m.role === "moderator" ? " · Moderator" : null}

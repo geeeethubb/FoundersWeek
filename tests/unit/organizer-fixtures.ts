@@ -4,12 +4,17 @@
  */
 import { demoMentors } from "@/content/demo";
 import { mentors } from "@/content/mentors";
+import { site } from "@/content/site";
 import type { Queryable } from "@/lib/db/client";
 import { buildOrganizerDirectory, type SlotInfo } from "@/lib/organizer/directory";
 
-export const directory = buildOrganizerDirectory([...mentors, ...demoMentors]);
+/** The office-hours rule from site settings (never hard-coded in tests of app behavior). */
+export const RULE = site.officeHours;
 
-/** Content slots plus extra test-only slots (e.g. one overlapping demo-avery-slot-1400). */
+/** Production + demo mentors, with sessions generated from exact windows under site.officeHours. */
+export const directory = buildOrganizerDirectory([...mentors, ...demoMentors], RULE);
+
+/** Content slots and generated sessions, plus extra test-only slots (e.g. one overlapping demo-avery-slot-1400). */
 export function slotMap(extra: Partial<SlotInfo>[] = []): Map<string, SlotInfo> {
   const map = new Map(directory.slotsById);
   for (const e of extra) {

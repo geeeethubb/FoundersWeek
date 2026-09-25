@@ -9,6 +9,7 @@
 import "server-only";
 import { isNonProductionDeploy } from "@/lib/config";
 import { getDatabaseConfig, getDb, getPersistenceStatus, LATEST_MIGRATION, type PersistenceStatus } from "@/lib/db/client";
+import { connectionValues, redactConnectionDetails } from "@/lib/security/redact";
 import { describeDataStore, type DataStoreStatus } from "./data-store-view";
 
 export type { DataStoreStatus } from "./data-store-view";
@@ -23,6 +24,20 @@ export function postgresProvider(url: string): "supabase" | "postgres" {
   } catch {
     return "postgres";
   }
+}
+
+/** Values of the configured connection string that must never appear in a hint. */
+function knownConnectionValues() {
+  const config = getDatabaseConfig();
+  return config.ok && config.kind === "postgres" ? connectionValues(config.url) : undefined;
+}
+
+/**
+ * A persistence error message (driver text) made safe for preview-deploy hints on the sign-in and
+ * application pages: no connection string, credentials, user or database name, host or address.
+ */
+export function redactDatabaseDetail(detail: string): string {
+  return redactConnectionDetails(detail, knownConnectionValues());
 }
 
 async function ping(): Promise<string | null> {
@@ -60,5 +75,6 @@ export async function getDataStoreStatus(now: Date = new Date()): Promise<DataSt
     schema: LATEST_MIGRATION,
     showHints: isNonProductionDeploy(),
     checkedAt: now.toISOString(),
+    known: knownConnectionValues(),
   });
 }

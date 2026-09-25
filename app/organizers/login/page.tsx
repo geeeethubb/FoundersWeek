@@ -6,7 +6,7 @@ import { AlertIcon, LockIcon } from "@/components/ui/icons";
 import { Container } from "@/components/ui/primitives";
 import { isNonProductionDeploy } from "@/lib/config";
 import { getPersistenceStatus } from "@/lib/db/client";
-import { redactSecrets } from "@/lib/organizer/data-store-view";
+import { redactDatabaseDetail } from "@/lib/organizer/data-store";
 import { getOrganizerPageSession } from "@/lib/organizer/page-auth";
 import { safeReturnPath } from "@/lib/organizer/paths";
 import { getSetupStatus } from "@/lib/setup-status";
@@ -100,7 +100,7 @@ async function SignInBody({ next }: { next: string }) {
           .
         </p>
         {isNonProductionDeploy() ? (
-          <p className="mt-2 break-words text-xs text-text-subtle">{redactSecrets(persistence.detail)}</p>
+          <p className="mt-2 break-words text-xs text-text-subtle">{redactDatabaseDetail(persistence.detail)}</p>
         ) : null}
       </div>
     );

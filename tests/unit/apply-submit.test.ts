@@ -1,4 +1,6 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import ApplicationStatusPage from "@/app/apply/status/[token]/page";
 import { mentors } from "@/content/mentors";
 import type { Mentor } from "@/content/types";
 import { site } from "@/content/site";
@@ -186,6 +188,8 @@ describe("POST /api/applications", () => {
         statusUrl: `${ORIGIN}${body.statusUrl}`,
         // Reads as "office hours during Founders Week" in the email.
         siteName: site.shortName,
+        // The email says how long a session is, from the same rule the site uses.
+        officeHours: site.officeHours,
         mentors: [
           { name: "Arnav Mishra", schedulingInProgress: false },
           { name: "Patrick Haddox", schedulingInProgress: false },
@@ -223,10 +227,10 @@ describe("POST /api/applications", () => {
     const res = await handleApplicationSubmission(
       post(
         validPayload({
-          mentorIds: ["ron-lewis"],
-          firstChoiceMentorId: "ron-lewis",
+          mentorIds: ["vikram-lakhwara"],
+          firstChoiceMentorId: "vikram-lakhwara",
           availability: [],
-          referrerMentorId: "ron-lewis",
+          referrerMentorId: "vikram-lakhwara",
         }),
       ),
       deps(),
@@ -238,21 +242,21 @@ describe("POST /api/applications", () => {
       `select mentor_id, rank from application_mentors where application_id = $1`,
       [body.id],
     );
-    expect(m).toEqual({ mentor_id: "ron-lewis", rank: 1 });
+    expect(m).toEqual({ mentor_id: "vikram-lakhwara", rank: 1 });
     await Promise.all(scheduled);
     expect(sendAcknowledgment.mock.calls[0]).toMatchObject([
-      { mentors: [{ name: "Ron Lewis", schedulingInProgress: true }] },
+      { mentors: [{ name: "Vikram “Vik” Lakhwara", schedulingInProgress: true }] },
     ]);
   });
 
-  it("stores an interest-only application for Ron and Vik: ranked preferences, zero availability rows", async () => {
+  it("stores an interest-only application for Elliott and Vik: ranked preferences, zero availability rows", async () => {
     const res = await handleApplicationSubmission(
       post(
         validPayload({
-          mentorIds: ["ron-lewis", "vikram-lakhwara"],
+          mentorIds: ["elliott-notrica", "vikram-lakhwara"],
           firstChoiceMentorId: "vikram-lakhwara",
           availability: [],
-          referrerMentorId: "ron-lewis",
+          referrerMentorId: "elliott-notrica",
         }),
       ),
       deps(),
@@ -265,7 +269,7 @@ describe("POST /api/applications", () => {
     );
     expect(ranked).toEqual([
       { mentor_id: "vikram-lakhwara", rank: 1 },
-      { mentor_id: "ron-lewis", rank: 2 },
+      { mentor_id: "elliott-notrica", rank: 2 },
     ]);
     expect(await count("application_availability")).toBe(0);
     const [app] = await db.query<{ first_choice_mentor_id: string }>(
@@ -278,7 +282,7 @@ describe("POST /api/applications", () => {
       {
         mentors: [
           { name: "Vikram “Vik” Lakhwara", schedulingInProgress: true },
-          { name: "Ron Lewis", schedulingInProgress: true },
+          { name: "Elliott Notrica", schedulingInProgress: true },
         ],
       },
     ]);
@@ -363,6 +367,53 @@ describe("POST /api/applications", () => {
       [id],
     );
     expect(app.first_choice_mentor_id).toBe("ron-lewis");
+  });
+
+  it("stores a Ron application with his Thu, Oct 1 window (2:30–4:30 PM CT) ticked and no note: he isn't “scheduling in progress”", async () => {
+    const res = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["ron-lewis"],
+          firstChoiceMentorId: "ron-lewis",
+          availability: ["window:ron-lewis-2026-10-01-pm"],
+          availabilityNotes: "",
+          referrerMentorId: "ron-lewis",
+        }),
+      ),
+      deps(),
+    );
+    expect(res.status).toBe(201);
+    const { id } = await res.json();
+    expect(
+      await db.query(`select mentor_id, option_kind, option_id from application_availability where application_id = $1`, [id]),
+    ).toEqual([{ mentor_id: "ron-lewis", option_kind: "window", option_id: "ron-lewis-2026-10-01-pm" }]);
+    const [app] = await db.query<{ availability_notes: string | null; referrer_mentor_id: string }>(
+      `select availability_notes, referrer_mentor_id from applications where id = $1`,
+      [id],
+    );
+    expect(app).toEqual({ availability_notes: null, referrer_mentor_id: "ron-lewis" });
+    await Promise.all(scheduled);
+    expect(sendAcknowledgment.mock.calls[0]).toMatchObject([{ mentors: [{ name: "Ron Lewis", schedulingInProgress: false }] }]);
+    // Applying reserves nothing.
+    expect(await getApplicationStatusView(db, id)).toMatchObject({
+      status: "submitted",
+      mentors: [{ mentorId: "ron-lewis", rank: 1 }],
+      appointments: [],
+    });
+    // Nothing is published for him on Oct 4: a made-up window for that day is refused.
+    const oct4 = await handleApplicationSubmission(
+      post(
+        validPayload({
+          mentorIds: ["ron-lewis"],
+          firstChoiceMentorId: "ron-lewis",
+          availability: ["window:ron-lewis-2026-10-04"],
+        }),
+      ),
+      deps(),
+    );
+    expect(oct4.status).toBe(400);
+    expect(Object.keys((await oct4.json()).fieldErrors)).toEqual(["availability"]);
+    expect(await count("applications")).toBe(1);
   });
 
   it("stores a Rishab application: his mentor row, his Thu, Oct 1 window row and the optional broad-availability note", async () => {
@@ -504,11 +555,11 @@ describe("POST /api/applications", () => {
     expect(nothingBody.fieldErrors).toEqual({
       availabilityNotes: "Tell us when you’re generally free during Founders Week (or pick one of the listed times).",
     });
-    // His ticked window doesn't cover Ron, whose times aren't set: only Ron is named.
-    const withRon = await handleApplicationSubmission(
+    // His ticked window doesn't cover Elliott, whose times aren't set: only Elliott is named.
+    const withElliott = await handleApplicationSubmission(
       post(
         validPayload({
-          mentorIds: ["rishab-veldur", "ron-lewis"],
+          mentorIds: ["rishab-veldur", "elliott-notrica"],
           firstChoiceMentorId: "rishab-veldur",
           availability: ["window:rishab-veldur-2026-10-01"],
           availabilityNotes: "",
@@ -516,9 +567,9 @@ describe("POST /api/applications", () => {
       ),
       deps(),
     );
-    expect(withRon.status).toBe(400);
-    expect((await withRon.json()).fieldErrors).toEqual({
-      availabilityNotes: "Tell us when you’re generally free during Founders Week. Ron’s times aren’t set yet.",
+    expect(withElliott.status).toBe(400);
+    expect((await withElliott.json()).fieldErrors).toEqual({
+      availabilityNotes: "Tell us when you’re generally free during Founders Week. Elliott’s times aren’t set yet.",
     });
     // He has no office hours on Fri, Oct 2.
     const oct2 = await handleApplicationSubmission(
@@ -650,13 +701,56 @@ describe("POST /api/applications", () => {
     expect(await count("applications")).toBe(0);
   });
 
+  it("stores answers with a pasted NUL (or other control characters) cleanly instead of failing with a 500", async () => {
+    const NUL = String.fromCharCode(0);
+    const BELL = String.fromCharCode(7);
+    // Postgres can't store U+0000 in text at all (22021): this is why the schema strips it first.
+    await expect(db.query("select $1::text as t", [`a${NUL}b`])).rejects.toThrow();
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const payload = validPayload({
+      fullName: `Alex${NUL} Student`,
+      major: `Computer${NUL} Engineering`,
+      participation: "team",
+      teamName: `Orbit${BELL}`,
+      teammates: `Priya${NUL} Shah`,
+      workingOn: `A telemetry${NUL} dashboard for student rocketry teams.`,
+      question: `How do I find my first${NUL} paying customers?${NUL}`,
+      availabilityNotes: `Class until 10:50${NUL} on Thursday`,
+      link: `example.com/deck${NUL}`,
+    });
+    const res = await handleApplicationSubmission(post(payload), deps());
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(isSubmitSuccess(body)).toBe(true);
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    const [app] = await db.query<Record<string, unknown>>(
+      `select full_name, major, team_name, teammates, working_on, question, availability_notes, link_url
+         from applications where id = $1`,
+      [body.id],
+    );
+    expect(app).toEqual({
+      full_name: "Alex Student",
+      major: "Computer Engineering",
+      team_name: "Orbit",
+      teammates: "Priya Shah",
+      working_on: "A telemetry dashboard for student rocketry teams.",
+      question: "How do I find my first paying customers?",
+      availability_notes: "Class until 10:50 on Thursday",
+      link_url: "https://example.com/deck",
+    });
+    await Promise.all(scheduled);
+    expect(sendAcknowledgment.mock.calls[0]).toMatchObject([{ firstName: "Alex" }]);
+  });
+
   it("requires a ticked window or broad availability — and stores broad availability alone (pending mentor)", async () => {
-    // Ron's schedule is pending: no window to tick. Without broad availability → 400, nothing stored.
+    // Vik's schedule is pending: no window to tick. Without broad availability → 400, nothing stored.
     const missing = await handleApplicationSubmission(
       post(
         validPayload({
-          mentorIds: ["ron-lewis"],
-          firstChoiceMentorId: "ron-lewis",
+          mentorIds: ["vikram-lakhwara"],
+          firstChoiceMentorId: "vikram-lakhwara",
           availability: [],
           availabilityNotes: "",
         }),
@@ -666,15 +760,17 @@ describe("POST /api/applications", () => {
     expect(missing.status).toBe(400);
     const body = await missing.json();
     expect(body).toMatchObject({ ok: false, error: "validation" });
-    expect(Object.keys(body.fieldErrors)).toEqual(["availabilityNotes"]);
+    expect(body.fieldErrors).toEqual({
+      availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik’s times aren’t set yet.",
+    });
     expect(await count("applications")).toBe(0);
 
     // With broad availability it's stored — the text is kept for organizers, no availability rows.
     const ok = await handleApplicationSubmission(
       post(
         validPayload({
-          mentorIds: ["ron-lewis"],
-          firstChoiceMentorId: "ron-lewis",
+          mentorIds: ["vikram-lakhwara"],
+          firstChoiceMentorId: "vikram-lakhwara",
           availability: [],
           availabilityNotes: "Thursday mornings, anytime Friday",
         }),
@@ -910,5 +1006,35 @@ describe("status page data", () => {
     expect(view?.appointments).toEqual([
       expect.objectContaining({ slotId: "s-live", status: "confirmed", startsAt: "2026-10-01T15:00:00.000Z" }),
     ]);
+  });
+
+  it("the status page says once how long a session is while there's no appointment yet", async () => {
+    const res = await handleApplicationSubmission(post(validPayload()), deps());
+    const { id, statusUrl } = await res.json();
+    const params = Promise.resolve({ token: String(statusUrl).replace("/apply/status/", "") });
+    const pageText = async () =>
+      renderToStaticMarkup(await ApplicationStatusPage({ params }))
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&#x27;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/\s+/g, " ");
+
+    const minutes = site.officeHours.sessionMinutes;
+    const waiting = await pageText();
+    expect(waiting).toContain(`No appointment yet. If you’re matched, your ${minutes}-minute session will show up here.`);
+    expect(waiting.split(`${minutes}-minute`).length - 1).toBe(1);
+    expect(waiting).not.toMatch(/break between sessions|\b(one|two|three|\d+) sessions\b/i);
+    // Never the email or answers.
+    expect(waiting).not.toMatch(/illinois\.edu|rocketry|customers/);
+
+    // Once there's an appointment, its own time says it all: the line gives way.
+    await db.query(
+      `insert into appointments (application_id, mentor_id, slot_id, starts_at, ends_at, status, created_by)
+       values ($1, 'patrick-haddox', 'patrick-haddox-2026-10-01-am-1000', '2026-10-01T15:00:00Z', '2026-10-01T15:25:00Z', 'confirmed', 'test')`,
+      [id],
+    );
+    const booked = await pageText();
+    expect(booked).not.toContain("No appointment yet");
+    expect(booked).toContain("Thursday, October 1 · 10:00–10:25 AM CT");
   });
 });

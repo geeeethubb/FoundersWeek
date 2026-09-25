@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getMentorsForOrganizers, isDemoContentEnabled } from "@/content";
+import { getMentorsForOrganizers, getSite, isDemoContentEnabled } from "@/content";
 import { AppointmentActions } from "@/components/organizer/appointment-actions";
 import { AssignForm, type AssignGroup } from "@/components/organizer/assign-form";
 import { AvailabilityList, Code, FirstChoiceMark, InterestOnly } from "@/components/organizer/bits";
@@ -25,10 +25,11 @@ import {
   mentorBookability,
   mentorName,
   resolveAvailability,
+  sessionLimitNote,
   type MentorBookability,
   type OrganizerDirectory,
 } from "@/lib/organizer/directory";
-import { redactSecrets } from "@/lib/organizer/data-store-view";
+import { redactDatabaseDetail } from "@/lib/organizer/data-store";
 import { describeActivity, participationLabel, stageDescription, stageLabel, yearLabel } from "@/lib/organizer/labels";
 import { requireOrganizerPage } from "@/lib/organizer/page-auth";
 import {
@@ -38,6 +39,7 @@ import {
   type ApplicationDetail,
   type AppointmentRecord,
 } from "@/lib/organizer/queries";
+import { sessionRuleText } from "@/lib/schedule/sessions";
 import { statusPath } from "@/lib/security/status-token";
 import { formatInstant, zonedTimeToUtc } from "@/lib/time";
 
@@ -72,7 +74,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
             </p>
             <p className="mt-1.5 text-text-muted">This application can’t be loaded right now. Try again in a minute.</p>
             {isNonProductionDeploy() ? (
-              <p className="mt-2 break-words text-xs text-text-subtle">{redactSecrets(persistence.detail)}</p>
+              <p className="mt-2 break-words text-xs text-text-subtle">{redactDatabaseDetail(persistence.detail)}</p>
             ) : null}
           </div>
         </Container>
@@ -84,7 +86,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
   const [detail, usage] = await Promise.all([getApplicationDetail(db, id), getSlotUsage(db)]);
   if (!detail) notFound();
 
-  const directory = buildOrganizerDirectory(getMentorsForOrganizers());
+  const directory = buildOrganizerDirectory(getMentorsForOrganizers(), getSite().officeHours);
   const { application: app } = detail;
   const statusUrl = `${getSiteUrl()}${statusPath(app.id)}`;
   const activeAppointments = app.appointments.filter((a) => a.status !== "canceled");
@@ -181,7 +183,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
                 {activeAppointments.map((a) => {
                   const slot = directory.slotsById.get(a.slotId);
                   const blocked = !slot
-                    ? "This slot isn’t in content anymore."
+                    ? "This session isn’t in the schedule anymore."
                     : slot.status !== "confirmed"
                       ? `This time isn’t confirmed with ${slot.mentorFirstName} yet, so it can’t be confirmed here.`
                       : null;
@@ -237,7 +239,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
             ) : null}
 
             <div className="mt-5 border-t border-line pt-5">
-              <h3 className="mb-3 font-semibold text-text">Assign appointment</h3>
+              <h3 className="mb-3 font-semibold text-text">Assign a session</h3>
               {closed ? (
                 <p className="text-sm text-text-muted">
                   This application is {APPLICATION_STATUS_LABELS[app.status].toLowerCase()}. Change its status to assign
@@ -245,13 +247,14 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
                 </p>
               ) : directory.slots.length === 0 ? (
                 <p className="text-sm leading-relaxed text-text-muted">
-                  No mentor has appointment slots yet, so there’s nothing to propose. Once specific times are set, add
-                  them as proposed or confirmed slots in <Code>content/mentors.ts</Code> and they’ll show up here.
+                  No mentor has sessions yet, so there’s nothing to propose. Once a mentor has a window with exact start
+                  and end times in <Code>content/mentors.ts</Code>, it’s split into sessions and they’ll show up here.
                 </p>
               ) : (
                 <AssignForm
                   applicationId={app.id}
                   groups={assignGroups(detail, directory, usage)}
+                  ruleText={sessionRuleText(directory.sessionRule)}
                   hasActiveAppointment={activeAppointments.length > 0}
                 />
               )}
@@ -523,7 +526,10 @@ function ActivityLog({ detail, directory }: { detail: ApplicationDetail; directo
   );
 }
 
-/** Slot options for assignment: preferred mentors first (by rank), then everyone else. */
+/**
+ * Session options for assignment: preferred mentors first (by rank), then everyone else. A mentor
+ * who agreed to fewer sessions than are listed (Patrick) carries a note with how many are booked.
+ */
 function assignGroups(
   detail: ApplicationDetail,
   directory: OrganizerDirectory,
@@ -541,8 +547,13 @@ function assignGroups(
   return mentors
     .map((m) => {
       const r = rank.get(m.id);
-      const options = directory.slots
-        .filter((s) => s.mentorId === m.id)
+      const sessions = directory.slots.filter((s) => s.mentorId === m.id);
+      const booked = sessions.filter((s) => {
+        const u = usage.get(s.id);
+        return u ? u.proposed + u.confirmed > 0 : false;
+      }).length;
+      const limit = sessionLimitNote(m, sessions.length);
+      const options = sessions
         .map((slot) => {
           const u = usage.get(slot.id) ?? { proposed: 0, confirmed: 0 };
           const used = u.proposed + u.confirmed;
@@ -564,6 +575,7 @@ function assignGroups(
             status: slot.status,
             capacity: slot.capacity,
             used,
+            generated: slot.generated,
             disabledReason,
           };
         });
@@ -571,6 +583,7 @@ function assignGroups(
         mentorId: m.id,
         label: `${m.name}${m.demo ? " (demo)" : ""} · ${r === 1 ? "1st choice" : r ? `preference ${r}` : "not requested"}`,
         preferred: r !== undefined,
+        note: limit ? `${limit} Booked so far: ${booked}.` : null,
         options,
       };
     })
@@ -578,9 +591,9 @@ function assignGroups(
 }
 
 /**
- * Why Confirmed/Attended isn't possible yet (no confirmed appointment). Mentors still scheduling
- * (no slots in content) are named, so organizers know the application can only be reviewed,
- * selected or waitlisted for now.
+ * Why Confirmed/Attended isn't possible yet (no confirmed appointment). Mentors without sessions
+ * (still scheduling, or a window without exact times) are named, so organizers know the
+ * application can only be reviewed, selected or waitlisted for now.
  */
 function confirmationBlocker(
   active: AppointmentRecord[],
@@ -597,12 +610,12 @@ function confirmationBlocker(
   const without = preferences.filter((p) => p.slots.length === 0);
   if (preferences.length && without.length === preferences.length) {
     const names = joinNames(without.map((p) => p.firstName));
-    return `Needs a confirmed appointment, and ${names} ${without.length === 1 ? "doesn’t" : "don’t"} have appointment slots yet. Use Under review, Selected or Waitlisted for now.`;
+    return `Needs a confirmed appointment, and ${names} ${without.length === 1 ? "doesn’t" : "don’t"} have sessions yet. Use Under review, Selected or Waitlisted for now.`;
   }
-  return "Needs a confirmed appointment. Propose a slot below, then confirm it.";
+  return "Needs a confirmed appointment. Propose a session below, then confirm it.";
 }
 
-/** Preferred mentors without appointment slots (scheduling in progress, or a window only). */
+/** Preferred mentors without sessions (scheduling in progress, or a window without exact times). */
 function NoSlotsYet({
   mentors,
   allWithout,
@@ -617,7 +630,7 @@ function NoSlotsYet({
   const contentFile = <Code>content/mentors.ts</Code>;
   return (
     <div className="mt-4 rounded-md bg-surface-subtle px-4 py-3.5 text-sm">
-      <p className="font-semibold text-text">No appointment slots yet for {names}</p>
+      <p className="font-semibold text-text">No sessions yet for {names}</p>
       <ul className="mt-2.5 space-y-2">
         {mentors.map((m) => (
           <li key={m.mentorId} className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -637,15 +650,17 @@ function NoSlotsYet({
       </ul>
       {hasConfirmed ? (
         <p className="mt-3 leading-relaxed text-text-muted">
-          To offer a time with {names} as well, add slots to {contentFile} once they’re set.
+          To offer a time with {names} as well, add {mentors.length === 1 ? "their" : "each mentor’s"} exact window to{" "}
+          {contentFile} once it’s set. It’s split into sessions automatically.
         </p>
       ) : (
         <p className="mt-3 leading-relaxed text-text-muted">
           {allWithout
             ? "You can still review this application: mark it Under review, Selected or Waitlisted. "
-            : "Their preferences can’t be booked yet, but you can still propose another mentor’s slot below. "}
-          Confirmed and Attended need a confirmed appointment. That’s possible once slots for {names} are added to{" "}
-          {contentFile} and confirmed with {mentors.length === 1 ? "them" : "each mentor"}.
+            : "Their preferences can’t be booked yet, but you can still propose another mentor’s session below. "}
+          Confirmed and Attended need a confirmed appointment. That’s possible once{" "}
+          {mentors.length === 1 ? `${names} has` : `${names} each have`} a window with exact start and end times in{" "}
+          {contentFile}. It’s split into sessions automatically.
         </p>
       )}
     </div>

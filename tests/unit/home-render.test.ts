@@ -4,8 +4,9 @@
  * (headshot, name, role and company, one availability line, a link to the profile) in a grid sized
  * from the mentor count, the four featured events (Dan Caruso — information only — the Sept 29
  * panel, Arnav’s happy hour, Founder Failure Lab), and the calendar link with the official dates.
- * Also: how a date-only window renders (on a synthetic fixture mentor); nothing private, removed or
- * canceled; the metadata; the 404 and error pages.
+ * Also: how a date-only window renders (on a synthetic fixture mentor); that the six-across cards
+ * share rows (so every availability rule lines up) and exact time ranges and rooms never break;
+ * 44px footer links; nothing private, removed or canceled; the metadata; the 404 and error pages.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -15,6 +16,7 @@ import NotFound from "@/app/not-found";
 import HomePage, { generateMetadata } from "@/app/page";
 import { mentorPreviews } from "@/components/home/home-model";
 import { MentorPreviews, previewColumns } from "@/components/home/mentor-previews";
+import { SiteFooter } from "@/components/site/site-footer";
 import { getMentors, getSite } from "@/content";
 import type { Mentor } from "@/content/types";
 
@@ -193,14 +195,15 @@ describe("home page (public data)", () => {
     expect(t).toMatch(/Ron Lewis Co-Founder\s?, Auctus Advisory/);
     expect(t).toMatch(/Rishab Veldur Co-Founder & CEO\s?, Auvi Labs/);
 
-    // One availability line each: a window for Patrick, Arnav and Rishab, "Scheduling in progress" otherwise.
+    // One availability line each: a window for Patrick, Arnav, Ron and Rishab; "Scheduling in progress"
+    // for Vik and Elliott only.
     expect(t).toMatch(/Samara Aerospace Thu, Oct 1\W+10:00–11:30 AM CT/);
-    expect(t).toMatch(/Doss Fri, Oct 2\W+Morning, before noon CT/);
+    expect(t).toMatch(/Doss Fri, Oct 2\W+10:00–11:30 AM CT/);
     expect(t).toMatch(/Stakehouse Scheduling in progress/);
     expect(t).toMatch(/Symbio Bioculinary Scheduling in progress/);
-    expect(t).toMatch(/Auctus Advisory Scheduling in progress/);
+    expect(t).toMatch(/Auctus Advisory Thu, Oct 1\W+2:30–4:30 PM CT/);
     expect(t).toMatch(/Auvi Labs Thu, Oct 1\W+12:00–5:00 PM CT/);
-    expect(t.match(/Scheduling in progress/g)).toHaveLength(3);
+    expect(t.match(/Scheduling in progress/g)).toHaveLength(2);
     expect(t).not.toContain("Time to be announced");
     // Every window shown has a time now: nothing reads "to be confirmed".
     expect(t).not.toContain("Exact time to be confirmed");
@@ -208,7 +211,24 @@ describe("home page (public data)", () => {
       "2026-10-01",
       "2026-10-02",
       "2026-10-01",
+      "2026-10-01",
     ]);
+    // Ron's openness to Oct 4 is organizer-only.
+    expect(t).not.toMatch(/Oct 4|October 4/);
+  });
+
+  it("shows Ron fifth: 'Thu, Oct 1 · 2:30–4:30 PM CT', with the orange dot", () => {
+    const items = [...section(page(), "mentors-heading").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    expect(items).toHaveLength(6);
+    const ron = items[4];
+    expect(images(ron)).toEqual([{ alt: "Ron Lewis", src: "/mentors/ron-lewis.jpg" }]);
+    expect(hrefs(ron)).toEqual(["/office-hours/ron-lewis"]);
+    expect(text(ron).trim()).toBe("Ron Lewis Co-Founder, Auctus Advisory Thu, Oct 1 ·, 2:30–4:30 PM CT");
+    expect(ron).toMatch(
+      /<time dateTime="2026-10-01"[^>]*>Thu, Oct 1<\/time><span aria-hidden="true"[^>]*> · <\/span><span class="sr-only">, <\/span><span[^>]*>2:30–4:30 PM CT<\/span>/,
+    );
+    expect(ron).toMatch(/rounded-full bg-accent"/);
+    expect(text(ron)).not.toMatch(/Oct 4|October 4|Scheduling in progress|Time to be announced/);
   });
 
   it("shows Rishab last, with his photo and 'Thu, Oct 1 · 12:00–5:00 PM CT', never Oct 2", () => {
@@ -292,6 +312,88 @@ describe("home page (public data)", () => {
 
     // Up to six fit on one row at xl.
     expect([1, 2, 3, 4, 5, 6].map(previewColumns)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("lines up every card's availability rule six across: shared subgrid rows, top-aligned", () => {
+    const html = section(page(), "mentors-heading");
+    const { list, items } = gridClasses(html);
+    // No row gap inside a card's rows at xl; each card (li and article) spans three shared rows:
+    // photo; name, role and company; availability.
+    expect(list).toEqual(expect.arrayContaining(["xl:gap-x-5", "xl:gap-y-0"]));
+    for (const item of items) {
+      expect(item).toEqual(expect.arrayContaining(["xl:row-span-3", "xl:grid", "xl:grid-rows-subgrid"]));
+      // One row of six: nothing spaces a second row.
+      expect(item).not.toContain("xl:pt-5");
+    }
+    const articles = [...html.matchAll(/<article\b[^>]*class="([^"]*)"/g)].map((m) => m[1].split(" "));
+    expect(articles).toHaveLength(6);
+    for (const a of articles) expect(a).toEqual(expect.arrayContaining(["xl:row-span-3", "xl:grid-rows-subgrid"]));
+    // The text column dissolves into the card's rows at xl; the availability block isn't pushed down
+    // (`mt-auto` would bottom-align it and put taller lines' rules higher).
+    expect(html.match(/class="flex min-w-0 flex-1 flex-col xl:contents"/g)).toHaveLength(6);
+    const rules = [...html.matchAll(/<div class="([^"]*)"><p class="[^"]*xl:border-t[^"]*"/g)].map((m) => m[1].split(" "));
+    expect(rules).toHaveLength(6);
+    for (const r of rules) {
+      expect(r).toContain("xl:mt-0");
+      expect(r.some((c) => /mt-auto|min-h/.test(c))).toBe(false);
+    }
+
+    // Seven mentors (a second row of four at xl): the second row is spaced from the first.
+    const seven = [...getMentors(), { ...DATE_ONLY_MENTOR, id: "fixture-seven" }];
+    const grid7 = gridClasses(renderToStaticMarkup(createElement(MentorPreviews, { mentors: mentorPreviews(seven) })));
+    expect(columnClasses(grid7.list)).toContain("xl:grid-cols-4");
+    expect(grid7.items.map((c) => c.includes("xl:pt-5"))).toEqual([false, false, false, false, true, true, true]);
+  });
+
+  it("keeps an exact time range on one line ('10:00–11:30 AM CT'); rough windows may wrap", () => {
+    const html = section(page(), "mentors-heading");
+    const timeClasses = (label: string, from = html) => {
+      const all = [...from.matchAll(new RegExp(`<span class="([^"]*)">${label}</span>`, "g"))];
+      expect(all.length, label).toBeGreaterThan(0);
+      return all.map((m) => m[1].split(" "));
+    };
+    // Patrick and Arnav (both 10:00–11:30 AM), Ron and Rishab.
+    expect(timeClasses("10:00–11:30 AM CT")).toHaveLength(2);
+    for (const c of timeClasses("10:00–11:30 AM CT")) expect(c).toContain("whitespace-nowrap");
+    expect(timeClasses("2:30–4:30 PM CT")).toHaveLength(1);
+    for (const c of timeClasses("2:30–4:30 PM CT")) expect(c).toContain("whitespace-nowrap");
+    for (const c of timeClasses("12:00–5:00 PM CT")) expect(c).toContain("whitespace-nowrap");
+    // A part-of-day window (fixture) isn't a range, so it may wrap.
+    const morning: Mentor = {
+      ...DATE_ONLY_MENTOR,
+      availability: [
+        { id: "fixture-date-only-2026-10-02-am", date: "2026-10-02", time: { kind: "part-of-day", part: "morning", before: "12:00" } },
+      ],
+    };
+    const rough = renderToStaticMarkup(createElement(MentorPreviews, { mentors: mentorPreviews([morning]) }));
+    for (const c of timeClasses("Morning, before noon CT", rough)) expect(c).not.toContain("whitespace-nowrap");
+  });
+
+  it("keeps each featured event's room whole, so it never sits alone on a line", () => {
+    const html = page();
+    const rooms: [string, string, string][] = [
+      ["featured-dan-caruso-fireside-chat", "Beckman Institute, ", "Auditorium (Room 1025)"],
+      ["featured-how-to-make-10k-a-month-in-college", "Materials Science and Engineering Building, ", "Room 100"],
+      ["featured-founder-failure-lab", "Campus Instructional Facility (CIF), ", "Room 1038"],
+    ];
+    for (const [id, venue, room] of rooms) {
+      const c = card(html, id);
+      expect(c, id).toContain(`${venue.replace(/&/g, "&amp;")}<span class="whitespace-nowrap">${room}</span>`);
+    }
+    // No room: plain text.
+    const hh = card(html, "featured-happy-hour-at-legends-with-arnav-mishra");
+    expect(hh).toContain('<dd class="text-charcoal">Legends<span class="mt-0.5 block text-sm text-text-subtle">6th &amp; Green</span></dd>');
+  });
+
+  it("footer links are 44px tap targets", () => {
+    const html = renderToStaticMarkup(createElement(SiteFooter));
+    const links = [...html.matchAll(/<a\b[^>]*class="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => ({
+      label: m[2],
+      classes: m[1].split(" "),
+    }));
+    expect(links.map((l) => l.label)).toEqual(["Office Hours", "Calendar", "Apply", "Organizers"]);
+    for (const l of links) expect(l.classes, l.label).toEqual(expect.arrayContaining(["inline-flex", "min-h-11", "items-center"]));
+    expect(hrefs(html)).toEqual(["/office-hours", "/schedule", "/office-hours#apply", "/organizers"]);
   });
 
   it("keeps mentor previews concise — no bios, expertise bases, badges or numbering", () => {

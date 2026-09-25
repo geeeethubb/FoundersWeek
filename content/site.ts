@@ -9,7 +9,7 @@ export const site: SiteSettings = {
   shortName: "Founders Week",
   tagline: "Find your people. Build what’s next.",
   description:
-    "Founders Office Hours during Founders Week 2026 at the University of Illinois Urbana-Champaign. Apply to meet startup founders and operators, and check out the full Founders Week calendar.",
+    "Founders Office Hours during Founders Week 2026 at the University of Illinois Urbana-Champaign. Apply to meet startup founders and investors, and check out the full Founders Week calendar.",
   university: "University of Illinois Urbana-Champaign",
   timezone: "America/Chicago",
   org: {
@@ -38,6 +38,9 @@ export const site: SiteSettings = {
     decisionsBy: null,
     emailDomains: ["illinois.edu"],
   },
+  // Every office-hours session is 25 minutes, with a 5-minute break between sessions
+  // (organizer update, Sept 24). Windows are split into sessions on this grid.
+  officeHours: { sessionMinutes: 25, breakMinutes: 5 },
   brand: {
     // Tight crop of the supplied logo (public/brand/founders-logo-original.png, kept intact):
     // foreground mark + wordmark only, original colors and proportions, transparent background.

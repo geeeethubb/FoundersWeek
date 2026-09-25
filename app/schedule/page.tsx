@@ -73,7 +73,7 @@ export default async function SchedulePage({ searchParams }: SchedulePageProps) 
     <div className="pb-20 md:pb-28">
       <ScheduleHeader week={site.week} days={days} showDemoNote={isDemoContentEnabled()} />
       <Container className="pb-10 md:pb-12">
-        <OfficeHoursCard mentors={mentors} />
+        <OfficeHoursCard mentors={mentors} sessionRule={site.officeHours} />
       </Container>
       <ScheduleExplorer
         entries={entries}

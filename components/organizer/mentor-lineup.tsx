@@ -36,8 +36,9 @@ const LG_COLUMNS: Record<2 | 3 | 4 | 5, string> = {
 
 /**
  * Demand at a glance: every mentor with their headshot, how many active applications list them
- * (and as first choice), and where their scheduling stands. Each card filters the list by that
- * mentor (select again to clear). All mentors are always shown.
+ * (and as first choice), their windows, and how many of their sessions are booked (plus how many
+ * sessions they agreed to host, when content says). Each card filters the list by that mentor
+ * (select again to clear). All mentors are always shown.
  */
 export function MentorLineup({
   directory,
@@ -59,6 +60,7 @@ export function MentorLineup({
         {directory.mentors.map((m) => {
           const active = filters.mentor === m.id;
           const n = interest.get(m.id) ?? { any: 0, first: 0 };
+          // Sessions: explicit content slots and sessions generated from exact windows.
           const slots = directory.slots.filter((s) => s.mentorId === m.id);
           const windows = directory.windows.filter((w) => w.mentorId === m.id);
           const seats = slots.reduce(
@@ -68,19 +70,30 @@ export function MentorLineup({
             },
             { used: 0, capacity: 0 },
           );
-          const scheduling: React.ReactNode = slots.length
-            ? `${slots.length} slot${slots.length === 1 ? "" : "s"} · ${seats.used}/${seats.capacity} seats used`
-            : windows.length
-              ? windows.map((w, wi) => (
-                  // Date and time never break internally ("10:00–11:30 / AM").
-                  <span key={w.id}>
-                    {wi ? " · " : null}
-                    <span className="whitespace-nowrap">{formatDate(w.date, "short")}</span>
-                    {" · "}
-                    <span className="whitespace-nowrap">{describeTime(w.time).bare}</span>
-                  </span>
-                ))
+          const scheduling: React.ReactNode = windows.length
+            ? windows.map((w, wi) => (
+                // Date and time never break internally ("10:00–11:30 / AM").
+                <span key={w.id}>
+                  {wi ? " · " : null}
+                  <span className="whitespace-nowrap">{formatDate(w.date, "short")}</span>
+                  {" · "}
+                  <span className="whitespace-nowrap">{describeTime(w.time).bare}</span>
+                </span>
+              ))
+            : slots.length
+              ? null
               : "Scheduling in progress";
+          const sessions = slots.length
+            ? [
+                `${slots.length} session${slots.length === 1 ? "" : "s"} · ${seats.used}/${seats.capacity} booked`,
+                // e.g. Patrick: three sessions fit his window, but he's hosting one or two.
+                m.sessionCount ? `hosting ${m.sessionCount.charAt(0).toLowerCase()}${m.sessionCount.slice(1)}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : windows.length
+              ? "No sessions yet"
+              : null;
           const href = organizersHref({ ...filters, mentor: active ? null : m.id, firstChoiceOnly: false });
 
           return (
@@ -108,7 +121,10 @@ export function MentorLineup({
                     <span className={cn("font-semibold tabular", n.any ? "text-text" : "text-text-subtle")}>{n.any}</span>{" "}
                     interested · <span className={n.first ? "font-medium text-text" : undefined}>{n.first} first choice</span>
                   </span>
-                  <span className="mt-1 text-xs leading-5 text-text-subtle">{scheduling}</span>
+                  {scheduling ? <span className="mt-1 text-xs leading-5 text-text-subtle">{scheduling}</span> : null}
+                  {sessions ? (
+                    <span className={cn("text-xs leading-5 text-text-subtle tabular", !scheduling && "mt-1")}>{sessions}</span>
+                  ) : null}
                   <span className="sr-only">
                     {active ? " (filtering by this mentor; select to show all mentors)" : " (show applications that list this mentor)"}
                   </span>

@@ -2,10 +2,13 @@
  * "We received your application" email. An acknowledgment only — never an acceptance.
  * Sent after the application is committed, best-effort: a failure here never changes what the
  * applicant was told on screen.
+ *
+ * Says once that nothing is reserved (APPLICATION_COPY.noReservation), and once how long a session
+ * is (from `site.officeHours`).
  */
 import "server-only";
 import { getEmailConfig } from "@/lib/config";
-import { APPLICATION_COPY } from "@/lib/applications/constants";
+import { APPLICATION_COPY, SESSION_COPY, type SessionLength } from "@/lib/applications/constants";
 import { INTEREST_COPY } from "@/lib/mentors";
 import { sendEmail, type EmailConfig, type SendResult } from "./resend";
 
@@ -18,6 +21,8 @@ export interface AcknowledgmentInput {
   /** The event's short name, as it reads in a sentence ("Founders Week"). */
   siteName: string;
   orgName: string;
+  /** The session rule (`site.officeHours`): how long each session is. */
+  officeHours: SessionLength;
   /** Rank order; the first is the first choice. */
   mentors: { name: string; schedulingInProgress: boolean }[];
 }
@@ -37,17 +42,15 @@ export function buildAcknowledgmentEmail(input: AcknowledgmentInput): { subject:
     const notes = [i === 0 ? "first choice" : null, m.schedulingInProgress ? "scheduling in progress" : null].filter(Boolean);
     return notes.length ? `${m.name} (${notes.join(", ")})` : m.name;
   });
-  const interestOnly = input.mentors.filter((m) => m.schedulingInProgress);
-  const interestNote = interestOnly.length
-    ? `${INTEREST_COPY.followUp} ${INTEREST_COPY.noReservation}`
-    : null;
+  // Mentors still scheduling get the follow-up promise; the no-reservation line is said once, last.
+  const interestNote = input.mentors.some((m) => m.schedulingInProgress) ? INTEREST_COPY.followUp : null;
 
   const paragraphs = [
     `Hi ${input.firstName},`,
     `Thanks for applying for office hours during ${input.siteName}. We got your application.`,
-    `${APPLICATION_COPY.limited} ${APPLICATION_COPY.noReservation}`,
+    `${APPLICATION_COPY.limited} ${SESSION_COPY.email(input.officeHours)}`,
     interestNote,
-    "This email is just a receipt. It doesn’t confirm an appointment.",
+    `This email is just a receipt. ${APPLICATION_COPY.noReservation}`,
   ].filter((p): p is string => Boolean(p));
 
   const text = [

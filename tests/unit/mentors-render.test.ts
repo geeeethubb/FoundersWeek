@@ -7,7 +7,8 @@
  * numbering, "To be confirmed" tables, the availability glossary, "one-on-one" claims) renders.
  * Rishab Veldur (Auvi Labs) has one exact window (Thu, Oct 1, noon to 5 PM CT), background chips and
  * a good-fit paragraph instead of a topic list, and his profile never makes medical-device claims.
- * The date-only path ("Exact time to be confirmed") is rendered with a synthetic fixture mentor.
+ * The date-only path ("Exact time to be confirmed") and the part-of-day path ("Morning, exact window
+ * pending") are rendered with synthetic fixture mentors: every real mentor with a window has exact times.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -28,13 +29,25 @@ import MentorProfilePage, { generateMetadata as profileMetadata } from "@/app/of
 import MentorNotFound from "@/app/office-hours/[id]/not-found";
 import { getMentors, getScheduleEntries } from "@/content";
 import { mentors as productionMentors } from "@/content/mentors";
+import { site } from "@/content/site";
 import type { Mentor } from "@/content/types";
 import { MentorCard, MentorGrid } from "@/components/mentors/mentor-card";
 import { OfficeHoursLines } from "@/components/mentors/mentor-profile";
 import { buildApplicationCatalog } from "@/lib/applications/catalog";
 import { resolvePrefill } from "@/lib/applications/prefill";
 import { INTEREST_COPY } from "@/lib/mentors";
-import { availabilityLines, availabilityNote, mentorAppearanceViews, mentorCardView } from "@/lib/mentors-view";
+import {
+  availabilityLines,
+  availabilityNote,
+  mentorAppearanceViews,
+  mentorCardView,
+  officeHoursPlace,
+  sessionRuleLine,
+} from "@/lib/mentors-view";
+import { sessionRuleText } from "@/lib/schedule/sessions";
+
+/** "Each session is 25 minutes, with a 5-minute break between sessions." (from site.officeHours) */
+const SESSION_RULE = sessionRuleText(site.officeHours);
 
 const MENTOR_IDS = [
   "patrick-haddox",
@@ -72,7 +85,7 @@ const SELECT_HREFS: Record<string, string> = {
   "arnav-mishra": "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
   "vikram-lakhwara": "/office-hours?mentor=vikram-lakhwara#apply",
   "elliott-notrica": "/office-hours?mentor=elliott-notrica#apply",
-  "ron-lewis": "/office-hours?mentor=ron-lewis#apply",
+  "ron-lewis": "/office-hours?mentor=ron-lewis&window=ron-lewis-2026-10-01-pm#apply",
   "rishab-veldur": "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
 };
 
@@ -118,6 +131,27 @@ const tbaMentor: Mentor = {
   links: [],
   acceptingApplications: true,
   sources: [],
+};
+
+/**
+ * A synthetic mentor with one part-of-day window ("Friday morning, before noon"), shaped like Arnav's
+ * entry before his window became 10:00–11:30 AM (Sept 24), so the rough-window rendering stays covered.
+ */
+const ROUGH_WINDOW_NOTE = "Riley has time Friday morning. We’ll share the exact window once it’s confirmed, but you can apply now.";
+const roughMentor: Mentor = {
+  ...tbaMentor,
+  id: "fixture-rough-mentor",
+  name: "Riley Fixture",
+  firstName: "Riley",
+  availability: [
+    {
+      id: "fixture-rough-2026-10-02-am",
+      date: "2026-10-02",
+      time: { kind: "part-of-day", part: "morning", before: "12:00" },
+      label: "Friday morning, before noon · Exact window pending",
+      note: ROUGH_WINDOW_NOTE,
+    },
+  ],
 };
 
 const MATCHING_SENTENCE =
@@ -226,6 +260,24 @@ function gridItems(html: string): string[][] {
   return [...html.matchAll(/<li\b[^>]*class="([^"]*)"[^>]*>\s*<article\b/g)].map((m) =>
     m[1].replace(/&amp;/g, "&").split(/\s+/),
   );
+}
+
+/** Class tokens of each top-level element in an HTML fragment (void elements don't nest). */
+function topLevelClasses(fragment: string): string[][] {
+  const out: string[][] = [];
+  let depth = 0;
+  for (const m of fragment.matchAll(/<(\/?)([a-z][a-z0-9]*)\b([^>]*?)(\/?)>/gi)) {
+    const [, closing, tag, attrs, selfClosing] = m;
+    if (closing) {
+      depth--;
+      continue;
+    }
+    if (depth === 0) {
+      out.push((/\bclass="([^"]*)"/.exec(attrs)?.[1] ?? "").replace(/&amp;/g, "&").split(/\s+/));
+    }
+    if (!selfClosing && !/^(img|input|br|hr|source|meta|link|wbr)$/i.test(tag)) depth++;
+  }
+  return out;
 }
 
 /**
@@ -410,6 +462,21 @@ describe("Office Hours page", () => {
     expect(t).toContain("Select anyone you’d like to meet and they’ll be added to your application below.");
   });
 
+  it("states the session rule once, in “How matching works”, from site.officeHours", async () => {
+    const html = await renderPage();
+    const t = text(html);
+    expect(SESSION_RULE).toBe(
+      `Each session is ${site.officeHours.sessionMinutes} minutes, with a ${site.officeHours.breakMinutes}-minute break between sessions.`,
+    );
+    expect(t.split(SESSION_RULE).length - 1).toBe(1);
+    const matching = /<section\b[^>]*aria-labelledby="matching-heading"[\s\S]*?<\/section>/.exec(html)![0];
+    expect(text(matching)).toContain(`${SESSION_RULE} Appointments are limited, and applying doesn’t reserve a time.`);
+    // Not on the cards (the profiles say it), and never a session count or a one-on-one promise.
+    for (const card of cards(html)) expect(text(card)).not.toContain("Each session is");
+    expect(t).not.toMatch(/\b(one|two|three|\d+) sessions\b/i);
+    expect(t).not.toMatch(/one[- ]on[- ]one/i);
+  });
+
   it("passes the URL's prefill parameters to the application", async () => {
     const html = await renderPage({ mentor: "arnav-mishra", window: "arnav-mishra-2026-10-02-am" });
     expect(html).toContain(
@@ -484,11 +551,13 @@ describe("mentor cards", () => {
 
     // One availability line each.
     expect(patrick).toContain("Office hours: Thu, Oct 1 · 10:00–11:30 AM CT");
-    expect(arnav).toContain("Office hours: Fri, Oct 2 · Morning, exact window pending");
-    for (const t of [vik, elliott, ron]) expect(t).toContain("Office hours: Scheduling in progress");
+    expect(arnav).toContain("Office hours: Fri, Oct 2 · 10:00–11:30 AM CT");
+    expect(ron).toContain("Office hours: Thu, Oct 1 · 2:30–4:30 PM CT");
+    for (const t of [vik, elliott]) expect(t).toContain("Office hours: Scheduling in progress");
     expect(rishab).toContain(`Office hours: ${RISHAB_LINE}`);
-    // No real mentor has a date-only window any more.
+    // No real mentor has a date-only or part-of-day window any more.
     expect(all.join(" ")).not.toContain("Exact time to be confirmed");
+    expect(all.join(" ")).not.toMatch(/exact window pending|before noon/i);
 
     // Longer copy stays on the profile.
     for (const m of getMentors()) expect(all.join(" ")).not.toContain(m.bio!.value);
@@ -559,6 +628,14 @@ describe("mentor cards", () => {
     expect(text(card)).not.toMatch(/Time TBA|Time to be announced/);
   });
 
+  it("a part-of-day mentor's card (fixture) reads 'Fri, Oct 2 · Morning, exact window pending'", () => {
+    const card = renderToStaticMarkup(
+      createElement(MentorCard, { card: mentorCardView(roughMentor, { applicationsOpen: true }) }),
+    );
+    expect(text(card)).toContain("Office hours: Fri, Oct 2 · Morning, exact window pending");
+    expect(hrefs(card)[0]).toBe("/office-hours?mentor=fixture-rough-mentor&window=fixture-rough-2026-10-02-am#apply");
+  });
+
   it("lays six cards out as three balanced rows of two, with no odd last card to center", () => {
     const html = renderGrid();
     expect(classesOf(html, "ul")).toEqual(expect.arrayContaining(["grid", "lg:grid-cols-2"]));
@@ -574,6 +651,26 @@ describe("mentor cards", () => {
       expect(classesOf(card, "article")).toEqual(
         expect.arrayContaining(["grid-cols-[5rem_minmax(0,1fr)]", "sm:grid-cols-[7.5rem_minmax(0,1fr)]", "rounded-md", "border-line"]),
       );
+    }
+  });
+
+  it("keeps the gap under the role the same in the shorter card of a row (content aligned to the top)", () => {
+    // Cards in a row share its height. The name/role row keeps its own height (`auto`) and the body
+    // row takes the extra space (`1fr`), so the body never drifts down in the shorter card (it
+    // did with implicit auto rows: 45px under Rishab's role vs 20px under Ron's).
+    for (const card of cards(renderGrid())) {
+      const article = classesOf(card, "article");
+      expect(article).toEqual(expect.arrayContaining(["grid", "h-full", "grid-rows-[auto_1fr]", "gap-y-5"]));
+      expect(article.filter((c) => /^(sm:|lg:)?(grid-rows|content-|items-|place-)/.test(c))).toEqual(["grid-rows-[auto_1fr]"]);
+      const [portrait, head, body] = [...card.matchAll(/<article\b[^>]*>([\s\S]*)<\/article>/g)].flatMap((m) =>
+        topLevelClasses(m[1]),
+      );
+      // The portrait spans both rows beside the text from sm; the name block sits at the top of its row.
+      expect(portrait).toContain("sm:row-span-2");
+      expect(head).toEqual(expect.arrayContaining(["sm:self-start"]));
+      // The body fills its row, with the actions pushed to the bottom.
+      expect(body).toEqual(expect.arrayContaining(["flex", "flex-col"]));
+      expect(card).toMatch(/<div class="mt-auto flex/);
     }
   });
 
@@ -655,23 +752,29 @@ describe("mentor profile page", () => {
 
   it("Patrick's profile shows his window as a window, not a booking", async () => {
     const t = text(await renderProfile("patrick-haddox"));
-    expect(t).toContain("Office hours Thu, Oct 1 · 10:00–11:30 AM CT");
+    expect(t).toContain(`Office hours Thu, Oct 1 · 10:00–11:30 AM CT ${SESSION_RULE} Patrick is free during this window`);
     expect(t).toContain("Patrick is free during this window, but it isn’t a booked appointment.");
-    expect(t).toContain("Speaking Fri, Oct 2 · 2:40 PM Next Generation Industrial, Manufacturing and Space Tech");
+    expect(t).toContain("Speaking Fri, Oct 2 · 2:40–2:55 PM CT Next Generation Industrial, Manufacturing and Space Tech");
+    // His window fits three sessions on the grid, but he agreed to one or two: never a computed count.
+    expect(t).not.toMatch(/\b(three|3) sessions\b/i);
   });
 
-  it("Arnav's profile: Friday morning pending, hosting his Wednesday happy hour, then speaking", async () => {
+  it("Arnav's profile: Friday 10:00–11:30 AM window, hosting his Wednesday happy hour, then speaking", async () => {
     const html = await renderProfile("arnav-mishra");
     const t = text(html);
-    expect(t).toContain("Office hours Fri, Oct 2 · Morning, exact window pending");
-    expect(t).toContain("We’ll share the exact window once it’s confirmed, but you can apply now.");
+    expect(t).toContain(
+      `Office hours Fri, Oct 2 · 10:00–11:30 AM CT ${SESSION_RULE} Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.`,
+    );
+    expect(t).not.toMatch(/exact window pending|before noon/i);
+    // His window fits three sessions on the grid; the count is organizer-only.
+    expect(t).not.toMatch(/\b(three|3) sessions\b/i);
     expect(t).toContain("Arnav at Founders Week");
     expect(anchor(html, "/schedule/happy-hour-at-legends-with-arnav-mishra")).toMatch(
-      /Hosting Wed, Sep 30 · 5:00 PM[\s\S]*Happy Hour with Arnav Mishra at Legends/,
+      /Hosting Wed, Sep 30 · 5:00–7:00 PM CT[\s\S]*Happy Hour with Arnav Mishra at Legends/,
     );
     // Arnav's session title comes from the calendar (content/events.ts), punctuated either way.
     expect(text(anchor(html, "/schedule/founders-showcase-day-sessions")!)).toMatch(
-      /Speaking Fri, Oct 2 · 1:55 PM From Idea to Scale(?: — |: )Building Doss[:,] Lessons from an Illini Founder Founders Showcase Day Sessions · Illinois Conference Center/,
+      /Speaking Fri, Oct 2 · 1:55–2:25 PM CT From Idea to Scale(?: — |: )Building Doss[:,] Lessons from an Illini Founder Founders Showcase Day Sessions · Illinois Conference Center/,
     );
     expect(t.indexOf("Hosting Wed, Sep 30")).toBeLessThan(t.indexOf("Speaking Fri, Oct 2"));
   });
@@ -679,9 +782,8 @@ describe("mentor profile page", () => {
   it("Elliott's profile: scheduling in progress, apply without a time, and his TechRise panel", async () => {
     const html = await renderProfile("elliott-notrica");
     const t = text(html);
-    expect(t).toContain("Office hours Scheduling in progress");
-    expect(t).toContain(INTEREST_COPY.followUp);
-    expect(anchor(html, "/schedule/techrise-pitch-competition")).toContain("Speaking Thu, Oct 1 · 6:30 PM");
+    expect(t).toContain(`Office hours Scheduling in progress ${SESSION_RULE} ${INTEREST_COPY.followUp}`);
+    expect(anchor(html, "/schedule/techrise-pitch-competition")).toContain("Speaking Thu, Oct 1 · 6:30–6:50 PM CT");
     expect(t).toContain("TechRise × University of Illinois Founders Week Cohort 2: Where Are They Now?");
     expect(hrefs(html)).toContain("/office-hours?mentor=elliott-notrica#apply");
     expect(hrefs(html).filter((h) => h.includes("mentor=elliott-notrica&"))).toEqual([]); // no time to preselect
@@ -691,13 +793,107 @@ describe("mentor profile page", () => {
     const t = text(await renderProfile("vikram-lakhwara"));
     expect(t).toContain("Office hours Scheduling in progress");
     expect(t).not.toMatch(/Wednesday|commitments|through Saturday/);
-    expect(t).toContain("Speaking Fri, Oct 2 · 2:55 PM Funding Start-ups in the Midwest");
+    expect(t).toContain("Speaking Fri, Oct 2 · 2:55–3:35 PM CT Funding Start-ups in the Midwest");
   });
 
-  it("Ron's profile has no Founders Week section (he has no listed appearances)", async () => {
-    const t = text(await renderProfile("ron-lewis"));
+  it("states the session rule once under the office-hours lines for exact windows and scheduling, never a session count", async () => {
+    const expected: Record<string, boolean> = {
+      "patrick-haddox": true, // exact window
+      "arnav-mishra": true, // exact window (Fri 10:00–11:30 AM since Sept 24)
+      "vikram-lakhwara": true, // scheduling in progress
+      "elliott-notrica": true,
+      "ron-lewis": true, // exact window (Thu 2:30–4:30 PM since Sept 24)
+      "rishab-veldur": true, // exact window
+    };
+    for (const mentor of getMentors()) {
+      const html = await renderProfile(mentor.id);
+      const t = text(html);
+      const block = text(officeHoursBlock(html));
+      expect(sessionRuleLine(mentor, site.officeHours) !== null, mentor.id).toBe(expected[mentor.id]);
+      expect(t.split(SESSION_RULE).length - 1, mentor.id).toBe(expected[mentor.id] ? 1 : 0);
+      expect(t.split("Each session is").length - 1, mentor.id).toBe(expected[mentor.id] ? 1 : 0);
+      if (expected[mentor.id]) {
+        // Right under the time lines, before the public note and the Apply button.
+        const firstLine = availabilityLines(mentor)[0]?.text ?? "Scheduling in progress";
+        expect(block.indexOf(firstLine), mentor.id).toBeLessThan(block.indexOf(SESSION_RULE));
+        expect(block.indexOf(SESSION_RULE), mentor.id).toBeLessThan(block.indexOf(availabilityNote(mentor)!));
+      }
+      // Patrick's own words ("one or two sessions") are his; a count from the grid never appears.
+      expect(block.replace(/one or two sessions/g, ""), mentor.id).not.toMatch(
+        /\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) sessions\b/i,
+      );
+      expect(t, mentor.id).not.toMatch(/one[- ]on[- ]one/i);
+    }
+  });
+
+  it("renders the rule as a short, indented line under the times, or nothing", () => {
+    const patrick = getMentors().find((m) => m.id === "patrick-haddox")!;
+    const withRule = renderToStaticMarkup(
+      createElement(OfficeHoursLines, {
+        lines: availabilityLines(patrick),
+        sessionRule: sessionRuleLine(patrick, site.officeHours),
+        note: null,
+      }),
+    );
+    expect(text(withRule).trim()).toBe(`Thu, Oct 1 · 10:00–11:30 AM CT ${SESSION_RULE}`);
+    expect(/<p class="([^"]*)">Each session is/.exec(withRule)?.[1].split(" ")).toEqual(
+      expect.arrayContaining(["pl-6", "text-sm", "text-text-muted"]),
+    );
+    // Built from the rule it's given.
+    const other = renderToStaticMarkup(
+      createElement(OfficeHoursLines, {
+        lines: availabilityLines(patrick),
+        sessionRule: sessionRuleLine(patrick, { sessionMinutes: 20, breakMinutes: 10 }),
+        note: null,
+      }),
+    );
+    expect(text(other)).toContain("Each session is 20 minutes, with a 10-minute break between sessions.");
+    const without = renderToStaticMarkup(
+      createElement(OfficeHoursLines, { lines: availabilityLines(tbaMentor), note: null }),
+    );
+    expect(text(without)).not.toContain("Each session is");
+    // A rough window has no sessions yet, so no rule line either.
+    expect(sessionRuleLine(roughMentor, site.officeHours)).toBeNull();
+    const rough = renderToStaticMarkup(
+      createElement(OfficeHoursLines, {
+        lines: availabilityLines(roughMentor),
+        sessionRule: sessionRuleLine(roughMentor, site.officeHours),
+        note: availabilityNote(roughMentor),
+      }),
+    );
+    expect(text(rough).trim()).toBe(`Fri, Oct 2 · Morning, exact window pending ${ROUGH_WINDOW_NOTE}`);
+  });
+
+  it("Ron's profile: his Thursday 2:30–4:30 PM window at BIF, Apply with it preselected, no Founders Week section", async () => {
+    const html = await renderProfile("ron-lewis");
+    const t = text(html);
+    const block = text(officeHoursBlock(html)).replace(/\s+/g, " ").trim();
+    expect(block).toBe(
+      `Thu, Oct 1 · 2:30–4:30 PM CT ${SESSION_RULE} Business Instructional Facility (BIF), 515 E. Gregory Drive, Champaign, IL 61820 Ron is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it. Apply to meet Ron`,
+    );
+    expect(hrefs(html)).toContain(SELECT_HREFS["ron-lewis"]);
+    expect(t).not.toContain("Scheduling in progress");
     expect(t).not.toContain("Ron at Founders Week");
-    expect(t).toContain("Apply to meet Ron");
+    // Anything else he offered (another day) is organizer-only until it's set.
+    expect(t).not.toMatch(/\bOct(ober)?\.? 4\b|Sunday/);
+  });
+
+  it("shows the place only once it's set (building, then street address)", () => {
+    const patrick = getMentors().find((m) => m.id === "patrick-haddox")!;
+    const ron = getMentors().find((m) => m.id === "ron-lewis")!;
+    expect(officeHoursPlace(patrick)).toBeNull();
+    expect(officeHoursPlace(ron)).toEqual({
+      venue: "Business Instructional Facility (BIF)",
+      address: "515 E. Gregory Drive, Champaign, IL 61820",
+    });
+    const buildingOnly = renderToStaticMarkup(
+      createElement(OfficeHoursLines, {
+        lines: availabilityLines(patrick),
+        place: { venue: "Siebel Center", address: null },
+        note: null,
+      }),
+    );
+    expect(text(buildingOnly).replace(/\s+/g, " ").trim()).toBe("Thu, Oct 1 · 10:00–11:30 AM CT Siebel Center");
   });
 
   it("a date-only window (fixture mentor) reads 'Exact time to be confirmed' in the profile's office-hours lines", () => {
@@ -764,7 +960,7 @@ describe("mentor profile page", () => {
     it("shows Thu, Oct 1 office hours, noon to 5 PM CT, as a window (not a booking), and never Oct 2 office hours", async () => {
       const html = await renderProfile("rishab-veldur");
       const block = officeHoursBlock(html);
-      expect(text(block).trim()).toBe(`${RISHAB_LINE} ${RISHAB_WINDOW_NOTE} Apply to meet Rishab`);
+      expect(text(block).trim()).toBe(`${RISHAB_LINE} ${SESSION_RULE} ${RISHAB_WINDOW_NOTE} Apply to meet Rishab`);
       expect(block).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
       expect(block.match(/<time\b/g)).toHaveLength(1);
       expect(block.match(/<li\b/g)).toHaveLength(1);
@@ -774,7 +970,7 @@ describe("mentor profile page", () => {
       expect(t).not.toContain("Exact time to be confirmed");
       // The only Friday on the page is his Showcase panel, never a second office-hours line.
       expect(t.match(/Oct 2/g)).toEqual(["Oct 2"]);
-      expect(t).toContain("Speaking Fri, Oct 2 · 1:20 PM");
+      expect(t).toContain("Speaking Fri, Oct 2 · 1:20–1:55 PM CT");
       expect(t).not.toContain("October 2");
       expect(availabilityLines(getMentors().find((m) => m.id === "rishab-veldur")!).map((l) => l.text)).toEqual([
         RISHAB_LINE,
@@ -796,7 +992,7 @@ describe("mentor profile page", () => {
       expect(text(/<h2\b[^>]*>([\s\S]*?)<\/h2>/.exec(appearances)![1]).trim()).toBe("Rishab at Founders Week");
       expect(hrefs(appearances)).toEqual(["/schedule/founders-showcase-day-sessions"]);
       expect(text(anchor(appearances, "/schedule/founders-showcase-day-sessions")!).trim()).toBe(
-        "Speaking Fri, Oct 2 · 1:20 PM Health Innovation: From Therapeutics to Devices Founders Showcase Day Sessions · Illinois Conference Center",
+        "Speaking Fri, Oct 2 · 1:20–1:55 PM CT Health Innovation: From Therapeutics to Devices Founders Showcase Day Sessions · Illinois Conference Center",
       );
       expect(appearances).toContain('<time dateTime="2026-10-02T13:20">');
       // His office hours stay in the header, not in the appearances.

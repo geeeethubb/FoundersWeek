@@ -14,12 +14,15 @@
 // - Interest only in mentors still scheduling (Ron, Vik, Elliott): Daniel Reyes (twice), Ethan
 //   Brooks, Aisha Rahman (broad availability in her notes), the formula-test applicant. Review them
 //   as Under review / Selected / Waitlisted; confirming is blocked until those mentors have
-//   confirmed slots.
-// - Windows (Patrick, Arnav) without slots: Maya, Priya, Marcus, Hannah.
-// - Rishab's date-only Thu, Oct 1 window (exact time to be confirmed), with the broad-availability
-//   note it requires: Nadia Brooks.
+//   sessions.
+// - Students apply to windows; organizers assign each application to one session. Exact windows
+//   are split into sessions under site.officeHours (lib/schedule/sessions.ts): Patrick's Thu window
+//   gives 3 sessions (he's hosting one or two, so don't fill all three), Rishab's Thu 12–5 PM
+//   window gives 10. Arnav's Friday-morning window has no exact times, so no sessions yet.
+//   Patrick/Arnav windows: Maya, Priya, Marcus, Hannah. Rishab's window: Nadia Brooks.
 // - Slot capacity with SHOW_DEMO_CONTENT=true: demo-avery-slot-1430 seats 2 (Sofia, Noah x2, Grace
 //   can compete for it); demo-avery-slot-1400 seats 1; demo-jordan-slot-1500 is only *proposed*.
+//   Rishab's 2:00 PM session overlaps demo-avery-slot-1400, so one student can't hold both.
 // - Student conflict: Noah Williams applied twice (same email) for demo-avery-slot-1430.
 // - referrer = the mentor profile the student came from (only some applicants).
 import { mkdirSync } from "node:fs";

@@ -20,10 +20,11 @@ export function ApplicationFiltersForm({
   directory: OrganizerDirectory;
 }) {
   const active = activeFilterCount(filters);
-  // Availability options grouped by mentor: slots where they exist, windows otherwise.
+  // What students chose, grouped by mentor: explicit slots where they exist, windows otherwise.
+  // Sessions generated from a window aren't options here: students pick the window itself.
   const groups = directory.mentors
     .map((m) => {
-      const slots = directory.slots.filter((s) => s.mentorId === m.id);
+      const slots = directory.slots.filter((s) => s.mentorId === m.id && !s.generated);
       const slotWindowIds = new Set(slots.map((s) => s.windowId));
       const windows = directory.windows.filter((w) => w.mentorId === m.id && !slotWindowIds.has(w.id));
       return {

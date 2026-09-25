@@ -7,20 +7,31 @@ import { AvailabilityBadge } from "@/components/ui/status";
 import { mentorApplyHref, schedulingStatus } from "@/lib/mentors";
 import { windowLabel } from "@/lib/organizer/directory";
 import { organizersHref } from "@/lib/organizer/filters";
+import { generatedSessionSlots, type SessionRule } from "@/lib/schedule/sessions";
 
 /**
  * Organizer-only context for each mentor: scheduling state, constraints (`organizerNotes`),
  * copy awaiting approval (drafts) and what's still missing. NOTHING here is public — this renders
- * only under /organizers, from `getMentorsForOrganizers()`.
+ * only under /organizers, from `getMentorsForOrganizers()`. `sessionRule` is site.officeHours:
+ * exact windows are split into sessions with it.
  */
-export function MentorNotes({ mentors }: { mentors: Mentor[] }) {
+export function MentorNotes({ mentors, sessionRule }: { mentors: Mentor[]; sessionRule: SessionRule }) {
   return (
     <ul className="divide-y divide-line border-y border-line">
       {mentors.map((m) => (
-        <MentorNote key={m.id} mentor={m} />
+        <MentorNote key={m.id} mentor={m} sessionRule={sessionRule} />
       ))}
     </ul>
   );
+}
+
+/** "3 sessions (see Sessions)." / "No sessions yet. …" for the Scheduling row. */
+export function sessionsSummary(mentor: Pick<Mentor, "availability" | "slots">, rule: SessionRule): string {
+  const n = mentor.slots.length + generatedSessionSlots(mentor, rule).length;
+  if (n) return `${n} session${n === 1 ? "" : "s"} (see Sessions).`;
+  return mentor.availability.length
+    ? "No sessions yet. A window becomes sessions once it has exact start and end times."
+    : "No sessions yet.";
 }
 
 type DraftEntry = {
@@ -57,7 +68,7 @@ export function mentorMissing(mentor: Mentor): string[] {
 
 const LINK = "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-text underline-offset-4 hover:underline sm:min-h-8";
 
-function MentorNote({ mentor }: { mentor: Mentor }) {
+function MentorNote({ mentor, sessionRule }: { mentor: Mentor; sessionRule: SessionRule }) {
   const scheduling = schedulingStatus(mentor);
   const drafts = mentorDrafts(mentor);
   const missing = mentorMissing(mentor);
@@ -116,11 +127,7 @@ function MentorNote({ mentor }: { mentor: Mentor }) {
                   <AvailabilityBadge kind={w.time.kind === "exact" ? "window" : "window-approx"} />
                 </li>
               ))}
-              <li className="text-text-subtle">
-                {mentor.slots.length
-                  ? `${mentor.slots.length} appointment slot${mentor.slots.length === 1 ? "" : "s"} (see Slot capacity).`
-                  : "No appointment slots yet."}
-              </li>
+              <li className="text-text-subtle">{sessionsSummary(mentor, sessionRule)}</li>
             </ul>
           )}
           {mentor.session.note ? <p className="mt-2 leading-relaxed text-text-muted">{mentor.session.note}</p> : null}

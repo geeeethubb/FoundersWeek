@@ -24,6 +24,22 @@ const CLOCK_SKEW_SECONDS = 60;
 
 export const ORGANIZER_NAME_MAX = 60;
 
+/**
+ * Sign-in attempt limits (POST /api/organizer/session), counted in the database per 15 minutes.
+ *
+ * - `perIp`: guesses from one network. Cleared by a successful sign-in.
+ * - `all`: every network together, a backstop against guesses spread across many addresses. It
+ *   has to stay far above `perIp` × the number of networks we can expect: at 50, about seven
+ *   addresses using up their own 8 attempts were enough to lock every organizer out for 15
+ *   minutes. At 300 that takes dozens of addresses, while a 12+ character password still can't
+ *   be guessed in 300 tries.
+ */
+export const ORGANIZER_LOGIN_LIMITS = {
+  perIp: 8,
+  all: 300,
+  windowSeconds: 15 * 60,
+} as const;
+
 export interface OrganizerSession {
   v: 1;
   /** Display name given at sign-in; recorded in the activity log. */

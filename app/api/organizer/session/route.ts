@@ -2,8 +2,9 @@
  * Organizer sign-in (POST) and sign-out (DELETE).
  *
  * POST { password, name } → sets the `fw_organizer` session cookie.
- * Rate limited per IP (8 attempts / 15 minutes, cleared on success); password compared in
- * constant time; same-origin only.
+ * Rate limited per IP (8 attempts / 15 minutes, cleared on success) and across all networks
+ * (300 / 15 minutes, see ORGANIZER_LOGIN_LIMITS); password compared in constant time; same-origin
+ * only.
  */
 import { z } from "zod";
 import { NO_STORE_HEADERS, readJson } from "@/lib/organizer/auth";
@@ -11,6 +12,7 @@ import {
   checkOrganizerPassword,
   clearSessionCookieHeader,
   createSessionToken,
+  ORGANIZER_LOGIN_LIMITS,
   ORGANIZER_NAME_MAX,
   sessionCookieHeader,
 } from "@/lib/organizer/session";
@@ -22,11 +24,13 @@ import { clientIp, isSameOriginRequest, jsonError } from "@/lib/security/request
 export const dynamic = "force-dynamic";
 
 const LOGIN_BUCKET = "organizer-login";
-const LOGIN_LIMIT = 8;
-const LOGIN_WINDOW_SECONDS = 15 * 60;
-// Shared by every network, so spreading guesses across many addresses doesn't help.
+const LOGIN_LIMIT = ORGANIZER_LOGIN_LIMITS.perIp;
+const LOGIN_WINDOW_SECONDS = ORGANIZER_LOGIN_LIMITS.windowSeconds;
+// Shared by every network, so spreading guesses across many addresses doesn't help. Kept well
+// above the per-IP limit: at 50, about seven addresses could lock every organizer out for 15
+// minutes (see ORGANIZER_LOGIN_LIMITS for the reasoning behind 300).
 const LOGIN_GLOBAL_BUCKET = "organizer-login:all";
-const LOGIN_GLOBAL_LIMIT = 50;
+const LOGIN_GLOBAL_LIMIT = ORGANIZER_LOGIN_LIMITS.all;
 
 const loginSchema = z.object({
   password: z.string().min(1, "Enter the organizer password.").max(200),

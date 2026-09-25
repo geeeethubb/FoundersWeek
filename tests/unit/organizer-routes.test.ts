@@ -9,7 +9,7 @@ import { PATCH as patchAppointment } from "@/app/api/organizer/appointments/[id]
 import { GET as exportCsv } from "@/app/api/organizer/export/route";
 import { DELETE as logout, POST as login } from "@/app/api/organizer/session/route";
 import { __setDbForTests, createMemoryDbForTests, type Database } from "@/lib/db/client";
-import { createSessionToken } from "@/lib/organizer/session";
+import { createSessionToken, ORGANIZER_LOGIN_LIMITS } from "@/lib/organizer/session";
 import { insertApplication } from "./organizer-fixtures";
 
 const PASSWORD = "organizer-test-password";
@@ -159,6 +159,44 @@ describe("organizer API authorization", () => {
     vi.stubEnv("ORGANIZER_PASSWORD", "");
     expect((await exportCsv(req("/api/organizer/export"))).status).toBe(503);
     expect((await login(req("/api/organizer/session", { method: "POST", body: { name: "A", password: "x" } }))).status).toBe(503);
+  });
+});
+
+describe("sessions through the API (generated from windows)", () => {
+  it("assigns one application per 25-minute session, confirms it, and exports the session time", async () => {
+    const email = "session.route@illinois.edu";
+    const first = await insertApplication(db, {
+      fullName: "Session Route",
+      email,
+      mentors: ["rishab-veldur"],
+      availability: ["window:rishab-veldur-2026-10-01"],
+    });
+    const second = await insertApplication(db, { mentors: ["rishab-veldur"] });
+    const slotId = "rishab-veldur-2026-10-01-1200";
+
+    const created = await postAppointment(req("/api/organizer/appointments", { method: "POST", body: { applicationId: first, slotId } }));
+    expect(created.status).toBe(201);
+    const { appointment } = (await created.json()) as { appointment: { id: string; startsAt: string; endsAt: string } };
+    expect(appointment).toMatchObject({ startsAt: "2026-10-01T17:00:00.000Z", endsAt: "2026-10-01T17:25:00.000Z" });
+
+    const full = await postAppointment(req("/api/organizer/appointments", { method: "POST", body: { applicationId: second, slotId } }));
+    expect(full.status).toBe(409);
+    expect(await full.json()).toMatchObject({ ok: false, error: "slot_full" });
+
+    const confirmed = await patchAppointment(
+      req(`/api/organizer/appointments/${appointment.id}`, { method: "PATCH", body: { action: "confirm" } }),
+      params(appointment.id),
+    );
+    expect(confirmed.status).toBe(200);
+
+    const res = await exportCsv(req(`/api/organizer/export?q=${encodeURIComponent(email)}`));
+    expect(res.status).toBe(200);
+    const csv = await res.text();
+    expect(csv).toContain("Rishab Veldur: Thu, Oct 1 · 12:00–12:25 PM CT (confirmed)");
+    expect(csv).toContain("Rishab Veldur: Thu, Oct 1 · 12:00–5:00 PM CT (window)");
+
+    // Leave no Rishab applications behind for the filtered-export test below.
+    await db.query(`delete from applications where id = any($1::uuid[])`, [[first, second]]);
   });
 });
 
@@ -336,5 +374,28 @@ describe("organizer sign-in", () => {
       req("/api/organizer/session", { method: "POST", body: { name: "Sam", password: PASSWORD }, cookie: null, ip: "10.0.0.3" }),
     );
     expect(other.status).toBe(200);
+  });
+
+  it("doesn't let a handful of networks lock every organizer out (shared limit 300 per 15 minutes)", async () => {
+    expect(ORGANIZER_LOGIN_LIMITS).toEqual({ perIp: 8, all: 300, windowSeconds: 15 * 60 });
+    // Eight networks each use up their own 8 attempts: 64 failures, more than the old shared limit of 50.
+    for (let n = 1; n <= 8; n++) {
+      for (let i = 0; i < ORGANIZER_LOGIN_LIMITS.perIp; i++) {
+        const res = await login(
+          req("/api/organizer/session", { method: "POST", body: { name: "Guess", password: "wrong-password" }, cookie: null, ip: `10.9.0.${n}` }),
+        );
+        expect(res.status).toBe(401);
+      }
+    }
+    // An organizer on another network can still sign in.
+    const organizer = await login(
+      req("/api/organizer/session", { method: "POST", body: { name: "Sam", password: PASSWORD }, cookie: null, ip: "10.9.1.1" }),
+    );
+    expect(organizer.status).toBe(200);
+    // The noisy networks stay limited.
+    const noisy = await login(
+      req("/api/organizer/session", { method: "POST", body: { name: "Sam", password: PASSWORD }, cookie: null, ip: "10.9.0.1" }),
+    );
+    expect(noisy.status).toBe(429);
   });
 });

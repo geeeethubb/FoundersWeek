@@ -46,13 +46,14 @@ export function MentorMarker({ className }: { className?: string }) {
   );
 }
 
+/** One person in a session's list. A name never breaks across lines ("Rishab" / "Veldur" on a phone). */
 function Person({ person }: { person: Speaker }) {
   if (person.mentorId) {
     return (
       <span>
         <Link
           href={mentorProfileHref(person.mentorId)}
-          className="font-medium text-text underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
+          className="whitespace-nowrap font-medium text-text underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-accent"
         >
           {person.name}
         </Link>
@@ -62,7 +63,7 @@ function Person({ person }: { person: Speaker }) {
   }
   return (
     <span>
-      <span className="text-text">{person.name}</span>
+      <span className="whitespace-nowrap text-text">{person.name}</span>
       {person.title ? <span>, {person.title}</span> : null}
     </span>
   );

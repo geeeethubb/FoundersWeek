@@ -22,15 +22,19 @@ import {
   mentorAction,
   mentorAppearanceViews,
   mentorMetaDescription,
+  officeHoursPlace,
+  sessionRuleLine,
   visibleExpertise,
   visibleField,
   type VisibleField,
 } from "@/lib/mentors-view";
 
 /**
- * A mentor’s profile: portrait, name, verified role and company, LinkedIn, office-hours line and the
- * Apply button up top; then the approved bio, what they can help with (labels only) and their
- * Founders Week appearances (→ calendar). Unknown mentor ids render ./not-found.tsx.
+ * A mentor’s profile: portrait, name, verified role and company, LinkedIn, office-hours lines (with
+ * the session rule from `site.officeHours`, never a session count, and the place once it's set) and
+ * the Apply button up top;
+ * then the approved bio, what they can help with (labels only) and their Founders Week
+ * appearances (→ calendar). Unknown mentor ids render ./not-found.tsx.
  */
 
 type PageProps = {
@@ -144,6 +148,8 @@ export default async function MentorProfilePage({ params }: PageProps) {
                 <h2 className="text-sm font-semibold text-text">Office hours</h2>
                 <OfficeHoursLines
                   lines={availabilityLines(mentor)}
+                  sessionRule={sessionRuleLine(mentor, site.officeHours)}
+                  place={officeHoursPlace(mentor)}
                   note={availabilityNote(mentor)}
                   className="mt-2"
                 />

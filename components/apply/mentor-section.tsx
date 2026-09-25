@@ -10,6 +10,9 @@
  * - `AvailabilityFields`: an optional "I can make …" checkbox for each published time of a
  *   selected mentor, plus one broad-availability answer. Either is enough — except that a selected
  *   mentor whose times aren't set yet always needs the broad answer (the shared schema's rule).
+ *   The session length (`site.officeHours`) is said once: under the listed times ("if you're
+ *   matched, Founders will email you a specific session time inside the window you picked"), or at
+ *   the end of the broad-availability hint when no times are listed.
  */
 import type { FocusEvent } from "react";
 import { DemoBadge } from "@/components/ui/badge";
@@ -17,7 +20,7 @@ import { FieldError, errorId, hintId } from "@/components/ui/field";
 import { MentorPortrait } from "@/components/ui/portrait";
 import type { Mentor } from "@/content/types";
 import type { ApplicationCatalog, AvailabilityOption, CatalogMentor } from "@/lib/applications/catalog";
-import { LIMITS } from "@/lib/applications/constants";
+import { LIMITS, SESSION_COPY, type SessionLength } from "@/lib/applications/constants";
 import type { OptionPresentation } from "@/lib/applications/option-presentation";
 import { cn } from "@/lib/cn";
 import { ChoiceIndicator, CheckboxRow, Hint, Label, RadioChip, TextAreaField, WRAPPED_FOCUS } from "./controls";
@@ -208,6 +211,7 @@ export function AvailabilityFields({
   presentations,
   state,
   errors,
+  officeHours,
   onToggleOption,
   onNotesChange,
   onLeave,
@@ -216,6 +220,8 @@ export function AvailabilityFields({
   presentations: OptionPresentations;
   state: FormState;
   errors: FieldErrors;
+  /** The session rule (`site.officeHours`). */
+  officeHours: SessionLength;
   onToggleOption: (key: string, checked: boolean) => void;
   onNotesChange: (value: string) => void;
   onLeave: (key: "availability" | "availabilityNotes") => void;
@@ -224,17 +230,19 @@ export function AvailabilityFields({
   const chosen = new Set(state.availability);
   const groupId = fieldId("availability");
   const broad = broadAvailabilityGuidance(state, catalog);
+  const windowsOnly = times.every(({ option }) => option.kind === "window");
   return (
     <div className="space-y-6">
       {times.length ? (
         <fieldset
           className="animate-fade-up"
           onBlur={leaveHandler(() => onLeave("availability"))}
-          aria-describedby={errors.availability ? errorId(groupId) : undefined}
+          aria-describedby={cn(hintId(groupId), errors.availability && errorId(groupId)) || undefined}
         >
           <Label as="legend" optional>
             Can you make these times?
           </Label>
+          <Hint id={groupId}>{SESSION_COPY.formTimes(officeHours, windowsOnly)}</Hint>
           <div className="mt-2">
             {times.map(({ mentor, option }) => {
               const p = present(option, presentations);
@@ -259,7 +267,7 @@ export function AvailabilityFields({
         label="Broad availability"
         optional={!broad.required}
         aria-required={broad.required || undefined}
-        hint={broad.hint}
+        hint={times.length ? broad.hint : `${broad.hint} ${SESSION_COPY.formLength(officeHours)}`}
         value={state.availabilityNotes}
         maxLength={LIMITS.availabilityNotes}
         onChange={(e) => onNotesChange(e.target.value)}

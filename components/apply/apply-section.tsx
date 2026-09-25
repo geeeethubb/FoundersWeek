@@ -94,6 +94,7 @@ export async function ApplySection({ searchParams }: { searchParams: ApplySearch
           prefill={prefill}
           draftKey={draftStorageKey({ shortName: site.shortName, year: site.week.year })}
           closed={closed}
+          officeHours={site.officeHours}
         />
       </div>
     </section>

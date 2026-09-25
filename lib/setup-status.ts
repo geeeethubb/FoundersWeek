@@ -1,7 +1,9 @@
 /**
  * Deployment readiness, without secrets. Powers GET /api/health and the organizer sign-in page so
  * whoever deploys the site can see exactly which setting is missing. Never returns secret values,
- * lengths, connection strings or database host names.
+ * lengths, connection strings, or the database user, database name, host or IP addresses: every
+ * piece of text that comes from a driver error or a network probe goes through `diagnostic()`
+ * (lib/security/redact.ts). What stays is the provider type, the failing stage and error codes.
  */
 import "server-only";
 import dns from "node:dns/promises";
@@ -16,6 +18,7 @@ import {
   lastDatabaseFailure,
   poolMaxWarning,
 } from "@/lib/db/client";
+import { connectionValues, redactConnectionDetails, type KnownConnectionValues } from "@/lib/security/redact";
 
 export type SetupKey = "app-secret" | "database" | "organizer-password" | "applications-switch";
 
@@ -31,6 +34,15 @@ export interface SetupCheck {
 export interface SetupStatus {
   applicationsOpen: boolean;
   checks: SetupCheck[];
+}
+
+/**
+ * Text derived from a driver error or probe, made safe to show publicly: no connection string,
+ * credentials, user or database name, host, or IPv4/IPv6 address (including the literal values of
+ * the configured URL), trimmed to a readable length.
+ */
+export function diagnostic(text: string, known: KnownConnectionValues = {}): string {
+  return redactConnectionDetails(text, known).replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
 
@@ -132,7 +144,7 @@ async function probeHandshake(rawUrl: string, host: string, port: number): Promi
         const secure = tls.connect({ socket, servername: host, rejectUnauthorized: false });
         secure.once("error", (e) => {
           clearTimeout(timer);
-          done(`TLS error ${(e as { code?: string }).code ?? sanitizeForProbe((e as Error).message)}`);
+          done(`TLS error ${(e as { code?: string }).code ?? diagnostic((e as Error).message, { user, database, host }).slice(0, 160)}`);
         });
         secure.once("secureConnect", () => {
           steps.push(`TLS ok ${Date.now() - started}ms`);
@@ -147,8 +159,13 @@ async function probeHandshake(rawUrl: string, host: string, port: number): Promi
             const type = String.fromCharCode(m[0]);
             if (type === "R") done(`startup → auth request ${m.readInt32BE(5)}`);
             else if (type === "E") {
-              const text = m.toString("utf8", 5).split("\0").find((f: string) => f.startsWith("M"))?.slice(1) ?? "error";
-              done(`startup → error: ${sanitizeForProbe(text)}`);
+              // Keep the SQLSTATE code ("C" field); the message ("M") names the user or database.
+              const fields = m.toString("utf8", 5).split("\0");
+              const code = fields.find((f: string) => f.startsWith("C"))?.slice(1);
+              const text = fields.find((f: string) => f.startsWith("M"))?.slice(1) ?? "error";
+              done(
+                `startup → error${code && /^[0-9A-Z]{5}$/.test(code) ? ` ${code}` : ""}: ${diagnostic(text, { user, database, host }).slice(0, 160)}`,
+              );
             } else done(`startup → message ${type}`);
             secure.destroy();
           });
@@ -157,14 +174,6 @@ async function probeHandshake(rawUrl: string, host: string, port: number): Promi
     });
   });
   return steps.join("; ");
-}
-
-function sanitizeForProbe(message: string): string {
-  return message
-    .replace(/postgres(?:ql)?:\/\/\S+/gi, "[connection string]")
-    .replace(/\b(?:[a-z0-9-]+\.)+(?:tech|co|com|net|org|io|dev|app|cloud)\b/gi, "[host]")
-    .replace(/\bep-[a-z0-9-]+\b/gi, "[endpoint]")
-    .slice(0, 160);
 }
 
 export async function getSetupStatus(): Promise<SetupStatus> {
@@ -207,9 +216,14 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     const elapsed = Date.now() - started;
     const poolNote = poolMaxWarning(env);
     const failure = lastDatabaseFailure();
-    const probe = !persistence.ready && found && config.kind === "postgres" ? await cachedProbe(found.url) : null;
+    // Everything below that comes from the driver or the probe is redacted: provider type, stage,
+    // error code and timings stay; user, database name, host and addresses never do.
+    const known = connectionValues(found?.url);
+    const rawProbe = !persistence.ready && found && config.kind === "postgres" ? await cachedProbe(found.url) : null;
+    const probe = rawProbe ? diagnostic(rawProbe, known) : null;
+    const code = failure?.code && /^[A-Za-z0-9_]{1,40}$/.test(failure.code) ? failure.code : null;
     const failureNote = failure
-      ? ` (using ${found?.name ?? "?"}; ${failure.stage} step${failure.code ? ` (${failure.code})` : ""}: ${failure.message}; waited ${elapsed}ms, trace [${failure.trace?.join(", ") ?? ""}]${poolNote ? `; ${poolNote}` : ""}${probe ? `; probe: ${probe}` : ""})`
+      ? ` (using ${found?.name ?? "?"}; ${failure.stage} step${code ? ` (${code})` : ""}: ${diagnostic(failure.message, known)}; waited ${elapsed}ms, trace [${diagnostic(failure.trace?.join(", ") ?? "", known)}]${poolNote ? `; ${poolNote}` : ""}${probe ? `; probe: ${probe}` : ""})`
       : probe
         ? ` (using ${found?.name ?? "?"}; probe: ${probe})`
         : "";

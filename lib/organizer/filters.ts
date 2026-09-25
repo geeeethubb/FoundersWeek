@@ -99,13 +99,14 @@ export function activeFilterCount(filters: ApplicationFilters): number {
 /**
  * Drop filter values that don't exist in content (unknown mentor ids, window/slot ids), so the
  * form always reflects what's applied. Events are never mentors: an event id such as
- * "dan-caruso-fireside-chat" is not a mentor filter.
+ * "dan-caruso-fireside-chat" is not a mentor filter. Sessions generated from a window aren't
+ * something students choose (they pick the window), so `slot:<generated id>` is dropped too.
  */
 export function restrictToDirectory(
   filters: ApplicationFilters,
   directory: {
     mentorsById: ReadonlyMap<string, unknown>;
-    slotsById: ReadonlyMap<string, unknown>;
+    slotsById: ReadonlyMap<string, { generated?: boolean }>;
     windowsById: ReadonlyMap<string, unknown>;
   },
 ): ApplicationFilters {
@@ -113,7 +114,8 @@ export function restrictToDirectory(
   let availability = filters.availability;
   if (availability && availability !== NO_TIME_SELECTED) {
     const [kind, id] = availability.split(":");
-    const known = kind === "slot" ? directory.slotsById.has(id) : directory.windowsById.has(id);
+    const slot = kind === "slot" ? directory.slotsById.get(id) : undefined;
+    const known = kind === "slot" ? Boolean(slot && !slot.generated) : directory.windowsById.has(id);
     if (!known) availability = null;
   }
   return { ...filters, mentor, firstChoiceOnly: Boolean(mentor) && filters.firstChoiceOnly, availability };

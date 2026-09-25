@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMentors, getScheduleEntries } from "@/content";
 import { demoMentors } from "@/content/demo";
 import { mentors as productionMentors } from "@/content/mentors";
+import { site } from "@/content/site";
 import type { Mentor } from "@/content/types";
 import { buildApplicationCatalog, mentorNeedsBroadAvailability } from "@/lib/applications/catalog";
 import { officeHoursEntryId } from "@/lib/schedule/entries";
 import {
   applyToMeetLabel,
-  appearanceShortLabel,
+  appearanceLabel,
   appearancesByMentor,
+  appearanceView,
   availabilityHeadline,
   availabilityItems,
   availabilityLine,
@@ -34,6 +36,7 @@ import {
   preselectedOption,
   SELECT_MENTOR_LABEL,
   sessionDetails,
+  sessionRuleLine,
   sessionSummary,
   strongestAvailabilityKind,
   visibleExpertise,
@@ -90,12 +93,17 @@ const RISHAB_GOOD_FIT =
 const RISHAB_WINDOW_ID = "rishab-veldur-2026-10-01";
 const RISHAB_WINDOW_NOTE =
   "Rishab is free anytime from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside this window.";
+/** Session length is policy now (site.officeHours), so only the location is still being set. */
 const RISHAB_SESSION_NOTE =
-  "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.";
+  "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting the location.";
 /** Rishab's window reads like Patrick's ("Thu, Oct 1 · 10:00–11:30 AM CT"). */
 const RISHAB_TIME = "12:00–5:00 PM CT";
 const RISHAB_LINE = "Thu, Oct 1 · 12:00–5:00 PM CT";
 const RISHAB_APPLY_HREF = "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply";
+// Ron: exact window Thu Oct 1, 2:30–4:30 PM CT, in person at BIF (organizer update, Sept 24).
+const RON_WINDOW_ID = "ron-lewis-2026-10-01-pm";
+const RON_TIME = "2:30–4:30 PM CT";
+const RON_LINE = "Thu, Oct 1 · 2:30–4:30 PM CT";
 
 /**
  * A synthetic mentor with one date-only window (the date is set, the time isn't), so the
@@ -131,6 +139,29 @@ const tbaMentor: Mentor = {
   links: [],
   acceptingApplications: true,
   sources: [],
+};
+
+/**
+ * A synthetic mentor with one part-of-day window ("Friday morning, before noon"), so the rough-window
+ * path stays covered now that every real mentor with a window has exact times (Arnav's Friday
+ * window became 10:00–11:30 AM on Sept 24). Shaped like Arnav's old content entry.
+ */
+const ROUGH_WINDOW_ID = "fixture-rough-2026-10-02-am";
+const ROUGH_WINDOW_NOTE = "Riley has time Friday morning. We’ll share the exact window once it’s confirmed.";
+const roughMentor: Mentor = {
+  ...tbaMentor,
+  id: "fixture-rough-mentor",
+  name: "Riley Fixture",
+  firstName: "Riley",
+  availability: [
+    {
+      id: ROUGH_WINDOW_ID,
+      date: "2026-10-02",
+      time: { kind: "part-of-day", part: "morning", before: "12:00" },
+      label: "Friday morning, before noon · Exact window pending",
+      note: ROUGH_WINDOW_NOTE,
+    },
+  ],
 };
 
 /**
@@ -286,7 +317,7 @@ describe("public mentor data (content loader, default env)", () => {
     expect(publicRishab.availability.map((w) => w.date)).not.toContain("2026-10-02");
     expect(publicRishab.session).toEqual({
       format: null,
-      durationMinutes: null,
+      durationMinutes: site.officeHours.sessionMinutes,
       location: null,
       sessionCount: null,
       confirmed: false,
@@ -488,7 +519,34 @@ describe("Founders Week appearances", () => {
       roleLabel: "Hosting",
       venue: "Legends",
     });
-    expect(views.map(appearanceShortLabel)).toEqual(["Hosting Wed, Sep 30 · 5:00 PM", "Speaking Fri, Oct 2 · 1:55 PM"]);
+    // Role, date and the full time range, labeled CT.
+    expect(views.map(appearanceLabel)).toEqual([
+      "Hosting Wed, Sep 30 · 5:00–7:00 PM CT",
+      "Speaking Fri, Oct 2 · 1:55–2:25 PM CT",
+    ]);
+  });
+
+  it("labels an appearance with its time range in CT, the start alone without an end, or just the date", () => {
+    const base = {
+      entryId: "e",
+      entryTitle: "Founders Showcase",
+      date: "2026-10-02",
+      sessionTitle: null,
+      role: "speaker",
+      venue: null,
+    } as const;
+    expect(appearanceLabel(appearanceView({ ...base, start: "13:20", end: "13:55" }))).toBe(
+      "Speaking Fri, Oct 2 · 1:20–1:55 PM CT",
+    );
+    expect(appearanceLabel(appearanceView({ ...base, start: "11:30", end: "12:15", role: "moderator" }))).toBe(
+      "Moderating Fri, Oct 2 · 11:30 AM–12:15 PM CT",
+    );
+    expect(appearanceLabel(appearanceView({ ...base, start: "13:55", end: null }))).toBe("Speaking Fri, Oct 2 · 1:55 PM CT");
+    expect(appearanceLabel(appearanceView({ ...base, start: null, end: null, role: "host" }))).toBe("Hosting Fri, Oct 2");
+    // Every published appearance of every mentor carries its end time and CT.
+    for (const views of Object.values(appearancesByMentor(getScheduleEntries(), getMentors()))) {
+      for (const v of views) expect(appearanceLabel(v)).toMatch(/ · \d{1,2}:\d{2}( [AP]M)?–\d{1,2}:\d{2} [AP]M CT$/);
+    }
   });
 
   it("links Elliott to the TechRise Cohort 2 panel", () => {
@@ -505,7 +563,7 @@ describe("Founders Week appearances", () => {
         venue: "EnterpriseWorks",
       }),
     ]);
-    expect(appearanceShortLabel(views[0])).toBe("Speaking Thu, Oct 1 · 6:30 PM");
+    expect(appearanceLabel(views[0])).toBe("Speaking Thu, Oct 1 · 6:30–6:50 PM CT");
   });
 
   it("links Rishab to the Health Innovation panel, separately from his office hours", () => {
@@ -526,7 +584,7 @@ describe("Founders Week appearances", () => {
         venue: "Illinois Conference Center",
       },
     ]);
-    expect(appearanceShortLabel(views[0])).toBe("Speaking Fri, Oct 2 · 1:20 PM");
+    expect(appearanceLabel(views[0])).toBe("Speaking Fri, Oct 2 · 1:20–1:55 PM CT");
     // His office hours are a calendar entry of their own (Thu, Oct 1, noon to 5 PM), never an appearance.
     const officeHours = entries.filter((e) => e.kind === "office-hours" && e.title === "Office hours with Rishab Veldur");
     expect(officeHours.map((e) => [e.id, e.date, e.time])).toEqual([
@@ -566,8 +624,9 @@ describe("Founders Week appearances", () => {
 describe("availability", () => {
   it("distinguishes exact windows from rough and date-only ones", () => {
     expect(windowKind(patrick.availability[0])).toBe("window");
-    expect(windowKind(arnav.availability[0])).toBe("window-approx");
+    expect(windowKind(arnav.availability[0])).toBe("window");
     expect(windowKind(rishab.availability[0])).toBe("window");
+    expect(windowKind(roughMentor.availability[0])).toBe("window-approx");
     expect(windowKind(tbaMentor.availability[0])).toBe("window-approx");
 
     const p = availabilityView(patrick);
@@ -578,7 +637,18 @@ describe("availability", () => {
       timeLabel: "10:00–11:30 AM CT",
       slots: [],
     });
+    // Arnav's window became exact on Sept 24 (same id, no display label any more).
     expect(availabilityView(arnav).windows[0]).toMatchObject({
+      id: "arnav-mishra-2026-10-02-am",
+      kind: "window",
+      dateShort: "Fri, Oct 2",
+      dateLong: "Friday, October 2",
+      timeLabel: "10:00–11:30 AM CT",
+      label: null,
+      slots: [],
+    });
+    expect(availabilityView(roughMentor).windows[0]).toMatchObject({
+      kind: "window-approx",
       dateShort: "Fri, Oct 2",
       timeLabel: "Morning, before noon CT",
       label: "Friday morning, before noon · Exact window pending",
@@ -693,17 +763,19 @@ describe("availability", () => {
     expect(strongestAvailabilityKind(availabilityView(avery))).toBe("confirmed");
     expect(strongestAvailabilityKind(availabilityView(jordan))).toBe("proposed");
     expect(strongestAvailabilityKind(availabilityView(patrick))).toBe("window");
-    expect(strongestAvailabilityKind(availabilityView(arnav))).toBe("window-approx");
+    expect(strongestAvailabilityKind(availabilityView(arnav))).toBe("window");
+    expect(strongestAvailabilityKind(availabilityView(roughMentor))).toBe("window-approx");
     expect(strongestAvailabilityKind(availabilityView(rishab))).toBe("window");
     expect(strongestAvailabilityKind(availabilityView(tbaMentor))).toBe("window-approx");
-    expect(strongestAvailabilityKind(availabilityView(ron))).toBe("in-progress");
+    expect(strongestAvailabilityKind(availabilityView(ron))).toBe("window");
     expect(strongestAvailabilityKind(availabilityView(vik))).toBe("in-progress");
     expect(strongestAvailabilityKind(availabilityView(elliott))).toBe("in-progress");
   });
 
   it("builds plain one-liners and card headlines", () => {
     expect(availabilityOneLiner(availabilityView(patrick))).toBe("Thu, Oct 1 · 10:00–11:30 AM CT");
-    expect(availabilityOneLiner(availabilityView(ron))).toBe("Scheduling in progress");
+    expect(availabilityOneLiner(availabilityView(ron))).toBe(RON_LINE);
+    expect(availabilityOneLiner(availabilityView(vik))).toBe("Scheduling in progress");
     expect(availabilityOneLiner(availabilityView(rishab))).toBe(RISHAB_LINE);
     expect(availabilityOneLiner(availabilityView(tbaMentor))).toBe(TBA_LINE);
     expect(availabilityHeadline(patrick)).toEqual({
@@ -714,8 +786,25 @@ describe("availability", () => {
       time: "10:00–11:30 AM CT",
       more: 0,
     });
-    expect(availabilityHeadline(arnav)).toMatchObject({ kind: "window-approx", label: "Exact times TBA" });
-    expect(availabilityHeadline(ron)).toMatchObject({
+    expect(availabilityHeadline(arnav)).toEqual({
+      kind: "window",
+      label: "Availability window",
+      date: "Fri, Oct 2",
+      dateTime: "2026-10-02",
+      time: "10:00–11:30 AM CT",
+      more: 0,
+    });
+    expect(availabilityOneLiner(availabilityView(arnav))).toBe("Fri, Oct 2 · 10:00–11:30 AM CT");
+    expect(availabilityHeadline(roughMentor)).toMatchObject({ kind: "window-approx", label: "Exact times TBA" });
+    expect(availabilityHeadline(ron)).toEqual({
+      kind: "window",
+      label: "Availability window",
+      date: "Thu, Oct 1",
+      dateTime: "2026-10-01",
+      time: RON_TIME,
+      more: 0,
+    });
+    expect(availabilityHeadline(elliott)).toMatchObject({
       kind: "in-progress",
       label: "Scheduling in progress",
       time: "Times to be announced",
@@ -836,7 +925,8 @@ describe("calls to action", () => {
     });
     expect(preselectedOption(jordan)).toMatchObject({ kind: "slot", id: "demo-jordan-slot-1500" });
     expect(preselectedOption(avery)).toBeNull(); // two slots: let the student choose
-    expect(preselectedOption(ron)).toBeNull();
+    expect(preselectedOption(ron)).toEqual({ kind: "window", id: RON_WINDOW_ID, label: RON_LINE });
+    expect(preselectedOption(vik)).toBeNull();
     expect(preselectedOption(elliott)).toBeNull();
   });
 
@@ -850,6 +940,11 @@ describe("calls to action", () => {
     expect(mentorCta(arnav)).toMatchObject({
       label: "Apply to meet Arnav",
       href: "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
+      preselects: "Fri, Oct 2 · 10:00–11:30 AM CT",
+    });
+    expect(mentorCta(roughMentor)).toMatchObject({
+      label: "Apply to meet Riley",
+      href: `/office-hours?mentor=fixture-rough-mentor&window=${ROUGH_WINDOW_ID}#apply`,
       preselects: "Fri, Oct 2 · Morning, before noon CT",
     });
     expect(mentorCta(avery)).toMatchObject({
@@ -891,8 +986,18 @@ describe("calls to action", () => {
     expect(buildApplicationCatalog(productionMentors).mentors.filter(mentorNeedsBroadAvailability).map((m) => m.id)).toEqual([
       "vikram-lakhwara",
       "elliott-notrica",
-      "ron-lewis",
     ]);
+  });
+
+  it("gives Ron 'Apply to meet Ron' with his Thursday 2:30–4:30 PM window preselected", () => {
+    const href = `/office-hours?mentor=ron-lewis&window=${RON_WINDOW_ID}#apply`;
+    expect(mentorCta(ron)).toEqual({ kind: "apply", label: "Apply to meet Ron", href, preselects: RON_LINE });
+    expect(mentorAction(ron, { applicationsOpen: true })).toEqual({ open: true, href });
+    // His window has exact times, so ticking it is enough (no broad-availability note needed).
+    const [catalogRon] = buildApplicationCatalog([ron]).mentors;
+    expect(catalogRon).toMatchObject({ id: "ron-lewis", scheduling: "available" });
+    expect(catalogRon.options.map((o) => [o.key, o.label, o.timeKnown])).toEqual([[`window:${RON_WINDOW_ID}`, RON_LINE, true]]);
+    expect(mentorNeedsBroadAvailability(catalogRon)).toBe(false);
   });
 
   it("keeps the date-only path for a mentor whose time isn't set (fixture mentor)", () => {
@@ -927,12 +1032,6 @@ describe("calls to action", () => {
   });
 
   it("uses 'Express interest' without a time while scheduling is in progress", () => {
-    expect(mentorCta(ron)).toEqual({
-      kind: "interest",
-      label: "Express interest",
-      href: "/office-hours?mentor=ron-lewis#apply",
-      preselects: null,
-    });
     expect(mentorCta(vik)).toEqual({
       kind: "interest",
       label: "Express interest",
@@ -965,9 +1064,21 @@ describe("calls to action", () => {
 });
 
 describe("session details", () => {
+  const minutes = site.officeHours.sessionMinutes;
+
+  it("gives every mentor the policy session length (site.officeHours), not a length of their own", () => {
+    for (const m of productionMentors) expect(m.session.durationMinutes, m.id).toBe(minutes);
+    // No public note still says the length is being worked out.
+    for (const m of getMentors()) {
+      const notes = [m.session.note, ...m.availability.map((w) => w.note)].filter(Boolean).join(" ");
+      expect(notes, m.id).not.toMatch(/\blength\b/i);
+    }
+  });
+
   it("says plainly what isn't known yet", () => {
-    expect(sessionSummary(patrick.session)).toBe("Format and length to be confirmed");
-    expect(sessionSummary(rishab.session)).toBe("Format and length to be confirmed");
+    expect(sessionSummary(patrick.session)).toBe(`${minutes} min · Format to be confirmed`);
+    expect(sessionSummary(rishab.session)).toBe(`${minutes} min · Format to be confirmed`);
+    expect(sessionSummary(tbaMentor.session)).toBe("Format and length to be confirmed");
     expect(sessionSummary(jordan.session)).toBe("Virtual · Length to be confirmed");
     expect(sessionSummary(avery.session)).toBe("In person · 25 min");
     expect(sessionSummary({ ...patrick.session, durationMinutes: 20 })).toBe("20 min · Format to be confirmed");
@@ -976,9 +1087,22 @@ describe("session details", () => {
   it("fills every unknown row with 'To be confirmed'", () => {
     expect(sessionDetails(patrick.session)).toEqual([
       { label: "Format", value: "To be confirmed", known: false },
-      { label: "Length", value: "To be confirmed", known: false },
+      { label: "Length", value: `${minutes} minutes`, known: true },
       { label: "Location", value: "To be confirmed", known: false },
       { label: "Sessions", value: "One or two sessions", known: true },
+    ]);
+    // Ron's place is confirmed: the Location row gives the building and its street address.
+    expect(sessionDetails(ron.session)).toEqual([
+      { label: "Format", value: "In person", known: true },
+      { label: "Length", value: `${minutes} minutes`, known: true },
+      { label: "Location", value: "Business Instructional Facility (BIF), 515 E. Gregory Drive, Champaign, IL 61820", known: true },
+      { label: "Sessions", value: "To be confirmed", known: false },
+    ]);
+    expect(sessionDetails(tbaMentor.session)).toEqual([
+      { label: "Format", value: "To be confirmed", known: false },
+      { label: "Length", value: "To be confirmed", known: false },
+      { label: "Location", value: "To be confirmed", known: false },
+      { label: "Sessions", value: "To be confirmed", known: false },
     ]);
     expect(sessionDetails(avery.session).map((r) => r.value)).toEqual([
       "In person",
@@ -1030,7 +1154,10 @@ describe("identity copy and links", () => {
     expect(mentorMetaDescription(patrick)).toBe(
       "Founders Office Hours with Patrick Haddox (CEO & Co-Founder, Samara Aerospace) during Founders Week at UIUC. Availability: Thu, Oct 1 · 10:00–11:30 AM CT. Apply to request a time.",
     );
-    expect(mentorMetaDescription(ron)).toContain("Scheduling is in progress");
+    expect(mentorMetaDescription(ron)).toBe(
+      `Founders Office Hours with Ron Lewis (Co-Founder, Auctus Advisory) during Founders Week at UIUC. Availability: ${RON_LINE}. Apply to request a time.`,
+    );
+    expect(mentorMetaDescription(vik)).toContain("Scheduling is in progress");
     for (const m of productionMentors) expect(mentorMetaDescription(m), m.id).not.toContain("—");
     expect(mentorMetaDescription(vik)).toContain("Vikram “Vik” Lakhwara (Founder & Managing Member, Stakehouse)");
     expect(mentorMetaDescription(elliott)).toBe(
@@ -1084,7 +1211,15 @@ describe("Office Hours cards and profiles", () => {
       text: "Thu, Oct 1 · 10:00–11:30 AM CT",
       more: 0,
     });
-    expect(availabilityLine(arnav)).toMatchObject({
+    expect(availabilityLine(arnav)).toEqual({
+      pending: false,
+      date: "Fri, Oct 2",
+      dateTime: "2026-10-02",
+      detail: "10:00–11:30 AM CT",
+      text: "Fri, Oct 2 · 10:00–11:30 AM CT",
+      more: 0,
+    });
+    expect(availabilityLine(roughMentor)).toMatchObject({
       date: "Fri, Oct 2",
       detail: "Morning, exact window pending",
       text: "Fri, Oct 2 · Morning, exact window pending",
@@ -1102,7 +1237,15 @@ describe("Office Hours cards and profiles", () => {
       detail: "Exact time to be confirmed",
       text: TBA_LINE,
     });
-    for (const m of [vik, elliott, ron]) {
+    expect(availabilityLine(ron)).toEqual({
+      pending: false,
+      date: "Thu, Oct 1",
+      dateTime: "2026-10-01",
+      detail: RON_TIME,
+      text: RON_LINE,
+      more: 0,
+    });
+    for (const m of [vik, elliott]) {
       expect(availabilityLine(m)).toEqual({
         pending: true,
         date: null,
@@ -1127,9 +1270,33 @@ describe("Office Hours cards and profiles", () => {
     expect(availabilityNote(arnav)).toBe(arnav.availability[0].note);
     expect(availabilityNote(rishab)).toBe(RISHAB_WINDOW_NOTE);
     expect(availabilityNote(tbaMentor)).toBe(TBA_WINDOW_NOTE);
-    for (const m of [vik, elliott, ron]) expect(availabilityNote(m)).toBe("Founders will follow up once availability is finalized.");
+    expect(availabilityNote(roughMentor)).toBe(ROUGH_WINDOW_NOTE);
+    expect(availabilityNote(ron)).toBe(ron.availability[0].note);
+    expect(availabilityNote(ron)).toBe("Ron is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.");
+    for (const m of [vik, elliott]) expect(availabilityNote(m)).toBe("Founders will follow up once availability is finalized.");
     // Organizer notes never feed it.
     for (const m of productionMentors) expect(availabilityNote(m)).not.toBe(m.organizerNotes);
+  });
+
+  it("states the session rule under a profile's times for exact windows or while scheduling, never a count", () => {
+    const rule = site.officeHours;
+    const text = `Each session is ${rule.sessionMinutes} minutes, with a ${rule.breakMinutes}-minute break between sessions.`;
+    // Exact windows (Patrick, Arnav, Ron, Rishab) and mentors still scheduling (Vik, Elliott).
+    for (const m of [patrick, arnav, rishab, vik, elliott, ron]) expect(sessionRuleLine(m, rule), m.id).toBe(text);
+    // Specific slots follow the same grid.
+    expect(sessionRuleLine(avery, rule)).toBe(text);
+    // Rough windows (a part-of-day or date-only window) have no sessions yet: no line.
+    expect(sessionRuleLine(roughMentor, rule)).toBeNull();
+    expect(sessionRuleLine(tbaMentor, rule)).toBeNull();
+    // Built from the rule it's given, and never a number of sessions (Patrick's window fits three,
+    // but he agreed to one or two).
+    expect(sessionRuleLine(patrick, { sessionMinutes: 20, breakMinutes: 10 })).toBe(
+      "Each session is 20 minutes, with a 10-minute break between sessions.",
+    );
+    expect(sessionRuleLine(patrick, { sessionMinutes: 30, breakMinutes: 0 })).toBe("Each session is 30 minutes.");
+    for (const m of productionMentors) {
+      expect(sessionRuleLine(m, rule) ?? "", m.id).not.toMatch(/\b(one|two|three|\d+) sessions\b/i);
+    }
   });
 
   it("links every mentor action to #apply with the mentor (and a single window) preselected", () => {

@@ -66,14 +66,33 @@ export function emptyApplicationValues(idempotencyKey: string): ApplicationFormV
   };
 }
 
+/** Every control character (Unicode Cc: C0, DEL, C1) except tab and line feed. */
+const CONTROL_CHARS = /[^\P{Cc}\t\n]/gu;
+const ANY_CONTROL_CHAR = /\p{Cc}/gu;
+
+/**
+ * Removes invisible control characters pasted into an answer (Postgres can't store U+0000 at all).
+ * Line breaks become "\n"; tabs and line breaks stay. Runs first in every free-text field, before
+ * trimming and the length and word checks, in the browser and on the server alike.
+ */
+export function stripControlChars(value: string): string {
+  return value.replace(/\r\n?/g, "\n").replace(CONTROL_CHARS, "");
+}
+
+/** For one-line values (email, link): no control characters at all, line breaks and tabs included. */
+function stripAllControlChars(value: string): string {
+  return value.replace(ANY_CONTROL_CHAR, "");
+}
+
 const trimmed = (max: number, requiredMessage?: string) => {
-  const base = z.string().trim().max(max, `Keep this under ${max} characters.`);
+  const base = z.string().overwrite(stripControlChars).trim().max(max, `Keep this under ${max} characters.`);
   return requiredMessage ? base.min(1, requiredMessage) : base;
 };
 
 const longAnswer = (requiredMessage: string) =>
   z
     .string()
+    .overwrite(stripControlChars)
     .trim()
     .min(1, requiredMessage)
     .max(LIMITS.longAnswerChars, `Keep this under ${LIMITS.longAnswerChars} characters.`)
@@ -120,6 +139,7 @@ export function createApplicationSchema(options: { catalog: ApplicationCatalog; 
       fullName: trimmed(LIMITS.fullName, "Enter your full name."),
       email: z
         .string()
+        .overwrite(stripAllControlChars)
         .trim()
         .toLowerCase()
         .min(1, "Enter your Illinois email.")
@@ -152,7 +172,7 @@ export function createApplicationSchema(options: { catalog: ApplicationCatalog; 
       // Length is checked after normalizing, which may add "https://".
       link: z
         .string()
-        .transform(normalizeLink)
+        .transform((v) => normalizeLink(stripAllControlChars(v)))
         .pipe(z.string().max(LIMITS.link, `Keep links under ${LIMITS.link} characters.`))
         .refine((v) => v === "" || isHttpUrl(v), { message: "Enter a full link, like https://example.com." }),
       acknowledgeNoGuarantee: z.literal(true, {

@@ -6,6 +6,8 @@
  *
  * Props
  * - `mentors`: public mentors (`getMentors()`), in display order.
+ * - `sessionRule`: `site.officeHours`; the card states it in one short line ("Each session is 25
+ *   minutes, with a 5-minute break between sessions."). Never a session count.
  * - `className`: extra classes for the <section>.
  *
  * Server component (no hooks).
@@ -20,6 +22,7 @@ import { PRIMARY_CTA_LABEL, schedulingStatus } from "@/lib/mentors";
 import { applyHref } from "@/lib/schedule/entries";
 import { listText } from "@/lib/schedule/format";
 import { mentorProfileHref } from "@/lib/schedule/program";
+import { sessionRuleText, type SessionRule } from "@/lib/schedule/sessions";
 import { cn } from "@/lib/cn";
 import { balancedColumns } from "@/lib/columns";
 import { numberWord } from "@/lib/words";
@@ -33,7 +36,12 @@ const LG_COLUMNS: Record<number, string> = {
   5: "lg:grid-cols-5",
 };
 
-/** "One application covers all six mentors. Appointments are limited. Times for Vik, Elliott and Ron are still being set." */
+/**
+ * "One application covers all six mentors. Appointments are limited. Times for Vik, Elliott and Ron
+ * are still being set." Names exactly the mentors with no availability window yet ("Scheduling in
+ * progress", the same mentors as the calendar's pending block); a mentor with any window (exact,
+ * part of day or date only) isn't named.
+ */
 export function officeHoursCardLede(mentors: Pick<Mentor, "firstName" | "availability" | "slots">[]): string {
   const n = mentors.length;
   const count = numberWord(n);
@@ -44,7 +52,15 @@ export function officeHoursCardLede(mentors: Pick<Mentor, "firstName" | "availab
   return `${covers} Appointments are limited.${pending}`;
 }
 
-export function OfficeHoursCard({ mentors, className }: { mentors: Mentor[]; className?: string }) {
+export function OfficeHoursCard({
+  mentors,
+  sessionRule,
+  className,
+}: {
+  mentors: Mentor[];
+  sessionRule: SessionRule;
+  className?: string;
+}) {
   if (!mentors.length) return null;
   return (
     <section
@@ -58,6 +74,7 @@ export function OfficeHoursCard({ mentors, className }: { mentors: Mentor[]; cla
             Founders Office Hours
           </h2>
           <p className="mt-2 leading-relaxed text-text-muted">{officeHoursCardLede(mentors)}</p>
+          <p className="mt-1.5 text-sm leading-relaxed text-text-muted">{sessionRuleText(sessionRule)}</p>
           {/* Phones: every face and first name on one line (the full list below is for wider screens). */}
           <div className="mt-4 flex items-center gap-3 sm:hidden">
             <span aria-hidden className="flex shrink-0 -space-x-2">

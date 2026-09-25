@@ -3,6 +3,7 @@
  * Safe on server and client; no environment access.
  */
 import type { PersistenceStatus } from "@/lib/db/client";
+import { redactConnectionDetails, type KnownConnectionValues } from "@/lib/security/redact";
 
 export type DataStoreState = "live" | "local" | "down";
 
@@ -46,24 +47,15 @@ const REASON_COPY: Record<Extract<PersistenceStatus, { ready: false }>["reason"]
 };
 
 /**
- * Remove anything that could be a credential or part of a connection string from free text:
- * URLs (postgres://user:pass@host/db…), `user:password@host` fragments, key=value secrets, and
- * hosts/IPs (driver errors such as "ECONNREFUSED 10.0.0.5:5432" or "ENOTFOUND db.<ref>.supabase.co"
- * would otherwise reveal the database host — the login page shows this text on preview deploys).
+ * Remove anything that could be a credential or identify the database from free text: URLs
+ * (postgres://user:pass@host/db…), `user:password@host` fragments, key=value secrets, quoted user
+ * and database names, and hosts/IPs (driver errors such as "ECONNREFUSED 10.0.0.5:5432",
+ * "ENOTFOUND db.<ref>.supabase.co" or `password authentication failed for user "…"` would
+ * otherwise reveal them — the dashboard shows this text as a hint on preview deploys).
+ * See lib/security/redact.ts.
  */
 export function redactSecrets(text: string): string {
-  return text
-    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"<>]+/gi, "[connection string hidden]")
-    .replace(/\b[^\s:@/]+:[^\s@/]+@[^\s/'"]+/g, "[credentials hidden]")
-    .replace(/\b(password|passwd|pwd|secret|token|api[_-]?key|sslpassword)\s*[=:]\s*\S+/gi, "$1=[hidden]")
-    .replace(/\[[0-9a-f:.]+\](?::\d+)?/gi, "[host hidden]")
-    .replace(/(^|[\s(])::1(?::\d+)?\b/g, "$1[host hidden]")
-    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, "[host hidden]")
-    .replace(/\blocalhost(?::\d+)?\b/gi, "[host hidden]")
-    .replace(
-      /\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|dev|app|cloud|internal|local|tech|ai|xyz)(?::\d+)?\b/gi,
-      "[host hidden]",
-    );
+  return redactConnectionDetails(text);
 }
 
 const PROVIDER_LABELS = {
@@ -79,6 +71,8 @@ export function describeDataStore(input: {
   schema: string;
   showHints: boolean;
   checkedAt: string;
+  /** User, database and host of the configured URL: removed from the hint wherever they appear. */
+  known?: KnownConnectionValues;
 }): DataStoreStatus {
   const provider = input.provider ? PROVIDER_LABELS[input.provider] : "Not configured";
   const base = { provider, checkedAt: input.checkedAt };
@@ -91,7 +85,9 @@ export function describeDataStore(input: {
       headline: copy.headline,
       detail: copy.detail,
       schema: null,
-      hint: input.showHints ? `${redactSecrets(input.persistence.detail)} See README → Database.` : null,
+      hint: input.showHints
+        ? `${redactConnectionDetails(input.persistence.detail, input.known)} See README → Database.`
+        : null,
     };
   }
 

@@ -503,7 +503,8 @@ export const events: ScheduleEvent[] = [
     organizer: UNIVERSITY,
     location: { kind: "in-person", venue: "Atkins Patio & Lawn and EnterpriseWorks" },
     summary: "A tailgate at Atkins Patio & Lawn and a tour of EnterpriseWorks.",
-    description: "A Founders Week tailgate at Atkins Patio & Lawn, with a tour of EnterpriseWorks. The time hasn’t been announced yet.",
+    // "When" already says "Time to be announced"; the description doesn't repeat it.
+    description: "A Founders Week tailgate at Atkins Patio & Lawn, with a tour of EnterpriseWorks.",
     speakers: [],
     topics: [],
     registration: null,
@@ -515,7 +516,8 @@ export const events: ScheduleEvent[] = [
     date: "2026-10-03",
     time: { kind: "tba" },
     status: "planned",
-    statusNote: "The game time isn’t on the Founders Week agenda yet.",
+    // As for the tailgate: the page says "Time to be announced" once, under "When".
+    statusNote: "Time to be announced.",
     types: ["social"],
     involvement: "week",
     foundersPick: false,
@@ -523,7 +525,7 @@ export const events: ScheduleEvent[] = [
     location: { kind: "in-person", venue: "Memorial Stadium" },
     summary: "Illinois vs. Purdue at Memorial Stadium. It’s on the Founders Week agenda, but tickets aren’t included.",
     description:
-      "Illinois vs. Purdue at Memorial Stadium, listed on the Founders Week agenda. The agenda doesn’t list the game time yet.\n\nThis listing doesn’t include admission or tickets.",
+      "Illinois vs. Purdue at Memorial Stadium, listed on the Founders Week agenda.\n\nThis listing doesn’t include admission or tickets.",
     speakers: [],
     topics: [],
     registration: null,

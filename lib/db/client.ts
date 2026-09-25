@@ -23,6 +23,7 @@ import {
   postgresAdapter,
   searchPathStatement,
 } from "@/db/migrate-core.mjs";
+import { connectionValues, redactConnectionDetails, type KnownConnectionValues } from "@/lib/security/redact";
 
 export { normalizePostgresUrl };
 
@@ -163,13 +164,14 @@ export function lastDatabaseFailure(): DatabaseFailure | null {
   return globalForFailure.__foundersDbFailure ?? null;
 }
 
-/** Strip connection strings, host names and IP addresses from driver error messages. */
-export function sanitizeDbMessage(message: string): string {
-  return message
-    .replace(/postgres(?:ql)?:\/\/\S+/gi, "[connection string]")
-    .replace(/\b(?:[a-z0-9-]+\.)+(?:tech|co|com|net|org|io|dev|app|cloud)\b/gi, "[host]")
-    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, "[ip]")
-    .slice(0, 300);
+/**
+ * Strip anything that could identify or unlock the database from driver error messages before they
+ * reach server logs, the stored failure (GET /api/health) or DatabaseUnavailableError text. Same
+ * rules as every public diagnostic (lib/security/redact.ts), plus the configured user, database
+ * and host when known.
+ */
+export function sanitizeDbMessage(message: string, known: KnownConnectionValues = {}): string {
+  return redactConnectionDetails(message, known).slice(0, 300);
 }
 
 class StageTimeout extends Error {
@@ -213,6 +215,7 @@ export function poolMaxWarning(env: Record<string, string | undefined> = process
 async function connectPostgres(rawUrl: string, schema: string | null, autoMigrate: boolean): Promise<Database> {
   const postgres = (await import("postgres")).default;
   const { url, ssl } = normalizePostgresUrl(rawUrl);
+  const known = connectionValues(url);
   const started = Date.now();
   const trace: string[] = [];
   const note = (step: string) => void (trace.length < 10 && trace.push(`${step} ${Date.now() - started}ms`));
@@ -272,7 +275,7 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
     cause?: unknown,
   ): Promise<never> => {
     const code = (cause as { code?: string } | undefined)?.code ?? null;
-    const message = sanitizeDbMessage(cause instanceof Error ? cause.message : error.message);
+    const message = sanitizeDbMessage(cause instanceof Error ? cause.message : error.message, known);
     globalForFailure.__foundersDbFailure = { stage, code, message, at: new Date().toISOString(), trace: [...trace] };
     console.error(`[db] ${stage} failed${code ? ` (${code})` : ""}: ${message}`);
     sql.end({ timeout: 1 }).catch(() => {});
@@ -286,7 +289,7 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
     return fail(
       new DatabaseUnavailableError(
         "unreachable",
-        `Could not connect to the database: ${sanitizeDbMessage((error as Error).message)}`,
+        `Could not connect to the database: ${sanitizeDbMessage((error as Error).message, known)}`,
       ),
       "connect",
       error,
@@ -299,7 +302,7 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
     state = await withTimeout(readVersion(), 12_000, "Checking the database schema");
   } catch (error) {
     return fail(
-      new DatabaseUnavailableError("unreachable", `Could not read the database: ${sanitizeDbMessage((error as Error).message)}`),
+      new DatabaseUnavailableError("unreachable", `Could not read the database: ${sanitizeDbMessage((error as Error).message, known)}`),
       "check",
       error,
     );
@@ -329,7 +332,7 @@ async function connectPostgres(rawUrl: string, schema: string | null, autoMigrat
       return fail(
         new DatabaseUnavailableError(
           "not-migrated",
-          `Automatic database setup failed: ${sanitizeDbMessage((error as Error).message)}. Run npm run db:migrate and check the database user's permissions.`,
+          `Automatic database setup failed: ${sanitizeDbMessage((error as Error).message, known)}. Run npm run db:migrate and check the database user's permissions.`,
         ),
         "setup",
         error,

@@ -46,11 +46,14 @@ export function MentorGrid({
 export function MentorCard({ card, priority }: { card: MentorCardView; priority?: boolean }) {
   const { availability, action } = card;
   const nameId = `${card.anchor}-name`;
+  // Cards in a row share its height. `grid-rows-[auto_1fr]` keeps the name/role row at its own
+  // height and gives the extra space to the body (whose actions sit at the bottom), so the gap
+  // under the role is the same in the shorter card of a row as in the taller one.
   return (
     <article
       id={card.anchor}
       aria-labelledby={nameId}
-      className="grid h-full scroll-mt-32 grid-cols-[5rem_minmax(0,1fr)] gap-x-4 gap-y-5 rounded-md border border-line bg-surface p-5 transition-[border-color,box-shadow] duration-150 hover:border-line-strong hover:shadow-sm sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-x-6 sm:p-6"
+      className="grid h-full scroll-mt-32 grid-cols-[5rem_minmax(0,1fr)] grid-rows-[auto_1fr] gap-x-4 gap-y-5 rounded-md border border-line bg-surface p-5 transition-[border-color,box-shadow] duration-150 hover:border-line-strong hover:shadow-sm sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-x-6 sm:p-6"
     >
       <MentorPortrait
         id={card.id}

@@ -10,14 +10,29 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Driver failures are recorded by lib/db/client when a real Postgres connection fails. Tests can
+// stand in a specific failure (a Postgres error naming the user, database and host) to check that
+// none of it reaches /api/health or the sign-in page's Setup checklist.
+const failureOverride = vi.hoisted(() => ({ value: null as null | Record<string, unknown> }));
+vi.mock("@/lib/db/client", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/lib/db/client")>();
+  return {
+    ...mod,
+    lastDatabaseFailure: () => (failureOverride.value as ReturnType<typeof mod.lastDatabaseFailure>) ?? mod.lastDatabaseFailure(),
+  };
+});
+
 import { GET as health } from "@/app/api/health/route";
 import { GET as exportCsv } from "@/app/api/organizer/export/route";
 import { POST as login } from "@/app/api/organizer/session/route";
 import { SetupChecklist, SignInUnavailable, signInBlockers } from "@/components/organizer/setup-checklist";
 import { __setDbForTests, createMemoryDbForTests, type Database } from "@/lib/db/client";
 import { authorizeOrganizerRequest } from "@/lib/organizer/auth";
+import { redactDatabaseDetail } from "@/lib/organizer/data-store";
 import { describeDataStore, type DataStoreStatus } from "@/lib/organizer/data-store-view";
-import { getSetupStatus, type SetupStatus } from "@/lib/setup-status";
+import { connectionValues, redactConnectionDetails } from "@/lib/security/redact";
+import { diagnostic, getSetupStatus, type SetupStatus } from "@/lib/setup-status";
 import { insertApplication } from "./organizer-fixtures";
 
 const APP_SECRET = "Zq8vN3kT1pW6yR0sL4mX9cB2hJ7dF5gA-app-secret-value";
@@ -82,6 +97,7 @@ beforeEach(() => {
 afterEach(() => {
   __setDbForTests(undefined);
   vi.unstubAllEnvs();
+  failureOverride.value = null;
 });
 
 afterAll(() => {
@@ -139,6 +155,131 @@ describe("GET /api/health", () => {
     expect(database).toMatchObject({ ok: false, status: expect.stringMatching(/^could not connect/) });
     expect(raw).not.toContain("127.0.0.1");
     expectNothingSensitive(raw);
+  });
+});
+
+describe("database diagnostics never name the user, database, host or addresses", () => {
+  // Shaped like real driver and Postgres errors (Neon, Supabase, PgBouncer, Node's net module).
+  const USER = "neondb_owner";
+  const DATABASE = "founders_prod";
+  const DRIVER_ERRORS = [
+    `password authentication failed for user "${USER}"`,
+    `database "${DATABASE}" does not exist`,
+    `role "${USER}" is not permitted to log in`,
+    `no pg_hba.conf entry for host "2600:1f18:4c1:ab00::5", user "${USER}", database "${DATABASE}", SSL off`,
+    "connect ECONNREFUSED 2600:1f18:4c1:ab00::5:5432",
+    "connect ECONNREFUSED [2600:1f18:4c1:ab00::5]:5432",
+    "connect ETIMEDOUT 10.20.30.40:5432",
+    "connect ECONNREFUSED ::ffff:10.20.30.40:5432",
+    "getaddrinfo ENOTFOUND ep-cool-darkness-123456.us-east-2.aws.neon.tech",
+    "getaddrinfo ENOTFOUND db.abcdefghijklmnop.supabase.co",
+    "Tenant or user not found: postgres.abcdefghijklmnop",
+    `no such user: ${USER}`,
+    `FATAL: terminating connection for user ${USER}`,
+    `connection to server at "db.internal.example" (10.0.0.7), port 5432 failed: user=${USER} dbname=${DATABASE}`,
+  ];
+  const LEAKS = [
+    USER,
+    DATABASE,
+    "2600:1f18",
+    "ab00::5",
+    "10.20.30.40",
+    "10.0.0.7",
+    "neon.tech",
+    "ep-cool-darkness",
+    "supabase.co",
+    "abcdefghijklmnop",
+    "db.internal.example",
+  ];
+  const IPV6 = /(?:^|[^0-9a-z:])(?:[0-9a-f]{0,4}:){2,}[0-9a-f]{1,4}/i;
+  const known = connectionValues(`postgres://${USER}:hunter2-db-password@ep-cool-darkness-123456.us-east-2.aws.neon.tech/${DATABASE}`);
+
+  it("redacts every identifying part of driver errors, with or without the configured URL", () => {
+    expect(known).toEqual({ user: USER, database: DATABASE, host: "ep-cool-darkness-123456.us-east-2.aws.neon.tech" });
+    for (const message of DRIVER_ERRORS) {
+      for (const redacted of [diagnostic(message), diagnostic(message, known), redactConnectionDetails(message)]) {
+        for (const leak of LEAKS) expect(redacted, `${message} → ${redacted}`).not.toContain(leak);
+        expect(redacted, `${message} → ${redacted}`).not.toMatch(IPV6);
+        expect(redacted, `${message} → ${redacted}`).not.toMatch(/\b\d{1,3}(?:\.\d{1,3}){3}\b/);
+      }
+    }
+    // What's left still says what went wrong.
+    expect(diagnostic(DRIVER_ERRORS[0])).toBe('password authentication failed for user "[hidden]"');
+    expect(diagnostic(DRIVER_ERRORS[1])).toBe('database "[hidden]" does not exist');
+    expect(diagnostic(DRIVER_ERRORS[4])).toBe("connect ECONNREFUSED [host hidden]");
+    expect(diagnostic(DRIVER_ERRORS[8])).toBe("getaddrinfo ENOTFOUND [host hidden]");
+    // An unquoted user name is caught by the literal value from the configured URL.
+    expect(diagnostic(`role ${USER} cannot log in`, known)).toBe("role [hidden] cannot log in");
+    // Our own wording, stages, codes and timings stay readable.
+    for (const kept of [
+      "Could not connect to the database: connect ECONNREFUSED",
+      "Checking the database schema timed out after 12s",
+      "Run npm run db:migrate and check the database user's permissions.",
+      "Neon (pooled), port 5432, DNS 2 IPv4 / 0 IPv6, TCP ok in 20ms, SSL reply S; TLS ok 41ms; startup → auth request 10",
+      "Supabase direct host (IPv6 only, so Vercel can’t reach it; use the pooler URI)",
+      "startup → error 28P01: connect 12ms, closed 13ms",
+    ]) {
+      expect(diagnostic(kept)).toBe(kept);
+    }
+  });
+
+  it("GET /api/health keeps the provider, stage and error code but none of the connection details", async () => {
+    vi.stubEnv("DATABASE_URL", `postgres://${USER}:hunter2-db-password@127.0.0.1:1/${DATABASE}`);
+    __setDbForTests(undefined);
+    failureOverride.value = {
+      stage: "connect",
+      code: "28P01",
+      message: DRIVER_ERRORS.join("; "),
+      at: "2026-09-24T17:00:00.000Z",
+      trace: ["connect 3ms", `closed 9ms`],
+    };
+    const raw = await (await health()).text();
+    const database = (JSON.parse(raw) as { checks: { key: string; ok: boolean; status: string }[] }).checks.find(
+      (c) => c.key === "database",
+    )!;
+    expect(database.ok).toBe(false);
+    expect(database.status).toMatch(
+      /^could not connect \(using DATABASE_URL; connect step \(28P01\): password authentication failed for user "\[hidden\]"; database "\[hidden\]" does not exist;/,
+    );
+    expect(database.status).toContain("trace [connect 3ms, closed 9ms]");
+    expect(database.status).toMatch(/probe: other host, port 1, /);
+    for (const leak of [...LEAKS, "127.0.0.1", "hunter2"]) expect(raw).not.toContain(leak);
+    expect(database.status).not.toMatch(IPV6);
+    expectNothingSensitive(raw);
+
+    // The sign-in page's Setup checklist shows the same (redacted) status.
+    const t = text(markup(await getSetupStatus()));
+    expect(t).toContain("password authentication failed for user");
+    for (const leak of [...LEAKS, "127.0.0.1"]) expect(t).not.toContain(leak);
+    expectNothingSensitive(t);
+  });
+
+  it("drops an error code that isn't a plain code", async () => {
+    vi.stubEnv("DATABASE_URL", `postgres://${USER}:hunter2-db-password@127.0.0.1:1/${DATABASE}`);
+    __setDbForTests(undefined);
+    failureOverride.value = { stage: "check", code: `role ${USER}`, message: "x", at: "2026-09-24T17:00:00.000Z" };
+    const status = (await getSetupStatus()).checks.find((c) => c.key === "database")!.status;
+    expect(status).toContain("check step: x;");
+    expect(status).not.toContain(USER);
+  });
+
+  it("redacts the dashboard hint and the sign-in page's database detail too", () => {
+    vi.stubEnv("DATABASE_URL", `postgres://${USER}:hunter2-db-password@127.0.0.1:1/${DATABASE}`);
+    const detail = `Could not connect to the database: ${DRIVER_ERRORS.join("; ")}; role ${USER} cannot log in`;
+    const redacted = redactDatabaseDetail(detail);
+    for (const leak of LEAKS) expect(redacted).not.toContain(leak);
+    expect(redacted).toContain("Could not connect to the database:");
+    const hint = describeDataStore({
+      persistence: { ready: false, reason: "unreachable", detail },
+      provider: "postgres",
+      schema: "0001_init",
+      showHints: true,
+      checkedAt: "2026-09-24T17:00:00.000Z",
+      known,
+    }).hint!;
+    for (const leak of LEAKS) expect(hint).not.toContain(leak);
+    expect(hint).not.toMatch(IPV6);
+    expect(hint.endsWith("See README → Database.")).toBe(true);
   });
 });
 

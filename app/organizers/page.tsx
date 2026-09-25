@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getMentorsForOrganizers, isDemoContentEnabled } from "@/content";
+import { getMentorsForOrganizers, getSite, isDemoContentEnabled } from "@/content";
 import { ApplicationFiltersForm } from "@/components/organizer/application-filters";
 import { ApplicationResults } from "@/components/organizer/application-results";
 import { MentorLineup } from "@/components/organizer/mentor-lineup";
@@ -25,7 +25,14 @@ import {
   restrictToDirectory,
 } from "@/lib/organizer/filters";
 import { requireOrganizerPage } from "@/lib/organizer/page-auth";
-import { getMentorInterest, getSlotUsage, getStatusCounts, listApplications } from "@/lib/organizer/queries";
+import {
+  getMentorInterest,
+  getSlotHolders,
+  getSlotUsage,
+  getStatusCounts,
+  listApplications,
+} from "@/lib/organizer/queries";
+import { sessionRuleText } from "@/lib/schedule/sessions";
 import { getSetupStatus } from "@/lib/setup-status";
 
 export const dynamic = "force-dynamic";
@@ -67,7 +74,8 @@ export default async function OrganizersDashboardPage({ searchParams }: PageProp
   const session = await requireOrganizerPage(`/organizers${rawQuery(sp) ? `?${rawQuery(sp)}` : ""}`);
 
   const mentors = getMentorsForOrganizers();
-  const directory = buildOrganizerDirectory(mentors);
+  const sessionRule = getSite().officeHours;
+  const directory = buildOrganizerDirectory(mentors, sessionRule);
   // Only ids that exist in content (an event such as Dan Caruso's is never a mentor filter).
   const filters = restrictToDirectory(parseApplicationFilters(sp), directory);
   // The GET form submits empty fields; keep URLs canonical and shareable.
@@ -131,11 +139,12 @@ export default async function OrganizersDashboardPage({ searchParams }: PageProp
     );
   }
 
-  const [applications, counts, usage, interest] = await Promise.all([
+  const [applications, counts, usage, interest, holders] = await Promise.all([
     listApplications(db, filters),
     getStatusCounts(db),
     getSlotUsage(db),
     getMentorInterest(db),
+    getSlotHolders(db),
   ]);
   const filtered = activeFilterCount(filters) > 0;
 
@@ -220,10 +229,10 @@ export default async function OrganizersDashboardPage({ searchParams }: PageProp
         <section aria-labelledby="capacity-heading">
           <SectionHeader
             id="capacity-heading"
-            title="Slot capacity"
-            lede="Proposed and confirmed appointments both hold a seat, and canceling frees it up. Full slots can’t be assigned."
+            title="Sessions"
+            lede={`${sessionRuleText(sessionRule)} One application (a student or a team) per session. Students apply to a mentor’s window, and you assign each application to one of its sessions. Proposed and confirmed appointments both hold the seat, and canceling frees it up.`}
           />
-          <SlotBoard directory={directory} usage={usage} />
+          <SlotBoard directory={directory} usage={usage} holders={holders} />
         </section>
       </Container>
 
@@ -234,7 +243,7 @@ export default async function OrganizersDashboardPage({ searchParams }: PageProp
             title="Mentor notes"
             lede="Scheduling, constraints and copy that still needs approval. None of this shows up on the public site. Students can pick a mentor who’s still scheduling without choosing a time, and those applications show as “Interest only”."
           />
-          <MentorNotes mentors={mentors} />
+          <MentorNotes mentors={mentors} sessionRule={sessionRule} />
         </section>
       </Container>
     </>

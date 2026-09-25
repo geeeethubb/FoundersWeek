@@ -3,7 +3,9 @@
  * /content fails loudly instead of rendering something wrong.
  */
 import { z } from "zod";
+import { generatedSessionSlots, slotRuleProblems, type SessionRule } from "@/lib/schedule/sessions";
 import { isISODate, isLocalTime, minutesOfDay } from "@/lib/time";
+import { site } from "./site";
 import type { Mentor, ScheduleEvent } from "./types";
 
 const isoDate = z.string().refine(isISODate, "Expected a real date as YYYY-MM-DD");
@@ -132,6 +134,7 @@ const mentorSchema = z.object({
     format: sessionFormat.nullable(),
     durationMinutes: z.number().int().positive().nullable(),
     location: z.string().min(1).nullable(),
+    address: z.string().min(1).nullable().optional(),
     sessionCount: z.string().min(1).nullable(),
     confirmed: z.boolean(),
     note: z.string().optional(),
@@ -179,13 +182,23 @@ function formatZodIssues(prefix: string, error: z.ZodError): string[] {
 /** Office-hours schedule entries are generated with this id prefix. */
 export const OFFICE_HOURS_ID_PREFIX = "office-hours-";
 
+const officeHoursRule = z.object({
+  sessionMinutes: z.number().int().min(5).max(240),
+  breakMinutes: z.number().int().min(0).max(120),
+});
+
 export function validateContent(input: {
   events: ScheduleEvent[];
   mentors: Mentor[];
   /** When true, items flagged `demo` are rejected (production data must be real). */
   forbidDemo: boolean;
+  /** Session length and break explicit slots must follow. Defaults to site.officeHours. */
+  officeHours?: SessionRule;
 }): void {
   const problems: string[] = [];
+  const rule = input.officeHours ?? site.officeHours;
+  const parsedRule = officeHoursRule.safeParse(rule);
+  if (!parsedRule.success) problems.push(...formatZodIssues("site.officeHours", parsedRule.error));
   const seenEventIds = new Set<string>();
   const seenMentorIds = new Set<string>();
   const seenOptionIds = new Set<string>();
@@ -268,12 +281,7 @@ export function validateContent(input: {
         continue;
       }
       if (window.date !== slot.date) problems.push(`${label}: slot "${slot.id}" is not on its window's date`);
-      if (window.time.kind === "exact" && window.time.end) {
-        const inside =
-          minutesOfDay(slot.start) >= minutesOfDay(window.time.start) &&
-          minutesOfDay(slot.end) <= minutesOfDay(window.time.end);
-        if (!inside) problems.push(`${label}: slot "${slot.id}" falls outside window "${window.id}"`);
-      }
+      // Inside an exact window: checked with the session rule below.
       if (window.time.kind === "part-of-day" && window.time.before) {
         if (minutesOfDay(slot.end) > minutesOfDay(window.time.before)) {
           problems.push(`${label}: slot "${slot.id}" ends after window "${window.id}" (${window.time.before})`);
@@ -289,6 +297,19 @@ export function validateContent(input: {
       const cur = sorted[k];
       if (prev.date === cur.date && minutesOfDay(cur.start) < minutesOfDay(prev.end)) {
         problems.push(`${label}: slots "${prev.id}" and "${cur.id}" overlap`);
+      }
+    }
+
+    if (parsedRule.success) {
+      // Organizer policy (site.officeHours): every session has the same length, inside its exact
+      // window, with the break before the next one.
+      for (const problem of slotRuleProblems(mentor, rule)) problems.push(`${label}: ${problem}`);
+      // Generated session ids ("<windowId>-1200") are stored with appointments like any other id.
+      for (const session of generatedSessionSlots(mentor, rule)) {
+        if (seenOptionIds.has(session.id)) {
+          problems.push(`${label}: generated session id "${session.id}" is already used by a window or slot`);
+        }
+        seenOptionIds.add(session.id);
       }
     }
   });

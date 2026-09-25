@@ -7,6 +7,11 @@
  * by three, with an odd last card centered in two-column rows). Every mentor is always visible, no
  * carousel.
  *
+ * From `xl` each card is a subgrid of three shared rows (photo; name, role and company;
+ * availability), so the rule above each availability line sits at the same height across the row
+ * however many lines a name, role or window takes. An exact time range never breaks
+ * ("10:00–11:30 AM CT" stays on one line).
+ *
  * Server component.
  */
 import Link from "next/link";
@@ -37,6 +42,7 @@ export function MentorPreviews({ mentors }: { mentors: MentorPreview[] }) {
   const thirds = mentors.length % 3 === 0;
   // Two-column rows centre an odd last card; three-column rows (lg) are used only when they fill evenly.
   const oddCount = mentors.length % 2 === 1;
+  const columns = previewColumns(mentors.length);
 
   return (
     <section id="mentors" aria-labelledby="mentors-heading">
@@ -56,16 +62,19 @@ export function MentorPreviews({ mentors }: { mentors: MentorPreview[] }) {
 
         <ul
           className={cn(
-            "mt-6 grid gap-3 sm:grid-cols-2 sm:gap-4 lg:mt-8 xl:gap-5",
+            "mt-6 grid gap-3 sm:grid-cols-2 sm:gap-4 lg:mt-8 xl:gap-x-5 xl:gap-y-0",
             thirds && "lg:grid-cols-3",
-            XL_COLUMNS[previewColumns(mentors.length)],
+            XL_COLUMNS[columns],
           )}
         >
           {mentors.map((m, i) => (
             <li
               key={m.id}
               className={cn(
-                "min-w-0",
+                // xl: the card spans three shared rows (see MentorCard). The list has no row gap there,
+                // so a second row of cards (seven or more mentors) is spaced here.
+                "min-w-0 xl:row-span-3 xl:grid xl:grid-rows-subgrid xl:gap-0",
+                i >= columns && "xl:pt-5",
                 // An odd last card sits centered under the two-column rows (sm–xl).
                 oddCount && i === mentors.length - 1 && mentors.length > 1
                   ? cn(
@@ -87,29 +96,32 @@ export function MentorPreviews({ mentors }: { mentors: MentorPreview[] }) {
 function MentorCard({ mentor: m }: { mentor: MentorPreview }) {
   const a = m.availability;
   return (
-    <article className="group relative flex h-full items-center gap-4 rounded-md border border-line bg-surface p-3 transition-[border-color,box-shadow] duration-150 hover:border-line-strong hover:shadow-sm sm:p-4 xl:flex-col xl:items-stretch xl:gap-0 xl:p-3">
+    <article className="group relative flex h-full items-center gap-4 rounded-md border border-line bg-surface p-3 transition-[border-color,box-shadow] duration-150 hover:border-line-strong hover:shadow-sm sm:p-4 xl:row-span-3 xl:grid xl:h-auto xl:grid-rows-subgrid xl:items-stretch xl:gap-0 xl:p-3">
       <div className="w-[4.5rem] shrink-0 xl:w-full">
         <MentorPortrait id={m.id} name={m.name} headshot={m.headshot} size="fluid" priority />
       </div>
-      <div className="flex min-w-0 flex-1 flex-col xl:px-1.5 xl:pb-1.5 xl:pt-4">
-        <h3 className="text-base font-semibold leading-snug text-text">
-          <Link
-            href={m.href}
-            className="rounded-xs decoration-accent decoration-2 underline-offset-4 after:absolute after:inset-0 after:rounded-md group-hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
-          >
-            {m.name}
-          </Link>
-        </h3>
-        {m.role || m.company ? (
-          <p className="mt-0.5 text-sm leading-snug text-text-muted">
-            {m.role ? <span className="xl:block">{m.role}</span> : null}
-            {m.role && m.company ? <span className="xl:sr-only">, </span> : null}
-            {m.company ? <span className="xl:block">{m.company}</span> : null}
-          </p>
-        ) : null}
-        <div className="mt-2 xl:mt-auto xl:pt-4">
-          {/* Two lines tall on large screens so every card's rule lines up. */}
-          <p className="flex items-start gap-2 text-[0.8125rem] leading-snug xl:min-h-[3.25rem] xl:border-t xl:border-line xl:pt-3">
+      {/* xl: `contents`, so who they are and their availability each take a shared row. */}
+      <div className="flex min-w-0 flex-1 flex-col xl:contents">
+        <div className="xl:px-1.5 xl:pt-4">
+          <h3 className="text-base font-semibold leading-snug text-text">
+            <Link
+              href={m.href}
+              className="rounded-xs decoration-accent decoration-2 underline-offset-4 after:absolute after:inset-0 after:rounded-md group-hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
+            >
+              {m.name}
+            </Link>
+          </h3>
+          {m.role || m.company ? (
+            <p className="mt-0.5 text-sm leading-snug text-text-muted">
+              {m.role ? <span className="xl:block">{m.role}</span> : null}
+              {m.role && m.company ? <span className="xl:sr-only">, </span> : null}
+              {m.company ? <span className="xl:block">{m.company}</span> : null}
+            </p>
+          ) : null}
+        </div>
+        {/* The third row at xl, top-aligned so every card's rule lines up. */}
+        <div className="mt-2 xl:mt-0 xl:px-1.5 xl:pb-1.5 xl:pt-4">
+          <p className="flex items-start gap-2 text-[0.8125rem] leading-snug xl:border-t xl:border-line xl:pt-3">
             <span
               aria-hidden
               className={cn("mt-[0.3rem] size-1.5 shrink-0 rounded-full", a.known ? "bg-accent" : "bg-line-strong")}
@@ -123,7 +135,8 @@ function MentorCard({ mentor: m }: { mentor: MentorPreview }) {
                   {" · "}
                 </span>
                 <span className="sr-only">, </span>
-                <span className="tabular xl:block">{a.time}</span>
+                {/* An exact range stays whole; a rough window ("Morning, before noon CT") may wrap. */}
+                <span className={cn("tabular xl:block", a.exact && "whitespace-nowrap")}>{a.time}</span>
                 {a.more > 0 ? <span className="text-text-subtle"> + {a.more} more</span> : null}
               </span>
             ) : (

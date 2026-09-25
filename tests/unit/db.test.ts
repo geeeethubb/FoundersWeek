@@ -155,3 +155,31 @@ describe("DATABASE_POOL_MAX", () => {
     expect(poolMaxWarning({ DATABASE_POOL_MAX: "0" })).toMatch(/invalid, so 3 is used/);
   });
 });
+
+describe("driver error messages (server logs, stored failure, DatabaseUnavailableError)", () => {
+  it("uses the shared redaction: no URLs, credentials, quoted names, IPs or Neon endpoints", async () => {
+    const { sanitizeDbMessage } = await import("@/lib/db/client");
+    const { connectionValues } = await import("@/lib/security/redact");
+    const cases = [
+      'password authentication failed for user "neondb_owner"',
+      "connect ECONNREFUSED [2600:1f16:abcd::12]:5432",
+      "connect ETIMEDOUT 2600:1f16:abcd::12",
+      "getaddrinfo ENOTFOUND ep-cool-darkness-123456.us-east-2.aws.neon.tech",
+      "Endpoint ep-cool-darkness-123456 not found",
+      "failed postgres://neondb_owner:hunter2@db.example.com/neondb",
+      "connect ECONNREFUSED 10.0.0.12:5432",
+    ];
+    for (const message of cases) {
+      const out = sanitizeDbMessage(message);
+      for (const secret of ["neondb_owner", "hunter2", "2600:1f16", "ep-cool-darkness", "example.com", "10.0.0.12"]) {
+        expect(out, message).not.toContain(secret);
+      }
+    }
+    // Error codes and our own wording stay; the configured user and database go even unquoted.
+    const known = connectionValues("postgres://founders_app:pw@db.internal:5432/founders_prod");
+    const out = sanitizeDbMessage("ECONNRESET: role founders_app cannot reach founders_prod", known);
+    expect(out).toContain("ECONNRESET");
+    expect(out).not.toMatch(/founders_app|founders_prod/);
+    expect(sanitizeDbMessage("x".repeat(500))).toHaveLength(300);
+  });
+});

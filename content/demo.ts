@@ -268,7 +268,7 @@ export const demoMentors: Mentor[] = [
       location: null,
       sessionCount: null,
       confirmed: false,
-      note: "Duration to be confirmed (demo).",
+      note: "Meeting link to be confirmed (demo).",
     },
     availability: [
       {
@@ -283,7 +283,7 @@ export const demoMentors: Mentor[] = [
         windowId: "demo-jordan-2026-10-02-pm",
         date: "2026-10-02",
         start: "15:00",
-        end: "15:30",
+        end: "15:25",
         capacity: 1,
         status: "proposed",
         format: "virtual",

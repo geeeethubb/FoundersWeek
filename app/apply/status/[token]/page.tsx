@@ -6,9 +6,9 @@ import { ButtonLink } from "@/components/ui/button";
 import { ArrowLeftIcon, LockIcon } from "@/components/ui/icons";
 import { MentorPortrait } from "@/components/ui/portrait";
 import { Container, Notice } from "@/components/ui/primitives";
-import { findSlot, getMentors } from "@/content";
+import { findSlot, getMentors, getSite } from "@/content";
 import type { SessionFormat } from "@/content/types";
-import { APPLICATION_STATUS_DESCRIPTIONS, type ApplicationStatus } from "@/lib/applications/constants";
+import { APPLICATION_STATUS_DESCRIPTIONS, SESSION_COPY, type ApplicationStatus } from "@/lib/applications/constants";
 import { getApplicationStatusView, type ApplicationStatusView } from "@/lib/applications/repository";
 import { DatabaseUnavailableError, getDb } from "@/lib/db/client";
 import { verifyStatusToken } from "@/lib/security/status-token";
@@ -17,7 +17,8 @@ import { formatDate, formatInstant, formatTimeRange, TZ_LABEL, utcToZoned } from
 /**
  * A student's private application status (/apply/status/<signed token>). The URL is the
  * credential; the page shows only status, first name, chosen mentors and appointments — never the
- * email or answers.
+ * email or answers. While there's no appointment yet, one line says how long a session is
+ * (`site.officeHours`).
  */
 export const metadata: Metadata = {
   title: "Application status",
@@ -125,7 +126,7 @@ export default async function ApplicationStatusPage({ params }: { params: Promis
           </p>
           {!appointments.length && AWAITING.includes(view.status) ? (
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-subtle">
-              No appointment yet. If you’re matched, it’ll show up here.
+              {SESSION_COPY.status(getSite().officeHours)}
             </p>
           ) : null}
         </section>

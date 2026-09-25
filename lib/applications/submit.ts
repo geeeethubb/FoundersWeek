@@ -302,6 +302,7 @@ export async function handleApplicationSubmission(
         statusUrl: `${deps.siteUrl()}${statusUrl}`,
         siteName: site.shortName,
         orgName: site.org.name,
+        officeHours: site.officeHours,
         mentors: record.mentorIds.map((mentorId) => ({
           name: byId.get(mentorId)?.name ?? mentorId,
           schedulingInProgress: byId.get(mentorId)?.scheduling === "in-progress",

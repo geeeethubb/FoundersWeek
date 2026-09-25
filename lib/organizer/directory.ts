@@ -1,14 +1,20 @@
 /**
  * Content lookups for the organizer view: mentor, availability-window and slot ids stored with
- * applications resolve to names and labels here. Built from `getMentorsForOrganizers()` in
- * pages/route handlers, or from fixture mentors in tests, so service code never reads env.
+ * applications resolve to names and labels here. Built from `getMentorsForOrganizers()` and
+ * `site.officeHours` in pages/route handlers (lib/organizer/content.ts), or from fixture mentors in
+ * tests, so service code never reads env.
+ *
+ * Bookable slots are the explicit `slots` in content plus the sessions generated from every exact
+ * availability window (lib/schedule/sessions.ts). Students apply to windows; organizers assign each
+ * application to one session.
  *
  * Pure and serializable-friendly (plain objects) — safe to import from client components.
  */
 import type { AppointmentSlot, AvailabilityWindow, ISODate, LocalTime, Mentor, TimeSpec } from "@/content/types";
 import { schedulingStatus, type SchedulingStatus } from "@/lib/mentors";
 import { mentorAffiliation } from "@/lib/schedule/entries";
-import { describeTime, formatDate, formatTimeRange, TZ_LABEL, utcToZoned } from "@/lib/time";
+import { generatedSessionSlots, type SessionRule } from "@/lib/schedule/sessions";
+import { describeTime, formatDate, formatTimeRange, minutesOfDay, TZ_LABEL, utcToZoned } from "@/lib/time";
 
 export interface MentorInfo {
   id: string;
@@ -22,6 +28,10 @@ export interface MentorInfo {
   demo: boolean;
   scheduling: SchedulingStatus;
   acceptingApplications: boolean;
+  /** Content `session.sessionCount`, e.g. "One or two sessions" (null when not agreed yet). */
+  sessionCount: string | null;
+  /** Organizer-only notes. This directory is only built for the protected organizer view. */
+  organizerNotes: string | null;
 }
 
 export interface SlotInfo {
@@ -38,6 +48,11 @@ export interface SlotInfo {
   format: AppointmentSlot["format"] | null;
   location: string | null;
   demo: boolean;
+  /**
+   * True for a session generated from an exact availability window (site.officeHours rule);
+   * false for an explicit slot in content. Students can only ever choose explicit slots.
+   */
+  generated: boolean;
   /** "Thu, Oct 1 · 2:00–2:25 PM CT" */
   label: string;
 }
@@ -59,6 +74,9 @@ export interface OrganizerDirectory {
   /** Content order (production mentors first, then demo). */
   mentors: MentorInfo[];
   mentorsById: ReadonlyMap<string, MentorInfo>;
+  /** Session length and break (site.officeHours) the sessions were generated with. */
+  sessionRule: SessionRule;
+  /** Explicit content slots and generated sessions, grouped by mentor (content order), in time order. */
   slots: SlotInfo[];
   slotsById: ReadonlyMap<string, SlotInfo>;
   windows: WindowInfo[];
@@ -86,7 +104,16 @@ export function intervalLabel(startsAt: Date | string, endsAt: Date | string): s
   return `${formatDate(s.date, "short")} · ${formatTimeRange(s.time, e.time)} ${TZ_LABEL}`;
 }
 
-export function buildOrganizerDirectory(mentors: Mentor[]): OrganizerDirectory {
+function byTime(a: Pick<SlotInfo, "date" | "start">, b: Pick<SlotInfo, "date" | "start">): number {
+  return a.date === b.date ? minutesOfDay(a.start) - minutesOfDay(b.start) : a.date.localeCompare(b.date);
+}
+
+/**
+ * Pure: everything comes from `mentors` and `rule` (site.officeHours), so tests build the same
+ * directory from fixtures. Explicit content slots win for their window; every other exact window
+ * is split into sessions (`generated: true`, one application each).
+ */
+export function buildOrganizerDirectory(mentors: Mentor[], rule: SessionRule): OrganizerDirectory {
   const mentorInfos: MentorInfo[] = mentors.map((m) => ({
     id: m.id,
     name: m.name,
@@ -98,9 +125,11 @@ export function buildOrganizerDirectory(mentors: Mentor[]): OrganizerDirectory {
     demo: Boolean(m.demo),
     scheduling: schedulingStatus(m),
     acceptingApplications: m.acceptingApplications,
+    sessionCount: m.session.sessionCount,
+    organizerNotes: m.organizerNotes ?? null,
   }));
-  const slots: SlotInfo[] = mentors.flatMap((m) =>
-    m.slots.map((s) => ({
+  const slots: SlotInfo[] = mentors.flatMap((m) => {
+    const toInfo = (s: AppointmentSlot, generated: boolean): SlotInfo => ({
       id: s.id,
       mentorId: m.id,
       mentorName: m.name,
@@ -114,9 +143,13 @@ export function buildOrganizerDirectory(mentors: Mentor[]): OrganizerDirectory {
       format: s.format ?? null,
       location: s.location ?? null,
       demo: Boolean(m.demo),
+      generated,
       label: slotLabel(s),
-    })),
-  );
+    });
+    return [...m.slots.map((s) => toInfo(s, false)), ...generatedSessionSlots(m, rule).map((s) => toInfo(s, true))].sort(
+      byTime,
+    );
+  });
   const windows: WindowInfo[] = mentors.flatMap((m) =>
     m.availability.map((w) => ({
       id: w.id,
@@ -132,6 +165,7 @@ export function buildOrganizerDirectory(mentors: Mentor[]): OrganizerDirectory {
   return {
     mentors: mentorInfos,
     mentorsById: new Map(mentorInfos.map((m) => [m.id, m])),
+    sessionRule: { sessionMinutes: rule.sessionMinutes, breakMinutes: rule.breakMinutes },
     slots,
     slotsById: new Map(slots.map((s) => [s.id, s])),
     windows,
@@ -186,16 +220,17 @@ export interface MentorBookability {
   mentorName: string;
   firstName: string;
   scheduling: SchedulingStatus | null;
-  /** Appointment slots in content for this mentor. */
+  /** Bookable sessions: explicit content slots and sessions generated from exact windows. */
   slots: SlotInfo[];
   /** Availability windows (general availability — not bookable by themselves). */
   windows: WindowInfo[];
 }
 
 /**
- * For each mentor id (in the given order): the slots and windows content currently has.
- * A mentor with no slots can't receive appointments yet — so an application for them can be
- * reviewed, selected or waitlisted, but not confirmed.
+ * For each mentor id (in the given order): the sessions and windows content currently has.
+ * A mentor with no sessions (still scheduling, or a window without exact times) can't receive
+ * appointments yet — so an application for them can be reviewed, selected or waitlisted, but not
+ * confirmed.
  */
 export function mentorBookability(directory: OrganizerDirectory, mentorIds: readonly string[]): MentorBookability[] {
   return mentorIds.map((id) => {
@@ -209,6 +244,19 @@ export function mentorBookability(directory: OrganizerDirectory, mentorIds: read
       windows: directory.windows.filter((w) => w.mentorId === id),
     };
   });
+}
+
+/**
+ * Some mentors agreed to fewer sessions than their window fits (content `session.sessionCount`,
+ * e.g. Patrick's "One or two sessions" in a window with room for three). Shown next to their
+ * sessions so organizers don't overbook: "Patrick is hosting one or two sessions, and 3 are
+ * listed. Only book as many as Patrick agreed to." Null when content sets no count.
+ */
+export function sessionLimitNote(mentor: Pick<MentorInfo, "firstName" | "sessionCount">, listed: number): string | null {
+  const count = mentor.sessionCount?.trim();
+  if (!count || listed === 0) return null;
+  const hosting = count.charAt(0).toLowerCase() + count.slice(1);
+  return `${mentor.firstName} is hosting ${hosting}, and ${listed} ${listed === 1 ? "is" : "are"} listed. Only book as many as ${mentor.firstName} agreed to.`;
 }
 
 /** "Ron", "Vik and Ron", "Patrick, Vik and Ron". */

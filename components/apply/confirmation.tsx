@@ -2,7 +2,8 @@
 
 /**
  * Replaces the form once the server has committed the application (never before). Short: it's
- * saved, here's the private status link (with copy), and what happens next in one line.
+ * saved, here's the private status link (with copy), and what happens next in one line (which also
+ * says how long a session is, from `site.officeHours`).
  *
  * `replay`: the server already had this submission (a retry or double submit of the same form
  * session) and kept the ORIGINAL — the answers on screen may have been edited since, so nothing
@@ -11,6 +12,7 @@
 import { forwardRef, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRightIcon, CheckIcon, LinkIcon } from "@/components/ui/icons";
+import { SESSION_COPY, type SessionLength } from "@/lib/applications/constants";
 
 function joinNames(names: string[]): string {
   if (names.length <= 1) return names.join("");
@@ -19,8 +21,16 @@ function joinNames(names: string[]): string {
 
 export const Confirmation = forwardRef<
   HTMLHeadingElement,
-  { firstName: string; email: string; statusUrl: string; mentorNames: string[]; replay?: boolean }
->(function Confirmation({ firstName, email, statusUrl, mentorNames, replay = false }, headingRef) {
+  {
+    firstName: string;
+    email: string;
+    statusUrl: string;
+    mentorNames: string[];
+    /** The session rule (`site.officeHours`). */
+    officeHours: SessionLength;
+    replay?: boolean;
+  }
+>(function Confirmation({ firstName, email, statusUrl, mentorNames, officeHours, replay = false }, headingRef) {
   return (
     <section
       aria-labelledby="apply-confirmation-title"
@@ -63,7 +73,7 @@ export const Confirmation = forwardRef<
         ) : (
           <span className="text-text [overflow-wrap:anywhere]">{email}</span>
         )}{" "}
-        to confirm a time. Nothing is booked until you confirm.
+        {SESSION_COPY.confirmation(officeHours)}. Nothing is booked until you confirm.
       </p>
     </section>
   );
@@ -105,7 +115,7 @@ function StatusLink({ statusUrl }: { statusUrl: string }) {
           value={statusUrl}
           aria-describedby="apply-status-link-hint"
           onFocus={(e) => e.currentTarget.select()}
-          className="field-control min-w-0 flex-1 truncate text-sm"
+          className="field-control min-h-11 min-w-0 flex-1 truncate text-sm"
         />
         <Button variant="secondary" onClick={copy} className="h-11 shrink-0 sm:w-32">
           {copied === "copied" ? <CheckIcon className="size-4" /> : <LinkIcon className="size-4" />}

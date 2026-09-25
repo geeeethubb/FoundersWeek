@@ -36,6 +36,7 @@ const happyHour = byId(HAPPY_HOUR);
 const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
 const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
+const RON_OH = "office-hours-ron-lewis-2026-10-01-pm";
 const rishabOfficeHours = byId(RISHAB_OH);
 const OFFICE_HOURS_REASON = "Office hours are by application. Selected students get their confirmed time by email.";
 
@@ -117,10 +118,10 @@ describe("calendar eligibility", () => {
     expect(byId("demo-canceled-session", withDemo).calendar.available).toBe(false);
   });
 
-  it("never exports office hours: Rishab's exact noon–5 PM window, and a date-only window", () => {
-    expect(production).toHaveLength(15);
+  it("never exports office hours: Rishab's exact noon–5 PM window, Ron's confirmed window, and a date-only window", () => {
+    expect(production).toHaveLength(16);
     const officeHours = production.filter((e) => e.kind === "office-hours");
-    expect(officeHours.map((e) => e.id)).toEqual([PATRICK_OH, RISHAB_OH, ARNAV_OH]);
+    expect(officeHours.map((e) => e.id)).toEqual([PATRICK_OH, RISHAB_OH, RON_OH, ARNAV_OH]);
     for (const e of officeHours) {
       expect(e.calendar, e.id).toEqual({ available: false, reason: OFFICE_HOURS_REASON });
       expect(googleCalendarUrl(e, SITE), e.id).toBeNull();
@@ -139,6 +140,22 @@ describe("calendar eligibility", () => {
     expect(ics).not.toContain(RISHAB_OH);
     expect(ics).not.toContain("20261001T120000");
     expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
+
+    // Ron's window is confirmed, with exact times and a venue, and still isn't exported: selected
+    // students get their time by email.
+    const ronOfficeHours = byId(RON_OH);
+    expect(ronOfficeHours).toMatchObject({
+      date: "2026-10-01",
+      time: { kind: "exact", start: "14:30", end: "16:30" },
+      status: "confirmed",
+      startsAt: "2026-10-01T19:30:00.000Z",
+      endsAt: "2026-10-01T21:30:00.000Z",
+    });
+    const ronIcs = buildIcsCalendar([ronOfficeHours], { siteUrl: SITE, now: NOW });
+    expect(ronIcs).not.toContain("BEGIN:VEVENT");
+    expect(ronIcs).not.toContain(RON_OH);
+    expect(ronIcs).not.toContain("20261001T143000");
+    expect(ronIcs).not.toContain("Business Instructional Facility");
 
     // A date-only window (a future mentor's): no export, and no invented time on Oct 1.
     const withDateOnly = buildScheduleEntries({ events, mentors: [...mentors, DATE_ONLY_MENTOR], site });
@@ -285,7 +302,7 @@ describe("calendar.ics routes (public data)", () => {
   });
 
   it("has no .ics for the canceled afterparty, forthcoming events or office hours", async () => {
-    for (const id of ["founders-week-afterparty", "dan-caruso-fireside-chat", PATRICK_OH, RISHAB_OH, ARNAV_OH]) {
+    for (const id of ["founders-week-afterparty", "dan-caruso-fireside-chat", PATRICK_OH, RISHAB_OH, RON_OH, ARNAV_OH]) {
       const res = await get(id);
       expect(res.status, id).toBe(404);
       expect(await res.text(), id).toBe("No calendar file is available for this event.");

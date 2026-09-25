@@ -1,3 +1,4 @@
+import { site } from "./site";
 import type { Mentor, SourceRef } from "./types";
 
 /**
@@ -35,6 +36,12 @@ const AGENDA: SourceRef = {
   checked: "2026-09-23",
 };
 
+/**
+ * Every office-hours session is the same length (organizer policy, Sept 24): site.officeHours.
+ * Windows are split into sessions on that grid (lib/schedule/sessions.ts).
+ */
+const SESSION_MINUTES = site.officeHours.sessionMinutes;
+
 export const mentors: Mentor[] = [
   {
     id: "patrick-haddox",
@@ -64,11 +71,11 @@ export const mentors: Mentor[] = [
     goodFitFor: null,
     session: {
       format: null,
-      durationMinutes: null,
+      durationMinutes: SESSION_MINUTES,
       location: null,
       sessionCount: "One or two sessions",
       confirmed: false,
-      note: "Patrick will host one or two sessions in this window. We’re still setting the exact times, length and location.",
+      note: "Patrick will host one or two sessions in this window. We’re still setting the exact times and location.",
     },
     availability: [
       {
@@ -82,7 +89,7 @@ export const mentors: Mentor[] = [
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/patrick-haddox/" }],
     acceptingApplications: true,
     organizerNotes:
-      "Willing to host one or two sessions in the Thu Oct 1, 10:00–11:30 AM window. Appointment lengths and location not finalized.",
+      "Willing to host one or two sessions in the Thu Oct 1, 10:00–11:30 AM window. The session grid fits three there, so assign at most two, and never publish a session count. Location not finalized.",
     sources: [
       BRIEF,
       AGENDA,
@@ -136,26 +143,26 @@ export const mentors: Mentor[] = [
     goodFitFor: null,
     session: {
       format: null,
-      durationMinutes: null,
+      durationMinutes: SESSION_MINUTES,
       location: null,
       sessionCount: null,
       confirmed: false,
-      note: "Arnav is free Friday before noon. We’re still confirming the exact window, session length, number of sessions and location.",
+      note: "Arnav is holding office hours on Friday, October 2, from 10:00 to 11:30 AM. We’re still setting the location.",
     },
     availability: [
       {
+        // Id kept from when only "before noon" was known: applications store it.
         id: "arnav-mishra-2026-10-02-am",
         date: "2026-10-02",
-        time: { kind: "part-of-day", part: "morning", before: "12:00" },
-        label: "Friday morning, before noon · Exact window pending",
-        note: "Arnav is free Friday before noon. We’ll share the exact window once it’s confirmed, but you can apply now.",
+        time: { kind: "exact", start: "10:00", end: "11:30" },
+        note: "Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
       },
     ],
     slots: [],
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/arnav-mishra/" }],
     acceptingApplications: true,
     organizerNotes:
-      "Available Fri Oct 2 before noon; exact start, duration, session count and location pending. Speaking 1:55 PM at the Founders Showcase. Hosting a happy hour at Legends Wed Sep 30, 5–7 PM (invited the Founders community).",
+      "Window confirmed for Fri Oct 2, 10:00–11:30 AM (organizer update, Sept 24); location pending. Speaking 1:55 PM at the Founders Showcase. Hosting a happy hour at Legends Wed Sep 30, 5–7 PM (invited the Founders community).",
     sources: [
       BRIEF,
       AGENDA,
@@ -204,7 +211,7 @@ export const mentors: Mentor[] = [
     goodFitFor: null,
     session: {
       format: null,
-      durationMinutes: null,
+      durationMinutes: SESSION_MINUTES,
       location: null,
       sessionCount: null,
       confirmed: false,
@@ -266,7 +273,7 @@ export const mentors: Mentor[] = [
     goodFitFor: null,
     session: {
       format: null,
-      durationMinutes: null,
+      durationMinutes: SESSION_MINUTES,
       location: null,
       sessionCount: null,
       confirmed: false,
@@ -333,20 +340,27 @@ export const mentors: Mentor[] = [
     },
     goodFitFor: null,
     session: {
-      format: null,
-      durationMinutes: null,
-      location: null,
+      format: "in-person",
+      durationMinutes: SESSION_MINUTES,
+      location: "Business Instructional Facility (BIF)",
+      address: "515 E. Gregory Drive, Champaign, IL 61820",
       sessionCount: null,
-      confirmed: false,
-      note: "We’re still confirming Ron’s date, time and session format. Founders will follow up once availability is finalized.",
+      confirmed: true,
+      note: "Ron is holding office hours on Thursday, October 1, from 2:30 to 4:30 PM at the Business Instructional Facility (BIF).",
     },
-    // Scheduling in progress — add windows/slots here once Ron's availability is confirmed.
-    availability: [],
+    availability: [
+      {
+        id: "ron-lewis-2026-10-01-pm",
+        date: "2026-10-01",
+        time: { kind: "exact", start: "14:30", end: "16:30" },
+        note: "Ron is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
+      },
+    ],
     slots: [],
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/ronlewis20/" }],
     acceptingApplications: true,
     organizerNotes:
-      "Willing to help. Exact date, time and session format pending. Confirm suggested discussion topics with Ron before publishing them.",
+      "Window confirmed for Thu Oct 1, 2:30–4:30 PM at BIF, 515 E. Gregory Drive, Champaign (organizer update, Sept 24). He’s also open to Oct 4; organizers will send details later, so nothing about Oct 4 is published yet. Confirm suggested discussion topics with Ron before publishing them.",
     sources: [
       BRIEF,
       {
@@ -382,11 +396,11 @@ export const mentors: Mentor[] = [
     },
     session: {
       format: null,
-      durationMinutes: null,
+      durationMinutes: SESSION_MINUTES,
       location: null,
       sessionCount: null,
       confirmed: false,
-      note: "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting session length and location.",
+      note: "Rishab is holding office hours on Thursday, October 1, anytime from noon to 5 PM. We’re still setting the location.",
     },
     availability: [
       {
@@ -404,7 +418,7 @@ export const mentors: Mentor[] = [
     ],
     acceptingApplications: true,
     organizerNotes:
-      "From his email to the organizers: he’s at Founders Week on Oct 1 and 2, but only has time for office hours on Thu Oct 1, and he’d like to meet student teams (a preference, not an eligibility rule; individuals can apply). Window locked for Thu Oct 1, anytime 12–5 PM (organizer update, Sept 24). Session length, location and capacity aren’t confirmed. Also on the Showcase panel “Health Innovation: From Therapeutics to Devices”, Fri Oct 2, 1:20–1:55 PM (not office hours). Keep the phone number from his email signature off the site.",
+      "From his email to the organizers: he’s at Founders Week on Oct 1 and 2, but only has time for office hours on Thu Oct 1, and he’d like to meet student teams (a preference, not an eligibility rule; individuals can apply). Window locked for Thu Oct 1, anytime 12–5 PM (organizer update, Sept 24). Location and capacity aren’t confirmed. Also on the Showcase panel “Health Innovation: From Therapeutics to Devices”, Fri Oct 2, 1:20–1:55 PM (not office hours). Keep the phone number from his email signature off the site.",
     sources: [
       {
         label: "Founders organizer update: Rishab Veldur profile and his email about availability",

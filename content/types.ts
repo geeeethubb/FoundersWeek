@@ -223,6 +223,8 @@ export interface Mentor {
     format: SessionFormat | null;
     durationMinutes: number | null;
     location: string | null;
+    /** Street address for `location`, when known (e.g. "515 E. Gregory Drive, Champaign, IL 61820"). */
+    address?: string | null;
     /** e.g. "One or two sessions". */
     sessionCount: string | null;
     /** True once format, duration and location are confirmed. */
@@ -289,6 +291,15 @@ export interface SiteSettings {
     decisionsBy: string | null;
     /** Email domains accepted as "Illinois email". */
     emailDomains: string[];
+  };
+  /**
+   * How office-hours sessions are scheduled (organizer policy, 2026-09-24): every session is
+   * `sessionMinutes` long with a `breakMinutes` break before the next one. Availability windows
+   * are split into sessions on this grid (lib/schedule/sessions.ts).
+   */
+  officeHours: {
+    sessionMinutes: number;
+    breakMinutes: number;
   };
   brand: {
     /** Path under /public to the Founders logo, with intrinsic size. `null` = typographic lockup. */

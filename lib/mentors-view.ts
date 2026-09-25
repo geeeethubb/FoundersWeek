@@ -29,6 +29,7 @@ import {
   type MentorAppearance,
   type ScheduleEntry,
 } from "@/lib/schedule/entries";
+import { sessionRuleText, type SessionRule } from "@/lib/schedule/sessions";
 import {
   describeTime,
   formatDate,
@@ -212,9 +213,13 @@ export function appearancesByMentor(
   return Object.fromEntries(mentors.map((m) => [m.id, mentorAppearanceViews(entries, m.id)]));
 }
 
-/** "Speaking Fri, Oct 2 · 1:55 PM" — a compact line for cards. */
-export function appearanceShortLabel(a: AppearanceView): string {
-  return `${a.roleLabel} ${a.dateShort}${a.startLabel ? ` · ${a.startLabel}` : ""}`;
+/**
+ * "Speaking Fri, Oct 2 · 1:20–1:55 PM CT" · "Hosting Wed, Sep 30 · 5:00–7:00 PM CT" — the line above
+ * each appearance on a profile: role, date, and the time range labeled CT (just the date when the
+ * time isn't exact).
+ */
+export function appearanceLabel(a: AppearanceView): string {
+  return `${a.roleLabel} ${a.dateShort}${a.timeLabel ? ` · ${a.timeLabel}` : ""}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +474,7 @@ export function sessionDetails(session: Mentor["session"]): SessionDetail[] {
   return [
     row("Format", session.format ? SESSION_FORMAT_LABELS[session.format] : null),
     row("Length", session.durationMinutes ? durationLabel(session.durationMinutes) : null),
-    row("Location", session.location),
+    row("Location", session.location ? [session.location, session.address].filter(Boolean).join(", ") : null),
     row("Sessions", session.sessionCount),
   ];
 }
@@ -638,6 +643,34 @@ export function availabilityNote(mentor: Pick<Mentor, "availability" | "slots">)
   const view = availabilityView(mentor);
   const notes = view.windows.map((w) => w.note).filter((n): n is string => Boolean(n));
   return notes.length === 1 ? notes[0] : null;
+}
+
+/**
+ * The one line under a profile's office-hours lines that states the session rule ("Each session is
+ * 25 minutes, with a 5-minute break between sessions." from `site.officeHours`). Shown when the
+ * mentor has an exact window (or specific slots), so sessions follow the grid, or while scheduling
+ * is in progress; `null` for rough windows only (part of day, time to be confirmed). Never a
+ * session count: how many sessions a mentor holds is theirs to say (Patrick: "one or two").
+ */
+export function sessionRuleLine(mentor: Pick<Mentor, "availability" | "slots">, rule: SessionRule): string | null {
+  const exact = mentor.slots.length > 0 || mentor.availability.some((w) => w.time.kind === "exact");
+  return exact || schedulingStatus(mentor) === "in-progress" ? sessionRuleText(rule) : null;
+}
+
+export interface OfficeHoursPlace {
+  /** e.g. "Business Instructional Facility (BIF)" */
+  venue: string;
+  /** e.g. "515 E. Gregory Drive, Champaign, IL 61820", or null when only the building is known. */
+  address: string | null;
+}
+
+/**
+ * Where a mentor's office hours happen, once the organizers have set the place
+ * (`session.location`, plus `session.address` when known). `null` while the location is pending.
+ */
+export function officeHoursPlace(mentor: Pick<Mentor, "session">): OfficeHoursPlace | null {
+  const { location, address } = mentor.session;
+  return location ? { venue: location, address: address ?? null } : null;
 }
 
 /** Visible label of a mentor card's action (the accessible name adds the mentor's name). */

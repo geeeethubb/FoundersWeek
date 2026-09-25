@@ -1,8 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMemoryDbForTests, type Database } from "@/lib/db/client";
+import { APPLICATION_CSV_COLUMNS, applicationsToCsv } from "@/lib/organizer/csv";
 import { OrganizerActionError } from "@/lib/organizer/errors";
+import { parseApplicationFilters } from "@/lib/organizer/filters";
+import { getApplicationDetail, getSlotHolders, getSlotUsage, listApplications } from "@/lib/organizer/queries";
 import { assignAppointment, updateApplication, updateAppointment, type ActionContext } from "@/lib/organizer/service";
-import { applicationStatus, insertApplication, slotMap } from "./organizer-fixtures";
+import { applicationStatus, directory, insertApplication, slotMap } from "./organizer-fixtures";
 
 let db: Database;
 let ctx: ActionContext;
@@ -182,6 +185,151 @@ describe("assigning appointments", () => {
     expect(await applicationStatus(db, confirmed)).toBe("confirmed");
     await assignAppointment(db, { applicationId: confirmed, slotId: "demo-jordan-slot-1500" }, ctx);
     expect(await applicationStatus(db, confirmed)).toBe("confirmed");
+  });
+});
+
+describe("sessions generated from windows (site.officeHours)", () => {
+  const RISHAB_1200 = "rishab-veldur-2026-10-01-1200";
+
+  it("assigns an application that chose Rishab's window to his 12:00–12:25 PM CT session", async () => {
+    const id = await insertApplication(db, {
+      fullName: "Nadia Brooks",
+      teamName: "PulseFit",
+      mentors: ["rishab-veldur"],
+      availability: ["window:rishab-veldur-2026-10-01"],
+    });
+    const { appointment, applicationStatus: status } = await assignAppointment(db, { applicationId: id, slotId: RISHAB_1200 }, ctx);
+    expect(appointment).toMatchObject({
+      status: "proposed",
+      slotId: RISHAB_1200,
+      mentorId: "rishab-veldur",
+      // 12:00–12:25 PM CDT (UTC-5) on Thu, Oct 1.
+      startsAt: "2026-10-01T17:00:00.000Z",
+      endsAt: "2026-10-01T17:25:00.000Z",
+    });
+    expect(status).toBe("selected");
+    const [row] = await db.query<{ starts_at: Date; ends_at: Date; slot_id: string }>(
+      `select starts_at, ends_at, slot_id from appointments where id = $1`,
+      [appointment.id],
+    );
+    expect(row.slot_id).toBe(RISHAB_1200);
+    expect(new Date(row.starts_at).toISOString()).toBe("2026-10-01T17:00:00.000Z");
+    expect(new Date(row.ends_at).toISOString()).toBe("2026-10-01T17:25:00.000Z");
+    // Who holds the seat, for the Sessions board.
+    expect((await getSlotHolders(db)).get(RISHAB_1200)).toEqual([
+      { appointmentId: appointment.id, applicationId: id, fullName: "Nadia Brooks", teamName: "PulseFit", status: "proposed" },
+    ]);
+    // Patrick's sessions: 10:00, 10:30 and 11:00 AM CDT.
+    const patrick = await insertApplication(db, { mentors: ["patrick-haddox"] });
+    const last = await assignAppointment(db, { applicationId: patrick, slotId: "patrick-haddox-2026-10-01-am-1100" }, ctx);
+    expect(last.appointment).toMatchObject({ startsAt: "2026-10-01T16:00:00.000Z", endsAt: "2026-10-01T16:25:00.000Z" });
+  });
+
+  it("seats one application per session (an individual or a team): the second gets slot_full", async () => {
+    const team = await insertApplication(db, { teamName: "Orbit Relay", mentors: ["rishab-veldur"] });
+    const individual = await insertApplication(db, { mentors: ["rishab-veldur"] });
+    await assignAppointment(db, { applicationId: team, slotId: RISHAB_1200 }, ctx);
+    await expectActionError(
+      assignAppointment(db, { applicationId: individual, slotId: RISHAB_1200 }, ctx),
+      409,
+      "slot_full",
+      /This slot is full \(1\/1\)/,
+    );
+    expect(await activeCount(RISHAB_1200)).toBe(1);
+    expect(await applicationStatus(db, individual)).toBe("submitted");
+    // The next session is free.
+    await expect(
+      assignAppointment(db, { applicationId: individual, slotId: "rishab-veldur-2026-10-01-1230" }, ctx),
+    ).resolves.toBeTruthy();
+  });
+
+  it("gives a session to exactly one of two concurrent assignments (advisory lock on the generated id)", async () => {
+    const [a, b] = [await insertApplication(db), await insertApplication(db)];
+    const results = await Promise.allSettled([
+      assignAppointment(db, { applicationId: a, slotId: "patrick-haddox-2026-10-01-am-1000" }, ctx),
+      assignAppointment(db, { applicationId: b, slotId: "patrick-haddox-2026-10-01-am-1000" }, ctx),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((r): r is PromiseRejectedResult => r.status === "rejected")?.reason).toMatchObject({ code: "slot_full" });
+    expect(await activeCount("patrick-haddox-2026-10-01-am-1000")).toBe(1);
+  });
+
+  it("blocks the same student from two overlapping sessions, across applications and mentors", async () => {
+    // Rishab's 2:00–2:25 PM session and the demo Avery slot at 2:00–2:25 PM are the same time.
+    expect(directory.slotsById.get("rishab-veldur-2026-10-01-1400")).toMatchObject({ start: "14:00", end: "14:25", generated: true });
+    const first = await insertApplication(db, { email: "overlap.student@illinois.edu", mentors: ["rishab-veldur"] });
+    const second = await insertApplication(db, { email: "Overlap.Student@illinois.edu", mentors: ["demo-avery-sample"] });
+    await assignAppointment(db, { applicationId: first, slotId: "rishab-veldur-2026-10-01-1400" }, ctx);
+    await expectActionError(
+      assignAppointment(db, { applicationId: second, slotId: "demo-avery-slot-1400" }, ctx),
+      409,
+      "student_conflict",
+      /overlapping time \(Thu, Oct 1 · 2:00–2:25 PM CT with Rishab Veldur\)/,
+    );
+    // Back-to-back sessions (2:00 and 2:30, with the break between) are fine for the same student.
+    await expect(
+      assignAppointment(db, { applicationId: second, slotId: "demo-avery-slot-1430" }, ctx),
+    ).resolves.toBeTruthy();
+    // Another student can take the overlapping time.
+    const other = await insertApplication(db);
+    await expect(assignAppointment(db, { applicationId: other, slotId: "demo-avery-slot-1400" }, ctx)).resolves.toBeTruthy();
+  });
+
+  it("confirms a session appointment, and the CSV export shows the session time", async () => {
+    const id = await insertApplication(db, {
+      fullName: "Omar Haddad",
+      email: "ohaddad@illinois.edu",
+      mentors: ["rishab-veldur", "patrick-haddox"],
+      availability: ["window:rishab-veldur-2026-10-01", "window:patrick-haddox-2026-10-01-am"],
+    });
+    const { appointment } = await assignAppointment(db, { applicationId: id, slotId: RISHAB_1200 }, ctx);
+    const confirmed = await updateAppointment(db, { id: appointment.id, action: "confirm" }, ctx);
+    expect(confirmed.appointment).toMatchObject({
+      status: "confirmed",
+      startsAt: "2026-10-01T17:00:00.000Z",
+      endsAt: "2026-10-01T17:25:00.000Z",
+    });
+    expect(confirmed.applicationStatus).toBe("confirmed");
+    expect(await getSlotUsage(db)).toEqual(new Map([[RISHAB_1200, { proposed: 0, confirmed: 1 }]]));
+    const detail = await getApplicationDetail(db, id);
+    expect(detail?.activity.map((a) => a.action)).toEqual([
+      "status_changed",
+      "appointment_confirmed",
+      "status_changed",
+      "appointment_proposed",
+    ]);
+    expect(detail?.activity[1].detail).toMatchObject({ slotId: RISHAB_1200, mentorId: "rishab-veldur" });
+
+    const apps = await listApplications(db, parseApplicationFilters({ q: "ohaddad" }));
+    const csv = applicationsToCsv(apps, directory);
+    const [header, row] = csv.split("\r\n");
+    expect(header.split(",")).toEqual([...APPLICATION_CSV_COLUMNS]);
+    expect(row).toContain("Rishab Veldur: Thu, Oct 1 · 12:00–12:25 PM CT (confirmed)");
+    // The student still shows as having chosen the windows.
+    expect(row).toContain("Rishab Veldur: Thu, Oct 1 · 12:00–5:00 PM CT (window)");
+    expect(row).toContain("Confirmed");
+  });
+
+  it("releases a session when its appointment is canceled", async () => {
+    const [a, b] = [await insertApplication(db), await insertApplication(db)];
+    const held = await assignAppointment(db, { applicationId: a, slotId: RISHAB_1200 }, ctx);
+    await updateAppointment(db, { id: held.appointment.id, action: "cancel" }, ctx);
+    await expect(assignAppointment(db, { applicationId: b, slotId: RISHAB_1200 }, ctx)).resolves.toBeTruthy();
+    expect(await activeCount(RISHAB_1200)).toBe(1);
+  });
+
+  it("rejects a session time that isn't on the grid (Rishab has no 5:00 PM session)", async () => {
+    const id = await insertApplication(db);
+    await expectActionError(
+      assignAppointment(db, { applicationId: id, slotId: "rishab-veldur-2026-10-01-1700" }, ctx),
+      404,
+      "slot_not_found",
+    );
+    await expectActionError(
+      assignAppointment(db, { applicationId: id, slotId: "rishab-veldur-2026-10-01-1215" }, ctx),
+      404,
+      "slot_not_found",
+    );
   });
 });
 

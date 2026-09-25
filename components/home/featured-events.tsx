@@ -11,11 +11,12 @@
  * Server component.
  */
 import Link from "next/link";
+import { Fragment } from "react";
 import { cn } from "@/lib/cn";
 import { InvolvementBadge } from "@/components/ui/badge";
 import { ArrowRightIcon, CalendarIcon, MapPinIcon } from "@/components/ui/icons";
 import { Container } from "@/components/ui/primitives";
-import type { FeaturedEventView } from "./home-model";
+import { placeRuns, type FeaturedEventView } from "./home-model";
 
 export function FeaturedEvents({ events, calendarNote }: { events: FeaturedEventView[]; calendarNote: string | null }) {
   return (
@@ -92,7 +93,16 @@ function EventCard({ event: e }: { event: FeaturedEventView }) {
             <span className="sr-only">Where</span>
           </dt>
           <dd className="text-charcoal">
-            {e.place}
+            {/* The room never breaks ("Auditorium (Room 1025)"): on phones it moves to the next line whole. */}
+            {placeRuns(e.place, e.room).map((run, i) =>
+              run.keep ? (
+                <span key={i} className="whitespace-nowrap">
+                  {run.text}
+                </span>
+              ) : (
+                <Fragment key={i}>{run.text}</Fragment>
+              ),
+            )}
             {e.address ? <span className="mt-0.5 block text-sm text-text-subtle">{e.address}</span> : null}
           </dd>
         </div>

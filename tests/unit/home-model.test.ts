@@ -19,9 +19,11 @@ import {
   namesText,
   officeHoursSentence,
   officialDates,
+  placeRuns,
   placeText,
   previewAvailability,
   relatedEventsStart,
+  roomText,
   shortDate,
   timeText,
 } from "@/components/home/home-model";
@@ -48,6 +50,8 @@ const RISHAB_AVAILABILITY = {
   known: true,
   date: "Thu, Oct 1",
   time: "12:00–5:00 PM CT",
+  // An exact range: shown unbroken on the home page.
+  exact: true,
   dateTime: "2026-10-01",
   more: 0,
 };
@@ -57,6 +61,7 @@ const DATE_ONLY_AVAILABILITY = {
   known: true,
   date: "Thu, Oct 1",
   time: "Exact time to be confirmed",
+  exact: false,
   dateTime: "2026-10-01",
   more: 0,
 };
@@ -152,13 +157,33 @@ describe("home model (public data)", () => {
       ["Co-Founder & CEO", "Auvi Labs"],
     ]);
     expect(previews.map((p) => p.availability)).toEqual([
-      { known: true, date: "Thu, Oct 1", time: "10:00–11:30 AM CT", dateTime: "2026-10-01", more: 0 },
-      { known: true, date: "Fri, Oct 2", time: "Morning, before noon CT", dateTime: "2026-10-02", more: 0 },
+      { known: true, date: "Thu, Oct 1", time: "10:00–11:30 AM CT", exact: true, dateTime: "2026-10-01", more: 0 },
+      // Arnav's Friday window has been exact since Sept 24.
+      { known: true, date: "Fri, Oct 2", time: "10:00–11:30 AM CT", exact: true, dateTime: "2026-10-02", more: 0 },
+      // Only Vik and Elliott are still scheduling.
       { known: false, label: "Scheduling in progress" },
       { known: false, label: "Scheduling in progress" },
-      { known: false, label: "Scheduling in progress" },
+      // Ron's Thursday window at BIF is exact.
+      { known: true, date: "Thu, Oct 1", time: "2:30–4:30 PM CT", exact: true, dateTime: "2026-10-01", more: 0 },
       RISHAB_AVAILABILITY,
     ]);
+  });
+
+  it("previews Ron: Thu, Oct 1 · 2:30–4:30 PM CT, and nothing about Oct 4", () => {
+    const ron = mentorPreviews(getMentors()).find((p) => p.id === "ron-lewis")!;
+    expect(ron).toEqual({
+      id: "ron-lewis",
+      name: "Ron Lewis",
+      role: "Co-Founder",
+      company: "Auctus Advisory",
+      headshot: { src: "/mentors/ron-lewis.jpg", alt: "Ron Lewis", width: 800, height: 800 },
+      href: "/office-hours/ron-lewis",
+      availability: { known: true, date: "Thu, Oct 1", time: "2:30–4:30 PM CT", exact: true, dateTime: "2026-10-01", more: 0 },
+    });
+    const a = ron.availability;
+    expect(a.known && `${a.date} · ${a.time}`).toBe("Thu, Oct 1 · 2:30–4:30 PM CT");
+    // His openness to Oct 4 is organizer-only.
+    expect(JSON.stringify(ron)).not.toMatch(/Oct 4|October 4|2026-10-04|Scheduling in progress/);
   });
 
   it("previews Rishab last: Thu, Oct 1 · 12:00–5:00 PM CT, never Oct 2", () => {
@@ -191,6 +216,8 @@ describe("home model (public data)", () => {
     // Rishab's organizer-only notes (team preference, phone, Oct 2 presence) and his bio stay off.
     expect(json).not.toMatch(/student teams|phone number|email signature|Oct 1 and 2|dialysis|Cozad|Medtech/i);
     expect(json).not.toMatch(/FDA|clinically|commercially available|Beacon|one-on-one/i);
+    // Ron's openness to Oct 4 and his organizer update stay off.
+    expect(json).not.toMatch(/Oct 4|October 4|2026-10-04|organizer update/i);
   });
 
   it("lists the earliest window first and counts the rest", () => {
@@ -202,10 +229,36 @@ describe("home model (public data)", () => {
       ],
       slots: [],
     });
-    expect(a).toEqual({ known: true, date: "Thu, Oct 1", time: "9:00–10:00 AM CT", dateTime: "2026-10-01", more: 2 });
+    expect(a).toEqual({
+      known: true,
+      date: "Thu, Oct 1",
+      time: "9:00–10:00 AM CT",
+      exact: true,
+      dateTime: "2026-10-01",
+      more: 2,
+    });
     expect(previewAvailability({ availability: [], slots: [] })).toEqual({
       known: false,
       label: "Scheduling in progress",
+    });
+  });
+
+  it("words a part-of-day window (fixture) as 'Morning, before noon CT', which isn't a range and may wrap", () => {
+    const [preview] = mentorPreviews([
+      {
+        ...DATE_ONLY_MENTOR,
+        availability: [
+          { id: "fixture-date-only-2026-10-02-am", date: "2026-10-02", time: { kind: "part-of-day", part: "morning", before: "12:00" } },
+        ],
+      },
+    ]);
+    expect(preview.availability).toEqual({
+      known: true,
+      date: "Fri, Oct 2",
+      time: "Morning, before noon CT",
+      exact: false,
+      dateTime: "2026-10-02",
+      more: 0,
     });
   });
 
@@ -263,6 +316,7 @@ describe("home model (public data)", () => {
       time: "4:00 PM CT",
       dateTime: "2026-09-28T16:00",
       place: "Beckman Institute, Auditorium (Room 1025)",
+      room: "Auditorium (Room 1025)",
       address: "405 N. Mathews Ave., Urbana, IL 61801",
     });
     expect(panel).toEqual({
@@ -274,8 +328,43 @@ describe("home model (public data)", () => {
       time: "6:00–8:00 PM CT",
       dateTime: "2026-09-29T18:00",
       place: "Materials Science and Engineering Building, Room 100",
+      room: "Room 100",
       address: "1304 W. Green St., Urbana, IL 61801",
     });
+  });
+
+  it("splits a place around its room so the room is kept whole on phones", () => {
+    const views = homeFeaturedEvents(getScheduleEntries()).map(featuredEventView);
+    const runs = (id: string) => {
+      const v = views.find((x) => x.id === id)!;
+      return placeRuns(v.place, v.room);
+    };
+    expect(runs("dan-caruso-fireside-chat")).toEqual([
+      { text: "Beckman Institute, ", keep: false },
+      { text: "Auditorium (Room 1025)", keep: true },
+    ]);
+    expect(runs("how-to-make-10k-a-month-in-college")).toEqual([
+      { text: "Materials Science and Engineering Building, ", keep: false },
+      { text: "Room 100", keep: true },
+    ]);
+    expect(runs("founder-failure-lab")).toEqual([
+      { text: "Campus Instructional Facility (CIF), ", keep: false },
+      { text: "Room 1038", keep: true },
+    ]);
+    // No room: one run, nothing kept together.
+    expect(runs("happy-hour-at-legends-with-arnav-mishra")).toEqual([{ text: "Legends", keep: false }]);
+    expect(views.find((x) => x.id === "happy-hour-at-legends-with-arnav-mishra")!.room).toBeNull();
+    // The runs always spell the place exactly; a hybrid room keeps its " and online" after it.
+    for (const v of views) expect(placeRuns(v.place, v.room).map((r) => r.text).join("")).toBe(v.place);
+    const hybrid: EventLocation = { kind: "hybrid", venue: "Siebel Center", room: "Room 2405" };
+    expect(placeRuns(placeText(hybrid), roomText(hybrid))).toEqual([
+      { text: "Siebel Center, ", keep: false },
+      { text: "Room 2405", keep: true },
+      { text: " and online", keep: false },
+    ]);
+    expect(roomText({ kind: "tba" })).toBeNull();
+    expect(roomText({ kind: "virtual", platform: "Zoom" })).toBeNull();
+    expect(placeRuns("Location to be announced", null)).toEqual([{ text: "Location to be announced", keep: false }]);
   });
 
   it("says plainly when a time or place isn't announced", () => {

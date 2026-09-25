@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { demoMentors } from "@/content/demo";
 import { mentors } from "@/content/mentors";
+import { site } from "@/content/site";
 import type { Mentor } from "@/content/types";
 import {
   APPLICATION_CSV_COLUMNS,
@@ -59,7 +60,7 @@ describe("CSV fields (RFC 4180)", () => {
 });
 
 describe("application CSV rows", () => {
-  const directory = buildOrganizerDirectory([...mentors, ...demoMentors]);
+  const directory = buildOrganizerDirectory([...mentors, ...demoMentors], site.officeHours);
   const app: ApplicationRecord = {
     id: "0b5c7b8e-6f1e-4a8e-9a57-0c1f5f1e2d3a",
     createdAt: "2026-09-23T19:15:00.000Z",
@@ -199,7 +200,7 @@ describe("application CSV rows", () => {
       acceptingApplications: true,
       sources: [],
     };
-    const withDateOnly = buildOrganizerDirectory([...mentors, dateOnlyMentor]);
+    const withDateOnly = buildOrganizerDirectory([...mentors, dateOnlyMentor], site.officeHours);
     const row = applicationCsvRow(
       {
         ...app,
@@ -241,5 +242,43 @@ describe("application CSV rows", () => {
     expect(row[APPLICATION_CSV_COLUMNS.indexOf("availability")]).toBe(
       "Rishab Veldur: Window rishab-veldur-2026-10-02 (no longer listed) (window)",
     );
+  });
+
+  it("exports the session an application was assigned to (window chosen, 25-minute session booked)", () => {
+    const appointment = (slotId: string, startsAt: string, endsAt: string, status: "proposed" | "confirmed" | "canceled") => ({
+      ...app.appointments[0],
+      id: slotId,
+      mentorId: slotId.startsWith("rishab") ? "rishab-veldur" : "patrick-haddox",
+      slotId,
+      startsAt,
+      endsAt,
+      status,
+    });
+    const row = applicationCsvRow(
+      {
+        ...app,
+        mentors: [
+          { mentorId: "rishab-veldur", rank: 1 },
+          { mentorId: "patrick-haddox", rank: 2 },
+        ],
+        firstChoiceMentorId: "rishab-veldur",
+        availability: [
+          { mentorId: "patrick-haddox", kind: "window", optionId: "patrick-haddox-2026-10-01-am" },
+          { mentorId: "rishab-veldur", kind: "window", optionId: "rishab-veldur-2026-10-01" },
+        ],
+        appointments: [
+          // 10:30–10:55 AM CDT and 12:00–12:25 PM CDT (UTC-5).
+          appointment("patrick-haddox-2026-10-01-am-1030", "2026-10-01T15:30:00.000Z", "2026-10-01T15:55:00.000Z", "canceled"),
+          appointment("rishab-veldur-2026-10-01-1200", "2026-10-01T17:00:00.000Z", "2026-10-01T17:25:00.000Z", "confirmed"),
+        ],
+      },
+      directory,
+    );
+    const cell = (column: (typeof APPLICATION_CSV_COLUMNS)[number]) => row[APPLICATION_CSV_COLUMNS.indexOf(column)];
+    // What the student chose: the windows. What they got: the session (canceled ones left out).
+    expect(cell("availability")).toBe(
+      "Patrick Haddox: Thu, Oct 1 · 10:00–11:30 AM CT (window); Rishab Veldur: Thu, Oct 1 · 12:00–5:00 PM CT (window)",
+    );
+    expect(cell("appointments")).toBe("Rishab Veldur: Thu, Oct 1 · 12:00–12:25 PM CT (confirmed)");
   });
 });

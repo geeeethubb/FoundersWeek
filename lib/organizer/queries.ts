@@ -272,6 +272,45 @@ export async function getSlotUsage(db: Queryable): Promise<Map<string, SlotUsage
   return usage;
 }
 
+/** An application holding a seat in a session (an active appointment). */
+export interface SlotHolder {
+  appointmentId: string;
+  applicationId: string;
+  fullName: string;
+  teamName: string | null;
+  status: Exclude<AppointmentStatus, "canceled">;
+}
+
+/** Who holds each session's seats (proposed or confirmed), per slot id, earliest assignment first. */
+export async function getSlotHolders(db: Queryable): Promise<Map<string, SlotHolder[]>> {
+  const rows = await db.query<{
+    id: string;
+    slot_id: string;
+    application_id: string;
+    full_name: string;
+    team_name: string | null;
+    status: SlotHolder["status"];
+  }>(
+    `select ap.id, ap.slot_id, ap.application_id, a.full_name, a.team_name, ap.status
+       from appointments ap join applications a on a.id = ap.application_id
+      where ap.status <> 'canceled'
+      order by ap.created_at, ap.id`,
+  );
+  const holders = new Map<string, SlotHolder[]>();
+  for (const r of rows) {
+    const list = holders.get(r.slot_id) ?? [];
+    list.push({
+      appointmentId: String(r.id),
+      applicationId: String(r.application_id),
+      fullName: r.full_name,
+      teamName: r.team_name || null,
+      status: r.status,
+    });
+    holders.set(r.slot_id, list);
+  }
+  return holders;
+}
+
 export interface MentorInterest {
   /** Active (not canceled) applications listing this mentor. */
   any: number;

@@ -2,6 +2,7 @@
  * Office-hours application vocabulary shared by the public form, the API, the student
  * status page and the organizer view. Database values are the keys.
  */
+import type { SessionRule } from "@/lib/schedule/sessions";
 
 export const APPLICATION_STATUSES = [
   "submitted",
@@ -90,4 +91,34 @@ export const APPLICATION_COPY = {
   limited:
     "Appointments are limited. Founders will match applicants by interests and availability, then email selected students to confirm.",
   noReservation: "Submitting an application doesn’t reserve a time slot.",
+} as const;
+
+/** The part of the session rule (`site.officeHours`) students need where they apply and hear back. */
+export type SessionLength = Pick<SessionRule, "sessionMinutes">;
+
+/**
+ * The session rule as each application surface says it, built from `site.officeHours` (never a
+ * hard-coded number). Students apply to windows; if they're matched, Founders emails them one
+ * specific session inside it. Each surface says this once, and applying still reserves nothing.
+ */
+export const SESSION_COPY = {
+  /**
+   * Application form, under "Can you make these times?": "Sessions are 25 minutes. If you’re
+   * matched, Founders will email you a specific session time inside the window you picked."
+   * (without the last part when a listed time is already a specific slot).
+   */
+  formTimes: (rule: SessionLength, windowsOnly: boolean) =>
+    `Sessions are ${rule.sessionMinutes} minutes. If you’re matched, Founders will email you a specific session time${
+      windowsOnly ? " inside the window you picked" : ""
+    }.`,
+  /** Application form, end of the broad-availability hint when no times are listed: "Sessions are 25 minutes." */
+  formLength: (rule: SessionLength) => `Sessions are ${rule.sessionMinutes} minutes.`,
+  /** Confirmation screen: "… Founders will email you@illinois.edu with a specific time for a 25-minute session." */
+  confirmation: (rule: SessionLength) => `with a specific time for a ${rule.sessionMinutes}-minute session`,
+  /** Acknowledgment email, after APPLICATION_COPY.limited. */
+  email: (rule: SessionLength) =>
+    `Each session is ${rule.sessionMinutes} minutes, and if you’re matched, that email will include a specific session time.`,
+  /** Status page, while there's no appointment yet. */
+  status: (rule: SessionLength) =>
+    `No appointment yet. If you’re matched, your ${rule.sessionMinutes}-minute session will show up here.`,
 } as const;

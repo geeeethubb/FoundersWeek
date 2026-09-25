@@ -7,6 +7,7 @@ import { ArrowRightIcon } from "@/components/ui/icons";
 import { Container, Notice } from "@/components/ui/primitives";
 import { PRIMARY_CTA_LABEL } from "@/lib/mentors";
 import { APPLY_ANCHOR } from "@/lib/schedule/entries";
+import { sessionRuleText } from "@/lib/schedule/sessions";
 import { numberWord } from "@/lib/words";
 
 /**
@@ -15,7 +16,8 @@ import { numberWord } from "@/lib/words";
  * 1. A short introduction and the Apply button (→ #apply).
  * 2. One grid of mentor cards (`#mentors`); each card's "Select mentor" opens the application
  *    with that mentor preselected, and "Profile" leads to /office-hours/<id>.
- * 3. A brief explanation of how matching works.
+ * 3. A brief explanation of how matching works, including the session rule (length and break from
+ *    `site.officeHours`), said once on the page.
  * 4. The application itself (`<ApplySection>`, `#apply`).
  *
  * Dynamic: the application reads ?mentor=…&window=…|slot=… to preselect a mentor, so every mentor
@@ -123,7 +125,9 @@ export default async function OfficeHoursPage({ searchParams }: PageProps) {
                 your general availability instead.
               </p>
               <p className="text-text">{MATCHING_SENTENCE}</p>
-              <p>Appointments are limited, and applying doesn’t reserve a time.</p>
+              <p>
+                {sessionRuleText(site.officeHours)} Appointments are limited, and applying doesn’t reserve a time.
+              </p>
             </div>
           </div>
         </Container>

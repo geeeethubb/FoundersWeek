@@ -23,6 +23,7 @@ import type {
 import { OFFICE_HOURS_ID_PREFIX } from "@/content/validate";
 import { APPLICATION_COPY } from "@/lib/applications/constants";
 import { describeTime, exactInterval, formatDate, timeSortMinutes } from "@/lib/time";
+import { sessionRuleText } from "./sessions";
 
 export type CalendarAvailability = { available: true } | { available: false; reason: string };
 
@@ -62,6 +63,12 @@ export interface ScheduleEntry {
   related: boolean;
   /** Informational note for the event page (no call to action). */
   callout: { title: string; body: string } | null;
+  /**
+   * Office hours with an exact window: how sessions run, from `site.officeHours` ("Each session is
+   * 25 minutes, with a 5-minute break between sessions."). Never a session count. `null` for events
+   * and for rough windows (part of day, time to be confirmed), as on mentor profiles.
+   */
+  sessionRule: string | null;
   sources: SourceRef[];
   mentor: {
     id: string;
@@ -187,6 +194,7 @@ export function eventToEntry(event: ScheduleEvent): ScheduleEntry {
     featuredRank: event.featured?.rank ?? null,
     related: Boolean(event.related),
     callout: event.callout ?? null,
+    sessionRule: null,
     sources: event.sources,
     mentor: null,
     demo: Boolean(event.demo),
@@ -233,7 +241,7 @@ export function officeHoursToEntries(mentor: Mentor, site: SiteSettings): Schedu
       ? null
       : "Location is shared with selected students once confirmed.";
     const location: EventLocation = mentor.session.location
-      ? { kind: "in-person", venue: mentor.session.location }
+      ? { kind: "in-person", venue: mentor.session.location, ...(mentor.session.address ? { address: mentor.session.address } : {}) }
       : { kind: "tba", note: locationNote ?? undefined };
 
     const intro = `${mentor.name}${affiliation ? ` (${affiliation})` : ""} is available for office hours: ${when}.`;
@@ -241,7 +249,9 @@ export function officeHoursToEntries(mentor: Mentor, site: SiteSettings): Schedu
     // Skip the "not a booked appointment" line when the mentor's note already says so.
     const notBooked =
       note && /booked appointment/i.test(note) ? null : "This is an availability window, not a booked appointment.";
-    const how = [notBooked, APPLICATION_COPY.limited].filter(Boolean).join(" ");
+    // Exact windows are split into sessions on the site's grid (lib/schedule/sessions.ts).
+    const sessionRule = window.time.kind === "exact" ? sessionRuleText(site.officeHours) : null;
+    const how = [notBooked, sessionRule, APPLICATION_COPY.limited].filter(Boolean).join(" ");
     const description = [intro, note, how].filter(Boolean).join("\n\n");
 
     return {
@@ -275,6 +285,7 @@ export function officeHoursToEntries(mentor: Mentor, site: SiteSettings): Schedu
       featuredRank: OFFICE_HOURS_FEATURED_RANK,
       related: false,
       callout: null,
+      sessionRule,
       sources: mentor.sources,
       mentor: {
         id: mentor.id,

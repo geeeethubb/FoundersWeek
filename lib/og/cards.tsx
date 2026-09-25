@@ -71,7 +71,7 @@ function Frame({ logo, label, children }: { logo: Logo; label: string; children:
         color: C.text,
         fontFamily: OG_FONT_FAMILY,
         fontWeight: 500,
-        padding: "52px 72px 56px",
+        padding: `52px ${OG_LAYOUT.framePaddingX}px 56px`,
       }}
     >
       <div
@@ -128,25 +128,44 @@ function Arrow({ size = 22, color = "currentColor" }: { size?: number; color?: s
   );
 }
 
+/**
+ * Layout numbers shared with tests (tests/unit/home-og.test.ts measures the site card's first-name
+ * line against the room left beside the CTA, using the real font metrics).
+ */
+export const OG_LAYOUT = {
+  /** Frame side padding: the content box is 1200 − 2 × 72 = 1056px wide. */
+  framePaddingX: 72,
+  cta: { fontSize: 25, paddingX: 26, gap: 14, arrow: 22, letterSpacingEm: -0.01 },
+  site: {
+    /** Gap between the people block and the CTA. */
+    rowGap: 32,
+    faceSize: 72,
+    faceOverlap: 12,
+    /** The first-name line under the faces ("Patrick, Arnav, Vik, Elliott, Ron and Rishab"). */
+    namesFontSize: 22,
+  },
+} as const;
+
 function CtaPill({ label }: { label: string }) {
+  const { cta } = OG_LAYOUT;
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 14,
+        gap: cta.gap,
         backgroundColor: C.accent,
         color: C.text,
         borderRadius: 8,
-        padding: "16px 26px",
-        fontSize: 25,
+        padding: `16px ${cta.paddingX}px`,
+        fontSize: cta.fontSize,
         flexShrink: 0,
         fontWeight: 700,
-        letterSpacing: "-0.01em",
+        letterSpacing: `${cta.letterSpacingEm}em`,
       }}
     >
       <div style={{ display: "flex" }}>{label}</div>
-      <Arrow size={22} color={C.text} />
+      <Arrow size={cta.arrow} color={C.text} />
     </div>
   );
 }
@@ -209,6 +228,7 @@ function Headshot({
 export async function renderSiteCard(model: SiteCardModel): Promise<ImageResponse> {
   const [logo, photos] = await Promise.all([loadLogo(64), headshots(model.people)]);
   const shown = model.people.slice(0, 6);
+  const layout = OG_LAYOUT.site;
   return render(
     <Frame logo={logo} label={model.label}>
       <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
@@ -225,23 +245,21 @@ export async function renderSiteCard(model: SiteCardModel): Promise<ImageRespons
           <div style={{ display: "flex", marginTop: 20, fontSize: 28, color: C.muted }}>{model.sub}</div>
         ) : null}
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 32 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 1 }}>
+      {/* Faces with the first names on one line underneath (beside the faces, a long name like
+          "Elliott" was squeezed under the CTA), and the CTA to the right. */}
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: layout.rowGap }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, flexShrink: 1, minWidth: 0 }}>
           {shown.length ? (
             <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
               {shown.map((p, i) => (
-                <div key={p.id} style={{ display: "flex", marginLeft: i === 0 ? 0 : -14 }}>
-                  <Headshot person={p} src={photos.get(p.id)} size={80} radius={40} ring={4} />
+                <div key={p.id} style={{ display: "flex", marginLeft: i === 0 ? 0 : -layout.faceOverlap }}>
+                  <Headshot person={p} src={photos.get(p.id)} size={layout.faceSize} radius={layout.faceSize / 2} ring={4} />
                 </div>
               ))}
             </div>
           ) : null}
           {model.peopleLine ? (
-            <Words
-              text={model.peopleLine}
-              fontSize={22}
-              style={{ color: C.charcoal, maxWidth: 280, lineHeight: 1.35 }}
-            />
+            <Words text={model.peopleLine} fontSize={layout.namesFontSize} style={{ color: C.charcoal, lineHeight: 1.3 }} />
           ) : null}
         </div>
         {model.cta ? <CtaPill label={model.cta} /> : null}

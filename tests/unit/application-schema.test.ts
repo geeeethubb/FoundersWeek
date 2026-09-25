@@ -4,7 +4,12 @@ import { mentors } from "@/content/mentors";
 import type { Mentor } from "@/content/types";
 import { buildApplicationCatalog, mentorNeedsBroadAvailability } from "@/lib/applications/catalog";
 import { LIMITS } from "@/lib/applications/constants";
-import { createApplicationSchema, emptyApplicationValues, toFieldErrors } from "@/lib/applications/schema";
+import {
+  createApplicationSchema,
+  emptyApplicationValues,
+  stripControlChars,
+  toFieldErrors,
+} from "@/lib/applications/schema";
 
 const catalog = buildApplicationCatalog([...mentors, ...demoMentors]);
 const schema = createApplicationSchema({ catalog, emailDomains: ["illinois.edu"] });
@@ -63,8 +68,33 @@ describe("application catalog", () => {
     const byId = Object.fromEntries(catalog.mentors.map((m) => [m.id, m]));
     expect(byId["patrick-haddox"].scheduling).toBe("available");
     expect(byId["patrick-haddox"].options.map((o) => o.key)).toEqual(["window:patrick-haddox-2026-10-01-am"]);
-    expect(byId["arnav-mishra"].options[0].label).toBe("Fri, Oct 2 · Friday morning, before noon · Exact window pending");
-    expect(byId["ron-lewis"]).toMatchObject({ scheduling: "in-progress", options: [] });
+    // Arnav's window became exact on Sept 24 (same id, so existing applications still match it).
+    expect(byId["arnav-mishra"].options.map((o) => [o.key, o.label, o.timeKnown])).toEqual([
+      ["window:arnav-mishra-2026-10-02-am", "Fri, Oct 2 · 10:00–11:30 AM CT", true],
+    ]);
+    // A part-of-day window (fixture) keeps its display label.
+    const rough: Mentor = {
+      ...DATE_ONLY_MENTOR,
+      id: "fixture-riley",
+      name: "Riley Fixture",
+      firstName: "Riley",
+      availability: [
+        {
+          id: "fixture-riley-2026-10-02-am",
+          date: "2026-10-02",
+          time: { kind: "part-of-day", part: "morning", before: "12:00" },
+          label: "Friday morning, before noon · Exact window pending",
+        },
+      ],
+    };
+    expect(buildApplicationCatalog([rough]).mentors[0].options[0].label).toBe(
+      "Fri, Oct 2 · Friday morning, before noon · Exact window pending",
+    );
+    // Ron's window became exact on Sept 24: Thu, Oct 1, 2:30–4:30 PM CT.
+    expect(byId["ron-lewis"].scheduling).toBe("available");
+    expect(byId["ron-lewis"].options.map((o) => [o.key, o.label, o.timeKnown])).toEqual([
+      ["window:ron-lewis-2026-10-01-pm", "Thu, Oct 1 · 2:30–4:30 PM CT", true],
+    ]);
     expect(byId["vikram-lakhwara"]).toMatchObject({ scheduling: "in-progress", options: [] });
     expect(byId["elliott-notrica"]).toMatchObject({ scheduling: "in-progress", options: [] });
     // Demo mentor with slots: slots replace the window.
@@ -116,17 +146,15 @@ describe("application catalog", () => {
     expect(others.filter((o) => !o.timeKnown).map((o) => o.key)).toEqual([]);
   });
 
-  it("needs broad availability exactly for mentors without a known time (Vik, Elliott, Ron; not Rishab)", () => {
+  it("needs broad availability exactly for mentors without a known time (Vik, Elliott; not Ron or Rishab)", () => {
     expect(catalog.mentors.filter((m) => mentorNeedsBroadAvailability(m)).map((m) => m.id)).toEqual([
       "vikram-lakhwara",
       "elliott-notrica",
-      "ron-lewis",
     ]);
     // A mentor with only a date-only window needs it too.
     expect(fixtureCatalog.mentors.filter((m) => mentorNeedsBroadAvailability(m)).map((m) => m.id)).toEqual([
       "vikram-lakhwara",
       "elliott-notrica",
-      "ron-lewis",
       "fixture-casey",
     ]);
     // No options at all counts as "no known time".
@@ -202,10 +230,10 @@ describe("Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
     if (both.success) expect(both.data.availability).toEqual([PATRICK_WINDOW, RISHAB_WINDOW]);
   });
 
-  it("with mentors still scheduling, names only them (Vik, Elliott, Ron), in the order chosen", () => {
+  it("with mentors still scheduling, names only them (Vik, Elliott), in the order chosen", () => {
     const r = schema.safeParse(
       valid({
-        mentorIds: ["vikram-lakhwara", "rishab-veldur", "ron-lewis"],
+        mentorIds: ["vikram-lakhwara", "rishab-veldur", "elliott-notrica"],
         firstChoiceMentorId: "rishab-veldur",
         availability: [RISHAB_WINDOW],
         availabilityNotes: "",
@@ -214,12 +242,12 @@ describe("Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
     expect(r.success).toBe(false);
     if (!r.success) {
       expect(toFieldErrors(r.error)).toEqual({
-        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik and Ron’s times aren’t set yet.",
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik and Elliott’s times aren’t set yet.",
       });
     }
     const all = schema.safeParse(
       valid({
-        mentorIds: ["vikram-lakhwara", "elliott-notrica", "rishab-veldur", "ron-lewis"],
+        mentorIds: ["elliott-notrica", "ron-lewis", "rishab-veldur", "vikram-lakhwara"],
         firstChoiceMentorId: "rishab-veldur",
         availability: [RISHAB_WINDOW],
         availabilityNotes: "",
@@ -227,8 +255,9 @@ describe("Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
     );
     expect(all.success).toBe(false);
     if (!all.success) {
+      // Ron has a set time now (Thu 2:30–4:30 PM), so he's never named, ticked or not.
       expect(toFieldErrors(all.error)).toEqual({
-        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik, Elliott and Ron’s times aren’t set yet.",
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Elliott and Vik’s times aren’t set yet.",
       });
     }
   });
@@ -324,7 +353,7 @@ describe("a mentor with a date-only window (fixture: Thu, Oct 1, exact time to b
   it("names the mentor with the mentors still scheduling, in the order chosen (Rishab never)", () => {
     const r = fixtureSchema.safeParse(
       valid({
-        mentorIds: ["vikram-lakhwara", "fixture-casey", "rishab-veldur", "ron-lewis"],
+        mentorIds: ["vikram-lakhwara", "fixture-casey", "rishab-veldur", "elliott-notrica"],
         firstChoiceMentorId: "fixture-casey",
         availability: [DATE_ONLY_WINDOW, "window:rishab-veldur-2026-10-01"],
         availabilityNotes: "",
@@ -333,7 +362,7 @@ describe("a mentor with a date-only window (fixture: Thu, Oct 1, exact time to b
     expect(r.success).toBe(false);
     if (!r.success) {
       expect(toFieldErrors(r.error)).toEqual({
-        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik, Casey and Ron’s times aren’t set yet.",
+        availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik, Casey and Elliott’s times aren’t set yet.",
       });
     }
   });
@@ -359,7 +388,7 @@ describe("application schema", () => {
   it("never blocks on mentors whose schedule is pending: broad availability is enough", () => {
     const r = schema.safeParse(
       valid({
-        mentorIds: ["ron-lewis", "vikram-lakhwara"],
+        mentorIds: ["elliott-notrica", "vikram-lakhwara"],
         firstChoiceMentorId: "vikram-lakhwara",
         availability: [],
         availabilityNotes: "Thursday mornings, anytime Friday",
@@ -420,13 +449,14 @@ describe("application schema", () => {
     expect(pending.success).toBe(false);
     if (!pending.success) {
       expect(toFieldErrors(pending.error).availabilityNotes).toBe(
-        "Tell us when you’re generally free during Founders Week. Vik, Elliott and Ron’s times aren’t set yet.",
+        "Tell us when you’re generally free during Founders Week. Vik and Elliott’s times aren’t set yet.",
       );
     }
   });
 
   it("requires either a ticked window or broad availability (error key availabilityNotes)", () => {
-    // Only Ron, nothing about availability → one clear error on the broad-availability answer.
+    // Only Ron (his window not ticked), nothing about availability → one clear error on the
+    // broad-availability answer.
     const ronOnly = schema.safeParse(
       valid({ mentorIds: ["ron-lewis"], firstChoiceMentorId: "ron-lewis", availability: [], availabilityNotes: "" }),
     );
@@ -494,5 +524,90 @@ describe("application schema", () => {
     const r = schema.safeParse(valid({ question: Array(100).fill("w").join(" "), link: "example.com/deck" }));
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.link).toBe("https://example.com/deck");
+  });
+
+  it("rejects a link over the limit with its own message (the form no longer truncates it)", () => {
+    const r = schema.safeParse(valid({ link: `https://example.com/${"a".repeat(LIMITS.link)}` }));
+    expect(r.success).toBe(false);
+    if (!r.success) expect(toFieldErrors(r.error)).toEqual({ link: `Keep links under ${LIMITS.link} characters.` });
+  });
+});
+
+describe("control characters pasted into answers", () => {
+  const NUL = String.fromCharCode(0);
+  const BELL = String.fromCharCode(7);
+  const ESC = String.fromCharCode(27);
+  const DEL = String.fromCharCode(127);
+  const C1 = String.fromCharCode(0x85);
+  const JUNK = [NUL, BELL, ESC, DEL, C1];
+  /** Any control character left over (tab and line feed allowed). */
+  const hasControl = (v: string) => [...v].some((c) => /\p{Cc}/u.test(c) && c !== "\t" && c !== "\n");
+
+  it("strips every control character except tabs and line breaks, and normalizes CRLF", () => {
+    expect(stripControlChars(`a${NUL}b${BELL}c${ESC}d${DEL}e${C1}f`)).toBe("abcdef");
+    expect(stripControlChars("line one\r\nline two\rline three\n\tindented")).toBe("line one\nline two\nline three\n\tindented");
+    // Ordinary text (curly quotes, accents, emoji-free Unicode) is untouched.
+    expect(stripControlChars("Café “MVP” – ready")).toBe("Café “MVP” – ready");
+  });
+
+  it("removes them from every free-text answer (NUL included) before storing", () => {
+    const r = schema.safeParse(
+      valid({
+        fullName: `Alex${NUL} Student${BELL}`,
+        email: `Alex${NUL}@Illinois.edu`,
+        major: `Computer${NUL} Engineering`,
+        participation: "team",
+        teamName: `Orbit${ESC}`,
+        teammates: `Priya${NUL} Shah`,
+        workingOn: `A satellite${NUL} telemetry dashboard.${DEL}`,
+        question: `${C1}How do I find${NUL} my first customers?\r\nAnd price it?`,
+        availabilityNotes: `Thursday${NUL} mornings`,
+        link: `example.com/deck${NUL}`,
+      }),
+    );
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    const d = r.data;
+    expect(d).toMatchObject({
+      fullName: "Alex Student",
+      email: "alex@illinois.edu",
+      major: "Computer Engineering",
+      teamName: "Orbit",
+      teammates: "Priya Shah",
+      workingOn: "A satellite telemetry dashboard.",
+      question: "How do I find my first customers?\nAnd price it?",
+      availabilityNotes: "Thursday mornings",
+      link: "https://example.com/deck",
+    });
+    for (const value of Object.values(d)) {
+      if (typeof value === "string") expect(hasControl(value), JSON.stringify(value)).toBe(false);
+    }
+  });
+
+  it("strips before the length, word and required checks", () => {
+    // Exactly at the limit once the NULs are gone.
+    const name = "a".repeat(LIMITS.fullName);
+    expect(schema.safeParse(valid({ fullName: `${name}${NUL.repeat(20)}` })).success).toBe(true);
+    const chars = "b".repeat(LIMITS.longAnswerChars);
+    expect(schema.safeParse(valid({ workingOn: `${NUL}${chars}${NUL}` })).success).toBe(true);
+    // Stray control characters between words aren't words: the limit counts only real ones.
+    const words = `${Array(LIMITS.longAnswerWords).fill("w").join(" ")} ${NUL} ${BELL}`;
+    expect(schema.safeParse(valid({ question: words })).success).toBe(true);
+    expect(schema.safeParse(valid({ question: `${words} w` })).success).toBe(false);
+    // Control characters alone are no answer: the required messages show, not a crash.
+    const blank = schema.safeParse(valid({ fullName: JUNK.join(""), question: `${NUL} ${BELL}` }));
+    expect(blank.success).toBe(false);
+    if (!blank.success) {
+      expect(toFieldErrors(blank.error)).toEqual({
+        fullName: "Enter your full name.",
+        question: "Tell us the question or challenge you’d like help with.",
+      });
+    }
+    // Broad availability made only of control characters doesn't count as an answer either.
+    const notes = schema.safeParse(
+      valid({ mentorIds: ["ron-lewis"], firstChoiceMentorId: "ron-lewis", availability: [], availabilityNotes: NUL.repeat(3) }),
+    );
+    expect(notes.success).toBe(false);
+    if (!notes.success) expect(Object.keys(toFieldErrors(notes.error))).toEqual(["availabilityNotes"]);
   });
 });
