@@ -133,6 +133,10 @@ const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
 const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
 const RON_OH = "office-hours-ron-lewis-2026-10-01-pm";
+const ELLIOTT_WED_AM_OH = "office-hours-elliott-notrica-2026-09-30-am";
+const ELLIOTT_WED_PM_OH = "office-hours-elliott-notrica-2026-09-30-pm";
+const ELLIOTT_THU_OH = "office-hours-elliott-notrica-2026-10-01-pm";
+const KICKOFF = "founders-week-kickoff-reception";
 const HEALTH_PANEL = "Health Innovation: From Therapeutics to Devices";
 const HAPPY_HOUR = "happy-hour-at-legends-with-arnav-mishra";
 const FAILURE_LAB = "founder-failure-lab";
@@ -154,13 +158,18 @@ describe("production calendar", () => {
     expect(ids(production)).toEqual([
       DAN,
       PANEL,
-      "founders-week-kickoff-reception",
+      // Elliott's two Wednesday windows (9 AM–noon, 2–5 PM) start before the 3:30 PM kickoff reception.
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
+      KICKOFF,
       // Arnav's happy hour starts as the kickoff reception ends (5:00 PM).
       HAPPY_HOUR,
       FAILURE_LAB,
       PATRICK_OH,
       "science-and-practice-of-pitching",
-      // Rishab's Thursday window (noon–5 PM) sorts by its start, after the 11:45 AM workshop.
+      // Elliott's and Rishab's Thursday windows (both noon–5 PM) sort by their start, after the
+      // 11:45 AM workshop; the tie keeps content order (Elliott is listed before Rishab).
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       // Ron's Thursday window (2:30–4:30 PM) starts before Entrepreneurial Impact (3:00 PM).
       RON_OH,
@@ -174,7 +183,7 @@ describe("production calendar", () => {
       "tailgate-and-enterpriseworks-tour",
       "illinois-football-vs-purdue",
     ]);
-    expect(production).toHaveLength(16);
+    expect(production).toHaveLength(19);
     const days = scheduleDays(production);
     expect(days).toEqual(["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"]);
     expect(dateRangeLabel(days[0], days[days.length - 1])).toBe("Mon Sep 28 – Sat Oct 3");
@@ -218,15 +227,22 @@ describe("production calendar", () => {
 
   it("only creates office-hours entries for mentors with published windows", () => {
     expect(production.filter((e) => e.kind === "office-hours").map((e) => e.mentor!.id)).toEqual([
+      "elliott-notrica",
+      "elliott-notrica",
       "patrick-haddox",
+      "elliott-notrica",
       "rishab-veldur",
       "ron-lewis",
       "arnav-mishra",
     ]);
-    // Vik and Elliott are "Scheduling in progress": no schedule entries, no invented windows.
-    for (const id of ["vikram-lakhwara", "elliott-notrica"]) {
-      expect(production.some((e) => e.mentor?.id === id)).toBe(false);
-    }
+    // Vik is "Scheduling in progress": no schedule entries, no invented windows.
+    expect(production.some((e) => e.mentor?.id === "vikram-lakhwara")).toBe(false);
+    // Elliott gets one entry per published window, and nothing else.
+    expect(ids(production.filter((e) => e.mentor?.id === "elliott-notrica"))).toEqual([
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
+      ELLIOTT_THU_OH,
+    ]);
   });
 
   it("lists Rishab's office hours once, on Thu Oct 1, anytime from noon to 5 PM", () => {
@@ -377,10 +393,13 @@ describe("production calendar", () => {
     const rule = sessionRuleText(site.officeHours);
     expect(rule).toBe("Each session is 25 minutes, with a 5-minute break between sessions.");
     const oh = production.filter((e) => e.kind === "office-hours");
-    // Patrick (Thu 10:00–11:30), Rishab (Thu noon–5 PM), Ron (Thu 2:30–4:30 PM) and Arnav
-    // (Fri 10:00–11:30) have exact windows.
+    // Elliott (Wed 9 AM–noon and 2–5 PM, Thu noon–5 PM), Patrick (Thu 10:00–11:30), Rishab (Thu
+    // noon–5 PM), Ron (Thu 2:30–4:30 PM) and Arnav (Fri 10:00–11:30) have exact windows.
     expect(oh.map((e) => [e.mentor!.id, e.sessionRule])).toEqual([
+      ["elliott-notrica", rule],
+      ["elliott-notrica", rule],
       ["patrick-haddox", rule],
+      ["elliott-notrica", rule],
       ["rishab-veldur", rule],
       ["ron-lewis", rule],
       ["arnav-mishra", rule],
@@ -412,13 +431,14 @@ describe("production calendar", () => {
     expect(ids(thursday)).toEqual([
       PATRICK_OH,
       "science-and-practice-of-pitching",
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
       "entrepreneurial-impact-launching-from-illinois",
       TECHRISE,
       FIXTURE_OH,
     ]);
-    expect(withDateOnly).toHaveLength(17);
+    expect(withDateOnly).toHaveLength(20);
     expect(byId(FIXTURE_OH, withDateOnly)).toMatchObject({
       kind: "office-hours",
       title: "Office hours with Fixture Mentor",
@@ -467,8 +487,8 @@ describe("production calendar", () => {
     expect(text).not.toMatch(/Wednesday through Saturday/i);
     expect(text).not.toMatch(/commitments/i);
     expect(text).not.toMatch(/Revenue strategy|Startup financial planning|Communicating business progress/i);
-    // Elliott's organizer note ("much more available… extra sessions") stays organizer-only too.
-    expect(text).not.toMatch(/much more available|extra sessions/i);
+    // Elliott's organizer note (what his email offered, the session total) stays organizer-only too.
+    expect(text).not.toMatch(/anytime after 9 AM|Organizers set his windows|22 sessions|sessions in all/i);
     // So do Rishab's email details (Oct 2 attendance, preference for student teams, phone number).
     expect(text).not.toMatch(/student teams|eligibility rule|phone number|Oct 1 and 2/i);
     // And Ron's openness to Oct 4.
@@ -502,7 +522,8 @@ describe("search", () => {
     expect(find("Hannah")).toEqual(["science-and-practice-of-pitching"]);
     expect(find("where are they now")).toEqual([TECHRISE]);
     expect(find("Martinis")).toEqual(["science-and-practice-of-pitching", TECHRISE, SHOWCASE]);
-    expect(find("Elliott Notrica")).toEqual([TECHRISE]);
+    // Elliott: his three office-hours windows, and the TechRise panel he speaks on.
+    expect(find("Elliott Notrica")).toEqual([ELLIOTT_WED_AM_OH, ELLIOTT_WED_PM_OH, ELLIOTT_THU_OH, TECHRISE]);
   });
 
   it("matches speakers, mentors and companies across events and office hours", () => {
@@ -532,6 +553,8 @@ describe("search", () => {
     expect(find("BIF")).toEqual([RON_OH]);
     expect(find("business instructional facility")).toEqual(["science-and-practice-of-pitching", RON_OH]);
     expect(find("515 E. Gregory Drive")).toEqual([RON_OH]);
+    // Elliott's company finds his office-hours windows only (the TechRise program names him, not Symbio).
+    expect(find("symbio")).toEqual([ELLIOTT_WED_AM_OH, ELLIOTT_WED_PM_OH, ELLIOTT_THU_OH]);
   });
 
   it("returns nothing for unknown terms or the canceled afterparty", () => {
@@ -588,40 +611,57 @@ describe("filters and facets", () => {
     expect(ids(filterEntries(production, f({ day: "2026-10-01" })))).toEqual([
       PATRICK_OH,
       "science-and-practice-of-pitching",
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
       "entrepreneurial-impact-launching-from-illinois",
       TECHRISE,
     ]);
     expect(ids(filterEntries(production, f({ day: "2026-09-30" })))).toEqual([
-      "founders-week-kickoff-reception",
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
+      KICKOFF,
       HAPPY_HOUR,
       FAILURE_LAB,
     ]);
     expect(ids(filterEntries(production, f({ view: "picks" })))).toEqual([
       DAN,
       PANEL,
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
       HAPPY_HOUR,
       FAILURE_LAB,
       PATRICK_OH,
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
       SHOWCASE,
       ARNAV_OH,
     ]);
     expect(ids(filterEntries(production, f({ types: ["office-hours"] })))).toEqual([
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
       PATRICK_OH,
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
       ARNAV_OH,
     ]);
+    expect(ids(filterEntries(production, f({ day: "2026-09-30", types: ["office-hours"] })))).toEqual([
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
+    ]);
     expect(ids(filterEntries(production, f({ day: "2026-10-01", types: ["office-hours"] })))).toEqual([
       PATRICK_OH,
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
     ]);
     expect(ids(filterEntries(production, f({ day: "2026-10-02", types: ["office-hours"] })))).toEqual([ARNAV_OH]);
     expect(ids(filterEntries(production, f({ types: ["office-hours"], q: "Auvi" })))).toEqual([RISHAB_OH]);
+    expect(ids(filterEntries(production, f({ day: "2026-10-01", types: ["office-hours"], q: "Symbio" })))).toEqual([
+      ELLIOTT_THU_OH,
+    ]);
     expect(ids(filterEntries(production, f({ types: ["office-hours"], q: "BIF" })))).toEqual([RON_OH]);
     expect(ids(filterEntries(production, f({ types: ["social"], view: "picks" })))).toEqual([HAPPY_HOUR]);
     expect(ids(filterEntries(production, f({ types: ["panel"], q: "Kennedy" })))).toEqual([PANEL]);
@@ -632,7 +672,7 @@ describe("filters and facets", () => {
     const facets = typeFacets(production, f());
     // Office hours lead, then the core types, then the other types present in content.
     expect(facets.map((x) => [x.type, x.count])).toEqual([
-      ["office-hours", 4],
+      ["office-hours", 7],
       ["talk", 2],
       ["panel", 7],
       ["networking", 6],
@@ -651,36 +691,44 @@ describe("filters and facets", () => {
       "2026-10-03": 0,
     });
 
-    expect(filterEntries(production, f({ view: "picks" }))).toHaveLength(9);
-    expect(filterEntries(production, f({ day: "2026-09-30", view: "picks" }))).toHaveLength(2);
-    expect(filterEntries(production, f({ day: "2026-10-01", view: "picks" }))).toHaveLength(3);
+    expect(filterEntries(production, f({ view: "picks" }))).toHaveLength(12);
+    expect(filterEntries(production, f({ day: "2026-09-30", view: "picks" }))).toHaveLength(4);
+    expect(filterEntries(production, f({ day: "2026-10-01", view: "picks" }))).toHaveLength(4);
     expect(filterEntries(production, f({ day: "2026-10-02", view: "picks" }))).toHaveLength(2);
     const all = dayCounts(production, days, f());
-    expect(all.all).toBe(16);
+    expect(all.all).toBe(19);
     expect(all.byDay).toEqual({
       "2026-09-28": 1,
       "2026-09-29": 1,
-      "2026-09-30": 3,
-      "2026-10-01": 6,
+      "2026-09-30": 5,
+      "2026-10-01": 7,
       "2026-10-02": 3,
       "2026-10-03": 2,
     });
 
     const officeHours = dayCounts(production, days, f({ types: ["office-hours"] }));
-    expect(officeHours.all).toBe(4);
+    expect(officeHours.all).toBe(7);
     expect(officeHours.byDay).toEqual({
       "2026-09-28": 0,
       "2026-09-29": 0,
-      "2026-09-30": 0,
-      "2026-10-01": 3,
+      "2026-09-30": 2,
+      "2026-10-01": 4,
       "2026-10-02": 1,
       "2026-10-03": 0,
     });
 
-    // Facet counts follow the other filters: Thursday has three office-hours windows (Patrick,
-    // Rishab, Ron).
+    // Facet counts follow the other filters: Thursday has four office-hours windows (Patrick,
+    // Elliott, Rishab, Ron), Wednesday two (both Elliott's).
+    expect(typeFacets(production, f({ day: "2026-09-30" })).map((x) => [x.type, x.count])).toEqual([
+      ["office-hours", 2],
+      ["talk", 0],
+      ["panel", 1],
+      ["networking", 2],
+      ["pitch", 0],
+      ["social", 2],
+    ]);
     expect(typeFacets(production, f({ day: "2026-10-01" })).map((x) => [x.type, x.count])).toEqual([
-      ["office-hours", 3],
+      ["office-hours", 4],
       ["talk", 0],
       ["panel", 3],
       ["networking", 2],
@@ -698,12 +746,12 @@ describe("filters and facets", () => {
       ["types", 1],
     ]);
     const search = relaxations(production, f({ q: "zzz" }));
-    expect(search).toEqual([{ dimension: "q", count: 16, filters: f() }]);
-    // No office hours on Saturday: clearing the day brings back all four windows.
+    expect(search).toEqual([{ dimension: "q", count: 19, filters: f() }]);
+    // No office hours on Saturday: clearing the day brings back all seven windows.
     const saturday = f({ day: "2026-10-03", types: ["office-hours"] });
     expect(filterEntries(production, saturday)).toHaveLength(0);
     expect(relaxations(production, saturday).map((x) => [x.dimension, x.count])).toEqual([
-      ["day", 4],
+      ["day", 7],
       ["types", 2],
     ]);
     // Rishab only has Thursday office hours: a Friday search for him finds the Showcase alone.
@@ -718,11 +766,14 @@ describe("filters and facets", () => {
 });
 
 describe("overlaps", () => {
-  it("the production calendar's clashes: Wednesday evening, Rishab's and Ron's Thursday windows with the program blocks, and Arnav's Friday window inside the Showcase", () => {
+  it("the production calendar's clashes: Elliott's Wednesday afternoon window with the kickoff reception, Wednesday evening, the Thursday windows with the program blocks, and Arnav's Friday window inside the Showcase", () => {
+    // Wednesday has two clusters (Elliott's 2–5 PM window with the kickoff reception, then the
+    // happy hour with Failure Lab); Thursday and Friday have one each; other days have none.
+    const clusterCounts: Record<string, number> = { "2026-09-30": 2, "2026-10-01": 1, "2026-10-02": 1 };
     for (const group of groupByDay(production)) {
       const blocks = agendaBlocks(group.entries);
-      if (group.date === "2026-09-30" || group.date === "2026-10-01" || group.date === "2026-10-02") {
-        expect(blocks.filter((b) => b.kind !== "single"), group.date).toHaveLength(1);
+      if (group.date in clusterCounts) {
+        expect(blocks.filter((b) => b.kind !== "single"), group.date).toHaveLength(clusterCounts[group.date]);
       } else {
         expect(blocks.every((b) => b.kind === "single"), group.date).toBe(true);
       }
@@ -731,19 +782,51 @@ describe("overlaps", () => {
     // Back-to-back blocks (Thu 3–5 PM, then 5–7 PM) are not overlaps.
     expect(entriesOverlap(byId("entrepreneurial-impact-launching-from-illinois"), byId(TECHRISE))).toBe(false);
     // Nor are Wednesday's kickoff reception (3:30–5 PM) and Arnav's happy hour (5–7 PM).
-    expect(entriesOverlap(byId("founders-week-kickoff-reception"), byId(HAPPY_HOUR))).toBe(false);
+    expect(entriesOverlap(byId(KICKOFF), byId(HAPPY_HOUR))).toBe(false);
     expect(ids(overlapsFor(byId(HAPPY_HOUR), production))).toEqual([FAILURE_LAB]);
-    // Rishab's Thursday window (noon–5 PM) runs through the pitching workshop (11:45 AM–2:15 PM),
-    // Ron's window (2:30–4:30 PM) and Entrepreneurial Impact (3–5 PM). Patrick's window ends at
-    // 11:30 AM, and TechRise starts as Rishab's window ends (5 PM): neither is an overlap.
+
+    // Wednesday: Elliott's morning window (9 AM–noon) clashes with nothing. His afternoon window
+    // (2–5 PM) runs through the kickoff reception (3:30–5 PM) and ends as the happy hour starts.
+    expect(ids(overlapsFor(byId(ELLIOTT_WED_AM_OH), production))).toEqual([]);
+    expect(ids(overlapsFor(byId(ELLIOTT_WED_PM_OH), production))).toEqual([KICKOFF]);
+    expect(ids(overlapsFor(byId(KICKOFF), production))).toEqual([ELLIOTT_WED_PM_OH]);
+    expect(entriesOverlap(byId(ELLIOTT_WED_PM_OH), byId(HAPPY_HOUR))).toBe(false);
+    expect(entriesOverlap(byId(ELLIOTT_WED_AM_OH), byId(ELLIOTT_WED_PM_OH))).toBe(false);
+    const wednesday = agendaBlocks(groupByDay(production).find((g) => g.date === "2026-09-30")!.entries);
+    expect(wednesday.map((b) => (b.kind === "single" ? b.entry.id : ids(b.entries)))).toEqual([
+      ELLIOTT_WED_AM_OH,
+      [ELLIOTT_WED_PM_OH, KICKOFF],
+      [HAPPY_HOUR, FAILURE_LAB],
+    ]);
+    const afternoon = wednesday[1];
+    if (afternoon.kind !== "overlap") throw new Error("expected Wednesday afternoon's cluster");
+    expect(afternoon.maxConcurrent).toBe(2);
+    expect(afternoon.start).toBe("14:00");
+    expect(afternoon.end).toBe("17:00");
+    expect(afternoon.overlapsWith).toEqual({
+      [ELLIOTT_WED_PM_OH]: [{ id: KICKOFF, title: "Founders Week Kickoff Reception" }],
+      [KICKOFF]: [{ id: ELLIOTT_WED_PM_OH, title: "Office hours with Elliott Notrica" }],
+    });
+    const evening = wednesday[2];
+    if (evening.kind !== "overlap") throw new Error("expected Wednesday evening's cluster");
+    expect(evening.start).toBe("17:00");
+    expect(evening.end).toBe("20:30");
+
+    // Thursday: Elliott's and Rishab's windows (both noon–5 PM) run through the pitching workshop
+    // (11:45 AM–2:15 PM), each other, Ron's window (2:30–4:30 PM) and Entrepreneurial Impact
+    // (3–5 PM). Patrick's window ends at 11:30 AM, and TechRise starts as their windows end (5 PM):
+    // neither is an overlap. (Elliott's TechRise panel, at 6:30 PM, is after his window.)
     const IMPACT = "entrepreneurial-impact-launching-from-illinois";
     const PITCHING = "science-and-practice-of-pitching";
-    expect(ids(overlapsFor(byId(RISHAB_OH), production))).toEqual([PITCHING, RON_OH, IMPACT]);
-    expect(entriesOverlap(byId(RISHAB_OH), byId(PATRICK_OH))).toBe(false);
-    expect(entriesOverlap(byId(RISHAB_OH), byId(TECHRISE))).toBe(false);
-    // Ron's window overlaps Rishab's and Entrepreneurial Impact (3–5 PM). The pitching workshop
-    // ends (2:15 PM) before it starts, and it ends (4:30 PM) before TechRise (5 PM).
-    expect(ids(overlapsFor(byId(RON_OH), production))).toEqual([RISHAB_OH, IMPACT]);
+    expect(ids(overlapsFor(byId(RISHAB_OH), production))).toEqual([PITCHING, ELLIOTT_THU_OH, RON_OH, IMPACT]);
+    expect(ids(overlapsFor(byId(ELLIOTT_THU_OH), production))).toEqual([PITCHING, RISHAB_OH, RON_OH, IMPACT]);
+    for (const id of [RISHAB_OH, ELLIOTT_THU_OH]) {
+      expect(entriesOverlap(byId(id), byId(PATRICK_OH)), id).toBe(false);
+      expect(entriesOverlap(byId(id), byId(TECHRISE)), id).toBe(false);
+    }
+    // Ron's window overlaps Elliott's, Rishab's and Entrepreneurial Impact (3–5 PM). The pitching
+    // workshop ends (2:15 PM) before it starts, and it ends (4:30 PM) before TechRise (5 PM).
+    expect(ids(overlapsFor(byId(RON_OH), production))).toEqual([ELLIOTT_THU_OH, RISHAB_OH, IMPACT]);
     expect(entriesOverlap(byId(RON_OH), byId(PITCHING))).toBe(false);
     expect(entriesOverlap(byId(RON_OH), byId(TECHRISE))).toBe(false);
     // The two program blocks don't overlap each other: they're linked only through the windows.
@@ -754,26 +837,23 @@ describe("overlaps", () => {
     const cluster = blocks[1];
     expect(cluster.kind).toBe("overlap");
     if (cluster.kind !== "overlap") return;
-    expect(ids(cluster.entries)).toEqual([PITCHING, RISHAB_OH, RON_OH, IMPACT]);
-    // At most three at once: from 3:00 to 4:30 PM, Rishab's and Ron's windows and Entrepreneurial Impact.
-    expect(cluster.maxConcurrent).toBe(3);
+    expect(ids(cluster.entries)).toEqual([PITCHING, ELLIOTT_THU_OH, RISHAB_OH, RON_OH, IMPACT]);
+    // At most four at once: from 3:00 to 4:30 PM, Elliott's, Rishab's and Ron's windows and
+    // Entrepreneurial Impact.
+    expect(cluster.maxConcurrent).toBe(4);
     expect(cluster.start).toBe("11:45");
     expect(cluster.end).toBe("17:00");
+    const elliottThu = { id: ELLIOTT_THU_OH, title: "Office hours with Elliott Notrica" };
+    const rishab = { id: RISHAB_OH, title: "Office hours with Rishab Veldur" };
+    const ron = { id: RON_OH, title: "Office hours with Ron Lewis" };
+    const pitching = { id: PITCHING, title: "The Science and Practice of Pitching" };
+    const impact = { id: IMPACT, title: "Entrepreneurial Impact: Launching From Illinois" };
     expect(cluster.overlapsWith).toEqual({
-      [PITCHING]: [{ id: RISHAB_OH, title: "Office hours with Rishab Veldur" }],
-      [RISHAB_OH]: [
-        { id: PITCHING, title: "The Science and Practice of Pitching" },
-        { id: RON_OH, title: "Office hours with Ron Lewis" },
-        { id: IMPACT, title: "Entrepreneurial Impact: Launching From Illinois" },
-      ],
-      [RON_OH]: [
-        { id: RISHAB_OH, title: "Office hours with Rishab Veldur" },
-        { id: IMPACT, title: "Entrepreneurial Impact: Launching From Illinois" },
-      ],
-      [IMPACT]: [
-        { id: RISHAB_OH, title: "Office hours with Rishab Veldur" },
-        { id: RON_OH, title: "Office hours with Ron Lewis" },
-      ],
+      [PITCHING]: [elliottThu, rishab],
+      [ELLIOTT_THU_OH]: [pitching, rishab, ron, impact],
+      [RISHAB_OH]: [pitching, elliottThu, ron, impact],
+      [RON_OH]: [elliottThu, rishab, impact],
+      [IMPACT]: [elliottThu, rishab, ron],
     });
     // Arnav's Friday window (10:00–11:30 AM) sits inside the Showcase day program (8:00 AM–5:30 PM).
     // His own Showcase talk (1:55 PM) comes after his window, and the evening reception (6 PM)
@@ -797,13 +877,20 @@ describe("overlaps", () => {
       [SHOWCASE]: [{ id: ARNAV_OH, title: "Office hours with Arnav Mishra" }],
       [ARNAV_OH]: [{ id: SHOWCASE, title: "Founders Showcase Day Sessions" }],
     });
-    // Every clash in the calendar, as pairs: Wednesday evening, Rishab's window three times, Ron's
-    // with Entrepreneurial Impact, then Arnav's.
+    // Every clash in the calendar, as pairs (in agenda order of the earlier id): Elliott's Wednesday
+    // afternoon window with the kickoff reception, Wednesday evening, Elliott's Thursday window
+    // three times, Rishab's twice, Entrepreneurial Impact with the three Thursday windows, then
+    // Arnav's.
     const pairs = production.flatMap((a) => overlapsFor(a, production).filter((b) => a.id < b.id).map((b) => [a.id, b.id]));
     expect(pairs).toEqual([
+      [KICKOFF, ELLIOTT_WED_PM_OH],
       [FAILURE_LAB, HAPPY_HOUR],
+      [ELLIOTT_THU_OH, PITCHING],
+      [ELLIOTT_THU_OH, RISHAB_OH],
+      [ELLIOTT_THU_OH, RON_OH],
       [RISHAB_OH, PITCHING],
       [RISHAB_OH, RON_OH],
+      [IMPACT, ELLIOTT_THU_OH],
       [IMPACT, RISHAB_OH],
       [IMPACT, RON_OH],
       [SHOWCASE, ARNAV_OH],
@@ -860,7 +947,10 @@ describe("featured placement", () => {
   it("orders priorities: office hours, then Dan Caruso, the Sep 29 panel, Arnav's happy hour and Failure Lab", () => {
     // Office hours share rank 1 and keep chronological order among themselves.
     expect(ids(featuredEntries(production))).toEqual([
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
       PATRICK_OH,
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
       ARNAV_OH,
@@ -886,9 +976,12 @@ describe("featured placement", () => {
     expect(ids(production.filter((e) => featuredIds.has(e.id)))).toEqual([
       DAN,
       PANEL,
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
       HAPPY_HOUR,
       FAILURE_LAB,
       PATRICK_OH,
+      ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
       ARNAV_OH,
@@ -1094,10 +1187,10 @@ describe("display helpers", () => {
 describe("pending mentors", () => {
   it("lists scheduling-in-progress mentors with public fields and an application link", () => {
     const list = pendingMentors(publicMentors);
-    // Rishab (Thu Oct 1, noon to 5 PM) and Ron (Thu Oct 1, 2:30 to 4:30 PM) have published
-    // windows, so they aren't "Scheduling in progress". Only Vik and Elliott are.
-    expect(list.map((m) => m.id)).toEqual(["vikram-lakhwara", "elliott-notrica"]);
-    const [vik, elliott] = list;
+    // Elliott (Wed Sept 30 and Thu Oct 1), Rishab (Thu Oct 1, noon to 5 PM) and Ron (Thu Oct 1,
+    // 2:30 to 4:30 PM) have published windows, so they aren't "Scheduling in progress". Only Vik is.
+    expect(list.map((m) => m.id)).toEqual(["vikram-lakhwara"]);
+    const [vik] = list;
     expect(vik).toMatchObject({
       name: "Vikram “Vik” Lakhwara",
       firstName: "Vik",
@@ -1106,20 +1199,32 @@ describe("pending mentors", () => {
       href: "/office-hours?mentor=vikram-lakhwara#apply",
       headshot: { src: "/mentors/vikram-lakhwara.jpg", alt: "Vikram “Vik” Lakhwara" },
     });
-    expect(elliott).toMatchObject({
-      name: "Elliott Notrica",
-      firstName: "Elliott",
-      affiliation: "Founder & CEO, Symbio Bioculinary",
-      ctaLabel: "Express interest",
-      href: "/office-hours?mentor=elliott-notrica#apply",
-      headshot: { src: "/mentors/elliott-notrica.jpg", alt: "Elliott Notrica" },
-    });
-    expect(JSON.stringify(list)).not.toMatch(/Wednesday|commitments|Revenue strategy|much more available/i);
+    expect(JSON.stringify(list)).not.toMatch(/Wednesday|commitments|Revenue strategy|From his email|Symbio/i);
     expect(pendingMentorMatches(vik, "vik lakhwara")).toBe(true);
     expect(pendingMentorMatches(vik, "stakehouse")).toBe(true);
     expect(pendingMentorMatches(vik, "managing member")).toBe(true);
     expect(pendingMentorMatches(vik, "aerospace")).toBe(false);
-    expect(pendingMentorMatches(elliott, "symbio")).toBe(true);
-    expect(pendingMentorMatches(elliott, "notrica")).toBe(true);
+    expect(pendingMentorMatches(vik, "notrica")).toBe(false);
+
+    // A second mentor without windows (fixture) is listed after Vik, in content order, with the
+    // same public fields; one who isn't taking applications is left out.
+    const pendingFixture: Mentor = { ...DATE_ONLY_MENTOR, id: "fixture-pending", availability: [] };
+    const closedFixture: Mentor = { ...pendingFixture, id: "fixture-closed", acceptingApplications: false };
+    const withFixtures = pendingMentors([...publicMentors, pendingFixture, closedFixture]);
+    expect(withFixtures.map((m) => m.id)).toEqual(["vikram-lakhwara", "fixture-pending"]);
+    const fixture = withFixtures[1];
+    expect(fixture).toEqual({
+      id: "fixture-pending",
+      name: "Fixture Mentor",
+      firstName: "Fixture",
+      affiliation: "Founder, Fixture Labs",
+      headshot: null,
+      ctaLabel: "Express interest",
+      href: "/office-hours?mentor=fixture-pending#apply",
+      demo: false,
+    });
+    expect(pendingMentorMatches(fixture, "fixture labs")).toBe(true);
+    expect(pendingMentorMatches(fixture, "mentor")).toBe(true);
+    expect(pendingMentorMatches(fixture, "stakehouse")).toBe(false);
   });
 });

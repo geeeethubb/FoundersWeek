@@ -14,7 +14,10 @@ export const PUBLIC_PAGES = [
   "/office-hours/ron-lewis",
   "/office-hours/rishab-veldur",
   "/schedule",
+  "/schedule/office-hours-elliott-notrica-2026-09-30-am",
+  "/schedule/office-hours-elliott-notrica-2026-09-30-pm",
   "/schedule/office-hours-patrick-haddox-2026-10-01-am",
+  "/schedule/office-hours-elliott-notrica-2026-10-01-pm",
   "/schedule/office-hours-rishab-veldur-2026-10-01",
   "/schedule/office-hours-ron-lewis-2026-10-01-pm",
   "/schedule/office-hours-arnav-mishra-2026-10-02-am",
@@ -51,6 +54,7 @@ export const HAPPY_HOUR_TITLE = "Happy Hour with Arnav Mishra at Legends";
 export const HAPPY_HOUR_RSVP_LABEL = "RSVP on Partiful";
 export const HAPPY_HOUR_RSVP_URL = "https://partiful.com/e/bUDJZTuCJyBqSeXAsfrN";
 
+/** Wed Sep 30, 3:30–5:00 PM at EnterpriseWorks: inside Elliott's 2:00–5:00 PM office-hours window. */
 export const KICKOFF_TITLE = "Founders Week Kickoff Reception";
 /** Wed Sep 30, 6:30–8:30 PM, CIF Room 1038 — hosted by Founders; featured on a light-orange card. */
 export const FAILURE_LAB_ID = "founder-failure-lab";

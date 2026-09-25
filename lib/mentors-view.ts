@@ -641,7 +641,8 @@ export function availabilityLine(mentor: Pick<Mentor, "availability" | "slots">)
 export function availabilityNote(mentor: Pick<Mentor, "availability" | "slots">): string | null {
   if (schedulingStatus(mentor) === "in-progress") return INTEREST_COPY.followUp;
   const view = availabilityView(mentor);
-  const notes = view.windows.map((w) => w.note).filter((n): n is string => Boolean(n));
+  // Identical notes on several windows (e.g. Elliott's three) are shown once.
+  const notes = [...new Set(view.windows.map((w) => w.note).filter((n): n is string => Boolean(n)))];
   return notes.length === 1 ? notes[0] : null;
 }
 

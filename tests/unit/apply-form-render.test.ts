@@ -63,7 +63,19 @@ const DATE_ONLY_MENTOR: Mentor = {
   acceptingApplications: true,
   sources: [],
 };
-const fixture = setup([...mentors, DATE_ONLY_MENTOR]);
+/**
+ * Synthetic mentor (not real content) whose times aren't set at all: no windows or slots
+ * (scheduling in progress). Vik is the only real one now that Elliott has windows, so this keeps
+ * the coverage of several such mentors together.
+ */
+const SCHEDULING_MENTOR: Mentor = {
+  ...DATE_ONLY_MENTOR,
+  id: "fixture-morgan",
+  name: "Morgan Fixture",
+  firstName: "Morgan",
+  availability: [],
+};
+const fixture = setup([...mentors, DATE_ONLY_MENTOR, SCHEDULING_MENTOR]);
 
 /** The session rule, from site.officeHours (never hard-coded in the app). */
 const SESSIONS_ARE = `Sessions are ${site.officeHours.sessionMinutes} minutes.`;
@@ -293,14 +305,40 @@ describe("broad availability", () => {
     );
     expect(attr(tagWithId(html, "apply-option-window-ron-lewis-2026-10-01-pm"), "checked")).toBe("");
     expect(attr(tagWithId(html, "apply-availabilityNotes"), "aria-required")).toBeNull();
-    // Next to Elliott (still scheduling), only Elliott is named, and the note is required.
-    const withElliott = renderAvailability({
-      mentorIds: ["ron-lewis", "elliott-notrica"],
+    // Next to Vik (still scheduling), only Vik is named, and the note is required.
+    const withVik = renderAvailability({
+      mentorIds: ["ron-lewis", "vikram-lakhwara"],
       availability: ["window:ron-lewis-2026-10-01-pm"],
     });
-    expect(text(withElliott)).toContain("Needed because Elliott’s times aren’t set yet.");
-    expect(text(withElliott)).not.toContain("Ron’s times");
-    expect(attr(tagWithId(withElliott, "apply-availabilityNotes"), "aria-required")).toBe("true");
+    expect(text(withVik)).toContain("Needed because Vik’s times aren’t set yet.");
+    expect(text(withVik)).not.toContain("Ron’s times");
+    expect(attr(tagWithId(withVik, "apply-availabilityNotes"), "aria-required")).toBe("true");
+  });
+
+  it("with Elliott, offers his three windows (Wed, Sep 30 twice, Thu, Oct 1) and, once any one is ticked, makes the note optional", () => {
+    const times =
+      "I can make Wed, Sep 30, 9:00 AM–12:00 PM CT Elliott’s office-hours window I can make Wed, Sep 30, 2:00–5:00 PM CT Elliott’s office-hours window I can make Thu, Oct 1, 12:00–5:00 PM CT Elliott’s office-hours window";
+    const ask = "When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.";
+    const windows = ["elliott-notrica-2026-09-30-am", "elliott-notrica-2026-09-30-pm", "elliott-notrica-2026-10-01-pm"];
+    for (const ticked of windows) {
+      const html = renderAvailability({ mentorIds: ["elliott-notrica"], availability: [`window:${ticked}`] });
+      expect(text(html), ticked).toBe(`Can you make these times? (optional) ${TIMES_HINT} ${times} Broad availability (optional) ${ask}`);
+      for (const id of windows) {
+        expect(attr(tagWithId(html, `apply-option-window-${id}`), "checked"), `${ticked} / ${id}`).toBe(id === ticked ? "" : null);
+      }
+      expect(attr(tagWithId(html, "apply-availabilityNotes"), "aria-required"), ticked).toBeNull();
+    }
+    // Nothing ticked yet: required until a time is ticked, never "Elliott’s times aren’t set yet".
+    const nothingTicked = renderAvailability({ mentorIds: ["elliott-notrica"] });
+    expect(text(nothingTicked)).toBe(`Can you make these times? (optional) ${TIMES_HINT} ${times} Broad availability ${ask}`);
+    expect(attr(tagWithId(nothingTicked, "apply-availabilityNotes"), "aria-required")).toBe("true");
+    // Next to Ron, in directory order (Elliott before Ron); Ron's ticked window is enough.
+    const withRon = text(
+      renderAvailability({ mentorIds: ["ron-lewis", "elliott-notrica"], availability: ["window:ron-lewis-2026-10-01-pm"] }),
+    );
+    expect(withRon).toBe(
+      `Can you make these times? (optional) ${TIMES_HINT} ${times} I can make Thu, Oct 1, 2:30–4:30 PM CT Ron’s office-hours window Broad availability (optional) ${ask}`,
+    );
   });
 
   it("with a date-only mentor (fixture), offers “I can make Thu, Oct 1 (exact time to be confirmed)” and still requires the note, pointing to that day", () => {
@@ -352,8 +390,12 @@ describe("session length (site.officeHours) next to the availability question", 
   });
 
   it("with no times listed (no mentor yet, or only mentors still scheduling), ends the broad-availability hint with the length", () => {
-    for (const mentorIds of [[], ["vikram-lakhwara"], ["elliott-notrica", "vikram-lakhwara"]]) {
-      const html = renderAvailability({ mentorIds });
+    for (const [mentorIds, setup] of [
+      [[], real],
+      [["vikram-lakhwara"], real],
+      [["fixture-morgan", "vikram-lakhwara"], fixture],
+    ] as const) {
+      const html = renderAvailability({ mentorIds: [...mentorIds] }, setup);
       const t = text(html);
       expect(t, mentorIds.join()).not.toContain("Can you make these times?");
       expect(count(t, SESSIONS_ARE), mentorIds.join()).toBe(1);
@@ -369,7 +411,7 @@ describe("session length (site.officeHours) next to the availability question", 
     expect(withTimes).toContain(
       "Sessions are 20 minutes. If you’re matched, Founders will email you a specific session time inside the window you picked.",
     );
-    const withoutTimes = text(renderAvailability({ mentorIds: ["elliott-notrica"] }, real, rule));
+    const withoutTimes = text(renderAvailability({ mentorIds: ["vikram-lakhwara"] }, real, rule));
     expect(withoutTimes).toContain("Sessions are 20 minutes.");
     expect(withoutTimes).not.toContain("Can you make these times?");
     for (const t of [withTimes, withoutTimes]) expect(t).not.toContain(`${site.officeHours.sessionMinutes} minutes`);

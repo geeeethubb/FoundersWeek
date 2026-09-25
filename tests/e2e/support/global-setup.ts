@@ -10,7 +10,7 @@ const ROUTES = [
   "/",
   "/office-hours",
   "/office-hours/patrick-haddox",
-  "/apply?mentor=elliott-notrica",
+  "/apply?mentor=vikram-lakhwara",
   "/schedule",
   "/schedule/dan-caruso-fireside-chat",
   "/schedule/how-to-make-10k-a-month-in-college/calendar.ics",

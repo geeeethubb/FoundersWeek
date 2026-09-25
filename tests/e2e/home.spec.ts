@@ -4,7 +4,8 @@
  *     first screen.
  *   - All six mentors previewed (photo, name, role and company, one availability line): Patrick
  *     "Thu, Oct 1 · 10:00–11:30 AM CT", Arnav "Fri, Oct 2 · 10:00–11:30 AM CT", Ron "Thu, Oct 1 ·
- *     2:30–4:30 PM CT", Rishab "Thu, Oct 1 · 12:00–5:00 PM CT"; Vik and Elliott "Scheduling in progress".
+ *     2:30–4:30 PM CT", Rishab "Thu, Oct 1 · 12:00–5:00 PM CT", Elliott his first window "Wed, Sept 30 ·
+ *     9:00 AM–12:00 PM CT" plus "+ 2 more"; only Vik "Scheduling in progress".
  *   - Featured events (a 2×2 grid): Dan Caruso's fireside chat, the Sept 29 panel, Arnav's happy
  *     hour, then Founder Failure Lab (Hosted by Founders) — each with its Founders label.
  *   - A link to the full calendar.
@@ -21,6 +22,7 @@ import {
   ONE_ON_ONE,
   PATRICK,
   ARNAV,
+  ELLIOTT,
   PENDING_MENTORS,
   RISHAB,
   RON,
@@ -103,6 +105,14 @@ test.describe("Home", () => {
     await expect(card(RISHAB.name)).toContainText("12:00–5:00 PM CT");
     await expect(card(RISHAB.name)).not.toContainText(/to be confirmed|to be announced|TBA/i);
     await expect(card(RISHAB.name)).not.toContainText("Oct 2");
+    // Elliott: the first of his three windows (Wed, Sept 30 morning), then "+ 2 more".
+    await expect(card(ELLIOTT.name).locator("time")).toHaveText("Wed, Sept 30");
+    await expect(card(ELLIOTT.name).locator("time")).toHaveAttribute("datetime", "2026-09-30");
+    await expect(card(ELLIOTT.name)).toContainText("9:00 AM–12:00 PM CT");
+    await expect(card(ELLIOTT.name)).toContainText("+ 2 more");
+    await expect(card(ELLIOTT.name)).not.toContainText(/Scheduling in progress|to be confirmed|to be announced/i);
+    // Only Vik's times aren't set yet.
+    expect(PENDING_MENTORS.map((m) => m.firstName)).toEqual(["Vik"]);
     for (const mentor of PENDING_MENTORS) await expect(card(mentor.name)).toContainText("Scheduling in progress");
   });
 

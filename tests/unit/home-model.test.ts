@@ -160,9 +160,10 @@ describe("home model (public data)", () => {
       { known: true, date: "Thu, Oct 1", time: "10:00–11:30 AM CT", exact: true, dateTime: "2026-10-01", more: 0 },
       // Arnav's Friday window has been exact since Sept 24.
       { known: true, date: "Fri, Oct 2", time: "10:00–11:30 AM CT", exact: true, dateTime: "2026-10-02", more: 0 },
-      // Only Vik and Elliott are still scheduling.
+      // Only Vik is still scheduling.
       { known: false, label: "Scheduling in progress" },
-      { known: false, label: "Scheduling in progress" },
+      // Elliott's first window (Wed Sept 30, 9 AM to noon), plus his two others.
+      { known: true, date: "Wed, Sept 30", time: "9:00 AM–12:00 PM CT", exact: true, dateTime: "2026-09-30", more: 2 },
       // Ron's Thursday window at BIF is exact.
       { known: true, date: "Thu, Oct 1", time: "2:30–4:30 PM CT", exact: true, dateTime: "2026-10-01", more: 0 },
       RISHAB_AVAILABILITY,
@@ -209,7 +210,7 @@ describe("home model (public data)", () => {
 
   it("previews carry nothing private: no organizer notes, drafts, bios or expertise bases", () => {
     const json = JSON.stringify(mentorPreviews(getMentors()));
-    expect(json).not.toMatch(/commitments|much more available|extra sessions|Wednesday through Saturday/i);
+    expect(json).not.toMatch(/commitments|much more available|extra sessions|anytime after 9 AM|sessions in all|Wednesday through Saturday/i);
     expect(json).not.toMatch(/Revenue strategy|Startup financial planning/);
     expect(json).not.toMatch(/"(basis|organizerNotes|expertise|bio|askMeAbout|goodFitFor|backgroundTags|sources)"/);
     expect(json).not.toMatch(/Former senior spacecraft test engineer|Stakehouse backs founders/);

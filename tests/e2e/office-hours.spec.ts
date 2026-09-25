@@ -7,8 +7,9 @@
  *   - The matching sentence appears exactly once, and so does the session rule ("Each session is 25
  *     minutes, with a 5-minute break between sessions.").
  *   - Every card's "Select mentor" action prefills that mentor in the form (and Patrick's / Arnav's /
- *     Ron's / Rishab's window); every profile's "Apply to meet …" does the same. A preselected window
- *     is enough on its own; mentors whose times aren't set yet (Vik, Elliott) need broad
+ *     Ron's / Rishab's one window); every profile's "Apply to meet …" does the same. A preselected
+ *     window is enough on its own. Elliott has three windows, so his actions preselect none and the
+ *     form lists all three for the student to tick. Vik's times aren't set yet: he needs broad
  *     availability, and the form says so.
  *   - Profiles: photo, role, LinkedIn, approved bio and "Can help with" labels, never the internal
  *     basis behind them, organizer notes or draft copy. Mentors with a window state the session
@@ -17,6 +18,9 @@
  *     12:00–5:00 PM CT. Patrick: in person at Espresso Royale at Grainger Library, 1301 W
  *     Springfield Ave. Ron: Thu, Oct 1, 2:30–4:30 PM CT in person at the Business Instructional
  *     Facility (BIF), 515 E. Gregory Drive, and nothing about his organizer-only Oct 4 availability.
+ *     Elliott: three windows (Wed, Sep 30, 9:00 AM–12:00 PM and 2:00–5:00 PM CT; Thu, Oct 1,
+ *     12:00–5:00 PM CT) with their shared note once, and "Apply to meet Elliott", with no window
+ *     preselected.
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -30,6 +34,9 @@ import {
   countMatches,
   DEMO_MENTOR_NAMES,
   DRAFT_TOPICS,
+  ELLIOTT,
+  ELLIOTT_WINDOW_NOTE,
+  ELLIOTT_WINDOWS,
   escapeRegExp,
   expectClearOfHeader,
   expectHeadshot,
@@ -75,32 +82,39 @@ async function openOfficeHours(page: Page, path = "/office-hours") {
   await waitForHydration(applicationForm(page).getByRole("button", { name: "Submit application" }));
 }
 
-/** After a mentor action: the application with that mentor (and their one window) selected — nobody else. */
+/**
+ * After a mentor action: the application with that mentor selected (and their one window ticked,
+ * when they have exactly one) — nobody else.
+ */
 async function expectPrefilled(page: Page, mentor: MentorFixture) {
   const window = mentor.windowId ? `&window=${escapeRegExp(mentor.windowId)}` : "";
   await expect(page).toHaveURL(new RegExp(`/office-hours\\?mentor=${escapeRegExp(mentor.id)}${window}#apply$`));
   await expect(mentorCheckbox(page, mentor)).toBeChecked();
   for (const other of MENTORS.filter((m) => m !== mentor)) await expect(mentorCheckbox(page, other)).not.toBeChecked();
-  if (mentor.windowId) {
-    await expect(mentorWindows(page, mentor)).toHaveCount(1);
-    await expect(mentorWindows(page, mentor)).toBeChecked();
-  } else {
-    // Schedule pending: nothing to pick; broad availability is the way to say when you're free.
-    await expect(mentorWindows(page, mentor)).toHaveCount(0);
-    await expect(broadAvailabilityField(page)).toBeVisible();
-  }
+  // Every published window is listed; only a mentor's one window is ticked by the link.
+  const windows = mentorWindows(page, mentor);
+  await expect(windows).toHaveCount(mentor.windowIds.length);
+  if (mentor.windowId) await expect(windows).toBeChecked();
+  else for (const listed of await windows.all()) await expect(listed).not.toBeChecked();
   const broad = broadAvailabilityField(page);
+  await expect(broad).toBeVisible();
   if (mentor.timesPending) {
-    // Times not set yet: broad availability is required, and the hint says why (and, with no
-    // listed time to tick, how long a session is).
+    // Times not set yet (nothing to pick): broad availability is required, and the hint says why
+    // (and, with no listed time to tick, how long a session is).
     await expect(broad).toHaveAttribute("aria-required", "true");
     await expect(broad).toHaveAccessibleDescription(
       `${BROAD_AVAILABILITY_ASK} Needed because ${mentor.firstName}’s times aren’t set yet. ${SESSION_LENGTH_HINT}`,
     );
-  } else {
+  } else if (mentor.windowId) {
     // The preselected window (Patrick's, Arnav's, Ron's or Rishab's) is enough on its own.
     await expect(broad).not.toHaveAttribute("aria-required", "true");
     await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+  } else {
+    // Several windows (Elliott's three), none ticked yet: a time or broad availability is still
+    // needed, and the hint says a ticked time is enough (never that his times aren't set).
+    await expect(broad).toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
   }
 }
 
@@ -242,10 +256,11 @@ test.describe("Mentor profiles", () => {
         await expect(fit.getByRole("listitem")).toHaveCount(0);
         await expect(page.getByRole("region", { name: "Useful for", exact: true })).toHaveCount(0);
       }
-      await expect(main).toContainText(mentor.cardLine);
-      // The office-hours block: the window (or "Scheduling in progress"), then the session rule once.
+      // The office-hours block: every window (or "Scheduling in progress"), then the session rule once.
       const officeHoursBlock = main.locator("header");
-      await expect(officeHoursBlock).toContainText(mentor.cardLine);
+      for (const line of mentor.windows.length ? mentor.windows : [mentor.cardLine]) {
+        await expect(officeHoursBlock).toContainText(line);
+      }
       expect(countMatches(await visibleText(officeHoursBlock), SESSION_RULE), "the session rule, once").toBe(1);
       expect(await visibleText(main)).not.toMatch(SESSION_COUNT);
 
@@ -271,6 +286,35 @@ test.describe("Mentor profiles", () => {
         }
         // His share card and description carry the same window.
         await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /Thu, Oct 1 · 2:30–4:30 PM CT/);
+      }
+      if (mentor === ELLIOTT) {
+        // Three windows, one line each, in order: Wed, Sep 30 morning and afternoon, then Thu, Oct 1.
+        const lines = officeHoursBlock.getByRole("listitem").filter({ has: page.locator("time") });
+        await expect(lines).toHaveText(ELLIOTT_WINDOWS.map((w) => w.line));
+        expect(await lines.locator("time").evaluateAll((els) => els.map((el) => el.getAttribute("datetime")))).toEqual([
+          "2026-09-30",
+          "2026-09-30",
+          "2026-10-01",
+        ]);
+        await expect(officeHoursBlock).not.toContainText(/Scheduling in progress|to be confirmed|\+\s*\d+ more/i);
+        // The three windows share one note, shown once under them.
+        expect(countMatches(await visibleText(officeHoursBlock), ELLIOTT_WINDOW_NOTE), "the window note, once").toBe(1);
+        // "Apply to meet Elliott" (never "Express interest"), with no window preselected: he has three.
+        await expect(main.getByRole("link", { name: /^Express interest\b/ })).toHaveCount(0);
+        const applyLinks = main.getByRole("link", { name: `Apply to meet ${ELLIOTT.firstName}`, exact: true });
+        await expect(applyLinks.first()).toBeVisible();
+        for (const link of await applyLinks.all()) {
+          await expect(link).toHaveAttribute("href", `/office-hours?mentor=${ELLIOTT.id}#apply`);
+        }
+        // His description lists all three; his share card, the first one "and 2 more times".
+        await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+          "content",
+          new RegExp(escapeRegExp(`Availability: ${ELLIOTT.windows.join("; ")}.`)),
+        );
+        await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
+          "content",
+          /Available Wed, Sept 30, 9:00 AM–12:00 PM CT, and 2 more times\.$/,
+        );
       }
       // Ron's Oct 4 availability is organizer-only: nowhere on any profile, not even in page data.
       await expect(page.locator("body")).not.toContainText(OCT_4);

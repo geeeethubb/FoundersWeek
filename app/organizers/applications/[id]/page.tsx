@@ -538,6 +538,9 @@ function assignGroups(
   const app = detail.application;
   const rank = new Map(app.mentors.map((m) => [m.mentorId, m.rank]));
   const assigned = new Set(app.appointments.filter((a) => a.status !== "canceled").map((a) => a.slotId));
+  // What the student ticked: windows (their sessions count as picked) and explicit slots.
+  const pickedWindows = new Set(app.availability.filter((a) => a.kind === "window").map((a) => a.optionId));
+  const pickedSlots = new Set(app.availability.filter((a) => a.kind === "slot").map((a) => a.optionId));
   const busy = detail.studentAppointments.map((a) => ({
     start: new Date(a.startsAt).getTime(),
     end: new Date(a.endsAt).getTime(),
@@ -577,6 +580,7 @@ function assignGroups(
             used,
             generated: slot.generated,
             disabledReason,
+            picked: pickedSlots.has(slot.id) || pickedWindows.has(slot.windowId),
           };
         });
       return {

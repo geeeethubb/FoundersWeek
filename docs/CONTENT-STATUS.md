@@ -51,7 +51,8 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
   slots. This is an organizer-only note.
 
 **Elliott Notrica** (Founder & CEO, Symbio Bioculinary). Added 2026-09-24.
-- Scheduling in progress (he's broadly available, per organizers). Add windows/slots once times are set.
+- Windows (from his email, Sept 25; set by the organizers): Wed Sept 30, 9 AM–noon and 2–5 PM, and
+  Thu Oct 1, noon–5 PM CT (22 sessions of 25 minutes). Location is still to be set.
 - On Thursday's TechRise Cohort 2 panel (linked on his profile).
 
 **Ron Lewis** (Co-Founder, Auctus Advisory)

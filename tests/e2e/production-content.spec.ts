@@ -5,19 +5,20 @@
  *   - /office-hours: exactly six mentor cards, in the published order, each with a loaded photo —
  *     two columns from desktop width, so six make three full rows.
  *   - Home: exactly six mentor previews, in order — one row of six on wide screens.
- *   - Calendar: 16 entries across 6 days (Mon Sep 28 – Sat Oct 3), with office hours for Patrick
- *     (10:00–11:30 AM, Espresso Royale at Grainger Library), Rishab (12:00–5:00 PM) and Ron
- *     (2:30–4:30 PM, BIF) on Thu, Oct 1 and Arnav
- *     (10:00–11:30 AM) on Fri, Oct 2, each sorted by start between the day's program blocks, with
- *     exact overlap lines; the office-hours card covers "all six mentors", three across on desktop,
- *     states the session rule and says only Vik and Elliott are still being scheduled; nothing
- *     marked Demo.
+ *   - Calendar: 19 entries across 6 days (Mon Sep 28 – Sat Oct 3), with office hours for Elliott
+ *     (9:00 AM–12:00 PM and 2:00–5:00 PM) on Wed, Sep 30; Patrick (10:00–11:30 AM, Espresso Royale
+ *     at Grainger Library), Elliott and Rishab (both 12:00–5:00 PM) and Ron (2:30–4:30 PM, BIF) on
+ *     Thu, Oct 1; and Arnav (10:00–11:30 AM) on Fri, Oct 2, each sorted by start between the day's
+ *     program blocks, with exact overlap lines; the office-hours card covers "all six mentors",
+ *     three across on desktop, states the session rule and says only Vik is still being scheduled;
+ *     nothing marked Demo.
  */
 import { expect, test, type Locator } from "@playwright/test";
 import { E2E_NODEMO_BASE_URL } from "./support/env";
 import {
   ARNAV,
   DEMO_MENTOR_NAMES,
+  ELLIOTT,
   expectHeadshot,
   horizontalOverflow,
   MENTORS,
@@ -35,6 +36,7 @@ import {
   EVENING_SHOWCASE_TITLE,
   FAILURE_LAB_TITLE,
   HAPPY_HOUR_TITLE,
+  KICKOFF_TITLE,
   LAUNCHING_TITLE,
   PANEL_TITLE,
   PITCHING_TITLE,
@@ -107,63 +109,112 @@ test.describe("Production content (no demo)", () => {
     for (const name of DEMO_MENTOR_NAMES) await expect(page.locator("body")).not.toContainText(name);
   });
 
-  test("calendar: 16 entries across 6 days, Mon Sep 28 – Sat Oct 3; no demo events", async ({ page }) => {
+  test("calendar: 19 entries across 6 days, Mon Sep 28 – Sat Oct 3; no demo events", async ({ page }) => {
     await page.goto("/schedule");
     await waitForHydration(page.getByRole("searchbox", { name: "Search the calendar" }));
     const days = page.getByRole("region", { name: /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), / });
     await expect(days.getByRole("heading", { level: 2 })).toHaveText(DAYS.map((d) => d.heading));
-    await expect(days.getByRole("article")).toHaveCount(16);
+    await expect(days.getByRole("article")).toHaveCount(19);
     for (const title of [DAN_TITLE, PANEL_TITLE, HAPPY_HOUR_TITLE, FAILURE_LAB_TITLE, EVENING_SHOWCASE_TITLE]) {
       await expect(days.getByRole("heading", { name: title, exact: true })).toHaveCount(1);
     }
-    await expect(page.getByRole("main")).toContainText("16 events over 6 days");
+    await expect(page.getByRole("main")).toContainText("19 events over 6 days");
 
-    // Four office-hours listings, one per mentor with a window: three on Thursday, Arnav's on Friday.
+    // Seven office-hours listings, one per window: Elliott's two on Wednesday; Patrick's, Elliott's,
+    // Rishab's and Ron's on Thursday; Arnav's on Friday.
     const patrick = `Office hours with ${PATRICK.name}`;
+    const elliott = `Office hours with ${ELLIOTT.name}`;
     const rishab = `Office hours with ${RISHAB.name}`;
     const ron = `Office hours with ${RON.name}`;
     const arnav = `Office hours with ${ARNAV.name}`;
-    await expect(days.getByRole("heading", { name: /^Office hours with / })).toHaveText([patrick, rishab, ron, arnav]);
+    await expect(days.getByRole("heading", { name: /^Office hours with / })).toHaveText([
+      elliott,
+      elliott,
+      patrick,
+      elliott,
+      rishab,
+      ron,
+      arnav,
+    ]);
+    const startsOf = (rows: Locator) =>
+      rows.evaluateAll((els) => els.map((r) => r.querySelector("time[datetime]")?.getAttribute("datetime") ?? ""));
+    const row = (scope: Locator, title: string) =>
+      scope.getByRole("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+    const overlapLine = (scope: Locator, title: string) => row(scope, title).getByText(/^Overlaps with /);
 
-    // Thursday, sorted by start: 10:00 AM, 11:45 AM, 12:00 PM, 2:30 PM, 3:00 PM, 5:00 PM.
+    // Wednesday, sorted by start: Elliott 9:00 AM and 2:00 PM, the 3:30 PM Kickoff Reception, the
+    // 5:00 PM happy hour and the 6:30 PM Failure Lab. His location isn't set yet.
+    const wednesday = page.getByRole("region", { name: "Wednesday, September 30", exact: true });
+    const wednesdayRows = wednesday.getByRole("article");
+    await expect(wednesdayRows.getByRole("heading")).toHaveText([
+      elliott,
+      elliott,
+      KICKOFF_TITLE,
+      HAPPY_HOUR_TITLE,
+      FAILURE_LAB_TITLE,
+    ]);
+    expect(await startsOf(wednesdayRows)).toEqual([
+      "2026-09-30T09:00",
+      "2026-09-30T14:00",
+      "2026-09-30T15:30",
+      "2026-09-30T17:00",
+      "2026-09-30T18:30",
+    ]);
+    const [elliottMorning, elliottAfternoon] = [wednesdayRows.nth(0), wednesdayRows.nth(1)];
+    await expect(elliottMorning).toContainText("to 12:00 PM");
+    await expect(elliottAfternoon).toContainText("to 5:00 PM");
+    for (const r of [elliottMorning, elliottAfternoon]) await expect(r).toContainText("Location to be announced");
+    // Overlaps, exactly: his afternoon window and the Kickoff Reception (3:30–5:00 PM); the happy
+    // hour starts as his window ends, and it overlaps only the Failure Lab.
+    await expect(elliottMorning.getByText(/^Overlaps with /)).toHaveCount(0);
+    await expect(elliottAfternoon.getByText(/^Overlaps with /)).toHaveText(`Overlaps with ${KICKOFF_TITLE}`);
+    await expect(overlapLine(wednesday, KICKOFF_TITLE)).toHaveText(`Overlaps with ${elliott}`);
+    await expect(overlapLine(wednesday, HAPPY_HOUR_TITLE)).toHaveText(`Overlaps with ${FAILURE_LAB_TITLE}`);
+    await expect(overlapLine(wednesday, FAILURE_LAB_TITLE)).toHaveText(`Overlaps with ${HAPPY_HOUR_TITLE}`);
+
+    // Thursday, sorted by start: 10:00 AM, 11:45 AM, 12:00 PM (Elliott, then Rishab), 2:30 PM,
+    // 3:00 PM, 5:00 PM.
     const thursday = page.getByRole("region", { name: "Thursday, October 1", exact: true });
     const thursdayRows = thursday.getByRole("article");
     await expect(thursdayRows.getByRole("heading")).toHaveText([
       patrick,
       PITCHING_TITLE,
+      elliott,
       rishab,
       ron,
       LAUNCHING_TITLE,
       TECHRISE_TITLE,
     ]);
-    const starts = await thursdayRows.evaluateAll((rows) =>
-      rows.map((r) => r.querySelector("time[datetime]")?.getAttribute("datetime") ?? ""),
-    );
-    expect(starts).toEqual([
+    expect(await startsOf(thursdayRows)).toEqual([
       "2026-10-01T10:00",
       "2026-10-01T11:45",
+      "2026-10-01T12:00",
       "2026-10-01T12:00",
       "2026-10-01T14:30",
       "2026-10-01T15:00",
       "2026-10-01T17:00",
     ]);
-    const row = (scope: Locator, title: string) =>
-      scope.getByRole("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
     await expect(row(thursday, patrick)).toContainText("to 11:30 AM");
     await expect(row(thursday, patrick)).toContainText(PATRICK_VENUE);
     await expect(row(thursday, patrick)).not.toContainText(/Location to be announced/);
+    await expect(row(thursday, elliott)).toContainText("to 5:00 PM");
+    await expect(row(thursday, elliott)).toContainText("Location to be announced");
     await expect(row(thursday, rishab)).toContainText("to 5:00 PM");
     await expect(row(thursday, ron)).toContainText("to 4:30 PM");
     await expect(row(thursday, ron)).toContainText("Business Instructional Facility (BIF)");
 
-    // Overlaps, exactly. Rishab (noon–5 PM) covers Pitching (until 2:15 PM), Ron (2:30–4:30 PM) and
-    // Launching From Illinois (3:00–5:00 PM); Ron misses Pitching; Patrick's window ends at 11:30 AM
-    // and TechRise starts at 5:00 PM, so neither overlaps anything.
-    const overlapLine = (scope: Locator, title: string) => row(scope, title).getByText(/^Overlaps with /);
-    await expect(overlapLine(thursday, rishab)).toHaveText(`Overlaps with ${PITCHING_TITLE}, ${ron} and ${LAUNCHING_TITLE}`);
-    await expect(overlapLine(thursday, ron)).toHaveText(`Overlaps with ${rishab} and ${LAUNCHING_TITLE}`);
-    await expect(overlapLine(thursday, PITCHING_TITLE)).toHaveText(`Overlaps with ${rishab}`);
-    await expect(overlapLine(thursday, LAUNCHING_TITLE)).toHaveText(`Overlaps with ${rishab} and ${ron}`);
+    // Overlaps, exactly. Elliott and Rishab (both noon–5 PM) cover each other, Pitching (until
+    // 2:15 PM), Ron (2:30–4:30 PM) and Launching From Illinois (3:00–5:00 PM); Ron misses Pitching;
+    // Patrick's window ends at 11:30 AM and TechRise starts at 5:00 PM, so neither overlaps anything.
+    await expect(overlapLine(thursday, elliott)).toHaveText(
+      `Overlaps with ${PITCHING_TITLE}, ${rishab}, ${ron} and ${LAUNCHING_TITLE}`,
+    );
+    await expect(overlapLine(thursday, rishab)).toHaveText(
+      `Overlaps with ${PITCHING_TITLE}, ${elliott}, ${ron} and ${LAUNCHING_TITLE}`,
+    );
+    await expect(overlapLine(thursday, ron)).toHaveText(`Overlaps with ${elliott}, ${rishab} and ${LAUNCHING_TITLE}`);
+    await expect(overlapLine(thursday, PITCHING_TITLE)).toHaveText(`Overlaps with ${elliott} and ${rishab}`);
+    await expect(overlapLine(thursday, LAUNCHING_TITLE)).toHaveText(`Overlaps with ${elliott}, ${rishab} and ${ron}`);
     await expect(overlapLine(thursday, patrick)).toHaveCount(0);
     await expect(overlapLine(thursday, TECHRISE_TITLE)).toHaveCount(0);
 
@@ -182,7 +233,7 @@ test.describe("Production content (no demo)", () => {
     // The office-hours card: one application for all six; the lineup is three across on desktop.
     const card = page.getByRole("region", { name: "Founders Office Hours", exact: true });
     await expect(card).toContainText(
-      "One application covers all six mentors. Appointments are limited. Times for Vik and Elliott are still being set.",
+      "One application covers all six mentors. Appointments are limited. Times for Vik are still being set.",
     );
     await expect(card).toContainText(SESSION_RULE);
     const width = page.viewportSize()!.width;

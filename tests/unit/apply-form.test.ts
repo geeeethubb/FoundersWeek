@@ -84,7 +84,25 @@ const DATE_ONLY_MENTOR: Mentor = {
   sources: [],
 };
 const DATE_ONLY_WINDOW = "window:fixture-casey-2026-10-01";
-const fixtureMentors = [...mentors, DATE_ONLY_MENTOR];
+/**
+ * Synthetic mentor (not real content) whose times aren't set at all: no windows or slots
+ * (scheduling in progress). Vik is the only real one now that Elliott has windows, so this keeps
+ * the coverage of naming several such mentors together.
+ */
+const SCHEDULING_MENTOR: Mentor = {
+  ...DATE_ONLY_MENTOR,
+  id: "fixture-morgan",
+  name: "Morgan Fixture",
+  firstName: "Morgan",
+  availability: [],
+};
+/** Elliott's three windows (Wed, Sep 30 morning and afternoon; Thu, Oct 1 afternoon), by date. */
+const ELLIOTT_WINDOWS = [
+  "window:elliott-notrica-2026-09-30-am",
+  "window:elliott-notrica-2026-09-30-pm",
+  "window:elliott-notrica-2026-10-01-pm",
+];
+const fixtureMentors = [...mentors, DATE_ONLY_MENTOR, SCHEDULING_MENTOR];
 const fixtureCatalog = buildApplicationCatalog(fixtureMentors);
 const fixturePresentations = presentOptions(fixtureCatalog, fixtureMentors);
 
@@ -120,13 +138,18 @@ describe("prefill from deep links", () => {
   });
 
   it("preselects mentors whose schedule is pending, and infers the mentor from a window alone", () => {
-    expect(resolvePrefill(catalog, { mentor: "vikram-lakhwara" })).toMatchObject({ mentorIds: ["vikram-lakhwara"], availability: [] });
-    expect(resolvePrefill(catalog, { mentor: "elliott-notrica" })).toEqual({
-      mentorIds: ["elliott-notrica"],
-      firstChoiceMentorId: "elliott-notrica",
+    expect(resolvePrefill(catalog, { mentor: "vikram-lakhwara" })).toEqual({
+      mentorIds: ["vikram-lakhwara"],
+      firstChoiceMentorId: "vikram-lakhwara",
       availability: [],
-      referrerMentorId: "elliott-notrica",
+      referrerMentorId: "vikram-lakhwara",
     });
+    // A made-up window for him is ignored: he has no times yet.
+    expect(resolvePrefill(catalog, { mentor: "vikram-lakhwara", window: "vikram-lakhwara-2026-10-01" })).toMatchObject({
+      mentorIds: ["vikram-lakhwara"],
+      availability: [],
+    });
+    expect(resolvePrefill(fixtureCatalog, { mentor: "fixture-morgan" })).toMatchObject({ mentorIds: ["fixture-morgan"], availability: [] });
     expect(resolvePrefill(catalog, { window: "arnav-mishra-2026-10-02-am" })).toMatchObject({
       mentorIds: ["arnav-mishra"],
       availability: ["window:arnav-mishra-2026-10-02-am"],
@@ -199,6 +222,34 @@ describe("prefill from deep links", () => {
     );
   });
 
+  it("preselects Elliott (three windows): his link ticks nothing, a link naming one of his windows ticks that one", () => {
+    const elliott = {
+      mentorIds: ["elliott-notrica"],
+      firstChoiceMentorId: "elliott-notrica",
+      availability: [] as string[],
+      referrerMentorId: "elliott-notrica",
+    };
+    // “Apply to meet Elliott” names only him (he has several windows): nothing is ticked.
+    expect(prefillFromSearch(catalog, "?mentor=elliott-notrica")).toEqual(elliott);
+    expect(prefillNote(catalog, elliott, presentations)).toBe("Elliott Notrica is selected below. Add anyone else you’d like to meet.");
+    // A link that names one of his windows (e.g. from the calendar) ticks exactly that one.
+    const afternoon = { ...elliott, availability: [ELLIOTT_WINDOWS[1]] };
+    expect(prefillFromSearch(catalog, "?mentor=elliott-notrica&window=elliott-notrica-2026-09-30-pm")).toEqual(afternoon);
+    expect(resolvePrefill(catalog, { window: "elliott-notrica-2026-09-30-pm" })).toEqual(afternoon);
+    expect(prefillNote(catalog, afternoon, presentations)).toBe(
+      "Elliott Notrica is selected below, with “I can make Wed, Sep 30, 2:00–5:00 PM CT” ticked. Add anyone else you’d like to meet.",
+    );
+    expect(resolvePrefill(catalog, { mentor: "elliott-notrica", window: "elliott-notrica-2026-09-30-am" }).availability).toEqual([
+      ELLIOTT_WINDOWS[0],
+    ]);
+    expect(resolvePrefill(catalog, { mentor: "elliott-notrica", window: "elliott-notrica-2026-10-01-pm" }).availability).toEqual([
+      ELLIOTT_WINDOWS[2],
+    ]);
+    // A window he doesn't have is ignored, and so is someone else's.
+    expect(resolvePrefill(catalog, { mentor: "elliott-notrica", window: "elliott-notrica-2026-10-01-am" })).toEqual(elliott);
+    expect(resolvePrefill(catalog, { mentor: "elliott-notrica", window: "rishab-veldur-2026-10-01" })).toEqual(elliott);
+  });
+
   it("preselects a date-only mentor (fixture) and ticks the window, noting the time is still to be confirmed", () => {
     const casey = {
       mentorIds: ["fixture-casey"],
@@ -225,8 +276,8 @@ describe("prefill from deep links", () => {
   });
 
   it("explains the initial preselection in one line", () => {
-    expect(prefillNote(catalog, resolvePrefill(catalog, { mentor: "elliott-notrica" }), presentations)).toBe(
-      "Elliott Notrica is selected below. Add anyone else you’d like to meet.",
+    expect(prefillNote(catalog, resolvePrefill(catalog, { mentor: "vikram-lakhwara" }), presentations)).toBe(
+      "Vikram “Vik” Lakhwara is selected below. Add anyone else you’d like to meet.",
     );
     expect(
       prefillNote(
@@ -331,7 +382,7 @@ describe("prefill merge while the form is open (or into a restored draft)", () =
     expect(mergePrefill(answered, EMPTY_PREFILL).changed).toBe(false);
   });
 
-  it("adds mentors whose schedule is pending (Vik, Elliott) without asking for a time", () => {
+  it("adds mentors whose schedule is pending (Vik, a fixture) without asking for a time", () => {
     const withPatrick = {
       ...answered,
       mentorIds: ["patrick-haddox"],
@@ -346,6 +397,29 @@ describe("prefill merge while the form is open (or into a restored draft)", () =
     });
     expect(mergeAnnouncement(catalog, vik.outcome!, presentations)).toBe("Vikram “Vik” Lakhwara added to your mentors.");
 
+    const vikFirst = mergeSearchParams(answered, catalog, { mentor: "vikram-lakhwara" });
+    expect(vikFirst.state).toEqual({
+      ...answered,
+      mentorIds: ["vikram-lakhwara"],
+      firstChoiceMentorId: "vikram-lakhwara",
+      availability: [],
+      referrerMentorId: "vikram-lakhwara",
+    });
+    expect(mergeAnnouncement(catalog, vikFirst.outcome!, presentations)).toBe(
+      "Vikram “Vik” Lakhwara added to your mentors. Vik is your first choice.",
+    );
+    // A made-up window for him is ignored: he has no times yet.
+    const withWindow = mergeSearchParams(answered, catalog, { mentor: "vikram-lakhwara", window: "vikram-lakhwara-2026-10-01" });
+    expect(withWindow.state.availability).toEqual([]);
+    expect(withWindow.outcome?.optionAdded).toBeNull();
+
+    // Another mentor still scheduling (fixture) joins Vik the same way.
+    const morgan = mergeSearchParams(vikFirst.state, fixtureCatalog, { mentor: "fixture-morgan" });
+    expect(morgan.state).toEqual({ ...vikFirst.state, mentorIds: ["vikram-lakhwara", "fixture-morgan"] });
+    expect(mergeAnnouncement(fixtureCatalog, morgan.outcome!, fixturePresentations)).toBe("Morgan Fixture added to your mentors.");
+  });
+
+  it("adds Elliott with the one window a link names (he has three), or with none from his own link", () => {
     const elliott = mergeSearchParams(answered, catalog, { mentor: "elliott-notrica" });
     expect(elliott.state).toEqual({
       ...answered,
@@ -357,10 +431,21 @@ describe("prefill merge while the form is open (or into a restored draft)", () =
     expect(mergeAnnouncement(catalog, elliott.outcome!, presentations)).toBe(
       "Elliott Notrica added to your mentors. Elliott is your first choice.",
     );
-    // A made-up window for him is ignored: he has no times yet.
-    const withWindow = mergeSearchParams(answered, catalog, { mentor: "elliott-notrica", window: "elliott-notrica-2026-10-01-am" });
-    expect(withWindow.state.availability).toEqual([]);
-    expect(withWindow.outcome?.optionAdded).toBeNull();
+    const morning = mergeSearchParams(answered, catalog, { mentor: "elliott-notrica", window: "elliott-notrica-2026-09-30-am" });
+    expect(morning.state).toMatchObject({ mentorIds: ["elliott-notrica"], availability: [ELLIOTT_WINDOWS[0]] });
+    expect(mergeAnnouncement(catalog, morning.outcome!, presentations)).toBe(
+      "Elliott Notrica added to your mentors. “I can make Wed, Sep 30, 9:00 AM–12:00 PM CT” is ticked. Elliott is your first choice.",
+    );
+    // A second window of his, ticked while he's already chosen, is added next to the first.
+    const thursday = mergeSearchParams(morning.state, catalog, { mentor: "elliott-notrica", window: "elliott-notrica-2026-10-01-pm" });
+    expect(thursday.state.availability).toEqual([ELLIOTT_WINDOWS[0], ELLIOTT_WINDOWS[2]]);
+    expect(mergeAnnouncement(catalog, thursday.outcome!, presentations)).toBe(
+      "“I can make Thu, Oct 1, 12:00–5:00 PM CT” is ticked for Elliott Notrica.",
+    );
+    // A window he doesn't have is ignored.
+    const madeUp = mergeSearchParams(answered, catalog, { mentor: "elliott-notrica", window: "elliott-notrica-2026-10-01-am" });
+    expect(madeUp.state.availability).toEqual([]);
+    expect(madeUp.outcome?.optionAdded).toBeNull();
   });
 
   it("reads and keys URL parameters (first value wins)", () => {
@@ -503,29 +588,44 @@ describe("form model", () => {
   });
 
   it("requires broad availability for mentors without times, else a ticked window OR broad availability", () => {
-    // Only Elliott (schedule pending) and nothing about availability → the availability error, together
+    // Only Vik (schedule pending) and nothing about availability → the availability error, together
     // with the other field errors.
-    const elliottOnly = submit(state({ mentorIds: ["elliott-notrica"] }));
-    expect(elliottOnly.availabilityNotes).toBe(
-      "Tell us when you’re generally free during Founders Week. Elliott’s times aren’t set yet.",
-    );
-    expect(elliottOnly.fullName).toBeDefined();
-    expect(Object.keys(submit({ ...answered, mentorIds: ["elliott-notrica"], availabilityNotes: "" }))).toEqual([
+    const vikOnly = submit(state({ mentorIds: ["vikram-lakhwara"] }));
+    expect(vikOnly.availabilityNotes).toBe("Tell us when you’re generally free during Founders Week. Vik’s times aren’t set yet.");
+    expect(vikOnly.fullName).toBeDefined();
+    expect(Object.keys(submit({ ...answered, mentorIds: ["vikram-lakhwara"], availabilityNotes: "" }))).toEqual([
       "availabilityNotes",
     ]);
     // Broad availability is enough.
-    expect(submit({ ...answered, mentorIds: ["elliott-notrica"] })).toEqual({});
-    // Ticking Patrick's window doesn't cover Elliott, whose times aren't set: the note is still needed.
-    const patrickAndElliott = {
+    expect(submit({ ...answered, mentorIds: ["vikram-lakhwara"] })).toEqual({});
+    // Ticking Patrick's window doesn't cover Vik, whose times aren't set: the note is still needed.
+    const patrickAndVik = {
       ...answered,
-      mentorIds: ["patrick-haddox", "elliott-notrica"],
-      firstChoiceMentorId: "elliott-notrica",
+      mentorIds: ["patrick-haddox", "vikram-lakhwara"],
+      firstChoiceMentorId: "vikram-lakhwara",
       availability: ["window:patrick-haddox-2026-10-01-am"],
     };
-    expect(submit({ ...patrickAndElliott, availabilityNotes: "" })).toEqual({
-      availabilityNotes: "Tell us when you’re generally free during Founders Week. Elliott’s times aren’t set yet.",
+    expect(submit({ ...patrickAndVik, availabilityNotes: "" })).toEqual({
+      availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik’s times aren’t set yet.",
     });
-    expect(submit(patrickAndElliott)).toEqual({});
+    expect(submit(patrickAndVik)).toEqual({});
+    // Elliott's times are set (three windows): any one of them ticked is enough, and with nothing
+    // ticked and no note the general rule applies, never "Elliott’s times aren’t set yet".
+    for (const window of ELLIOTT_WINDOWS) {
+      expect(submit({ ...answered, mentorIds: ["elliott-notrica"], availability: [window], availabilityNotes: "" }), window).toEqual({});
+    }
+    expect(submit({ ...answered, mentorIds: ["elliott-notrica"], availabilityNotes: "" })).toEqual({
+      availabilityNotes: "Tell us when you’re generally free during Founders Week (or pick one of the listed times).",
+    });
+    // Next to Patrick, Patrick's ticked window is enough for both.
+    expect(
+      submit({
+        ...patrickAndVik,
+        mentorIds: ["patrick-haddox", "elliott-notrica"],
+        firstChoiceMentorId: "elliott-notrica",
+        availabilityNotes: "",
+      }),
+    ).toEqual({});
     // Ron's times are set (Thu, Oct 1, 2:30–4:30 PM CT): his ticked window is enough, like Patrick's…
     const ron = { ...answered, mentorIds: ["ron-lewis"], availability: ["window:ron-lewis-2026-10-01-pm"], availabilityNotes: "" };
     expect(submit(ron)).toEqual({});
@@ -556,8 +656,14 @@ describe("form model", () => {
     expect(
       submit({ ...answered, mentorIds: ["patrick-haddox", "arnav-mishra"], firstChoiceMentorId: "arnav-mishra" }),
     ).toEqual({});
-    // Every pending mentor at once, no time needed.
-    const pending = submit({ ...answered, mentorIds: ["vikram-lakhwara", "elliott-notrica"] });
+    // Every pending mentor at once (Vik and a fixture), no time needed.
+    const validateFixture = createValidator(fixtureCatalog, ["illinois.edu"]);
+    const pending = validateFixture(
+      toSubmissionValues({ ...answered, mentorIds: ["vikram-lakhwara", "fixture-morgan"] }, fixtureCatalog, {
+        idempotencyKey: newIdempotencyKey(),
+        elapsedMs: 5000,
+      }),
+    );
     expect(Object.keys(pending)).toEqual(["firstChoiceMentorId"]);
   });
 
@@ -585,16 +691,16 @@ describe("form model", () => {
     expect(submit({ ...withPatrick, availabilityNotes: "" })).toEqual({});
     expect(submit({ ...withPatrick, availability: [...withPatrick.availability, RISHAB_WINDOW], availabilityNotes: "" })).toEqual({});
     expect(submit(withPatrick)).toEqual({});
-    // Next to mentors still scheduling, only they are named, in the order chosen (Ron's times are set).
+    // Next to mentors still scheduling, only they are named, in the order chosen (Elliott's and Ron's times are set).
     expect(
       submit({
         ...answered,
-        mentorIds: ["elliott-notrica", "rishab-veldur"],
-        firstChoiceMentorId: "elliott-notrica",
+        mentorIds: ["vikram-lakhwara", "rishab-veldur"],
+        firstChoiceMentorId: "vikram-lakhwara",
         availability: [RISHAB_WINDOW],
         availabilityNotes: "",
       }),
-    ).toEqual({ availabilityNotes: "Tell us when you’re generally free during Founders Week. Elliott’s times aren’t set yet." });
+    ).toEqual({ availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik’s times aren’t set yet." });
     expect(
       submit({
         ...answered,
@@ -603,7 +709,25 @@ describe("form model", () => {
         availabilityNotes: "",
       }),
     ).toEqual({
-      availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik and Elliott’s times aren’t set yet.",
+      availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik’s times aren’t set yet.",
+    });
+    const validateFixture = createValidator(fixtureCatalog, ["illinois.edu"]);
+    expect(
+      validateFixture(
+        toSubmissionValues(
+          {
+            ...answered,
+            mentorIds: ["fixture-morgan", "rishab-veldur", "elliott-notrica", "ron-lewis", "vikram-lakhwara"],
+            firstChoiceMentorId: "rishab-veldur",
+            availability: [RISHAB_WINDOW],
+            availabilityNotes: "",
+          },
+          fixtureCatalog,
+          { idempotencyKey: newIdempotencyKey(), elapsedMs: 5000 },
+        ),
+      ),
+    ).toEqual({
+      availabilityNotes: "Tell us when you’re generally free during Founders Week. Morgan and Vik’s times aren’t set yet.",
     });
     // On an otherwise empty submit, his ticked window leaves no availability error among the rest.
     const empty = submit(state({ mentorIds: ["rishab-veldur"], availability: [RISHAB_WINDOW] }));
@@ -634,15 +758,24 @@ describe("form model", () => {
       submitFixture({ ...withPatrick, availability: [...withPatrick.availability, DATE_ONLY_WINDOW], availabilityNotes: "" }),
     ).toEqual({ availabilityNotes: NAMES_CASEY });
     expect(submitFixture(withPatrick)).toEqual({});
-    // Names every mentor without set times, in the order chosen (Rishab and Ron aren't among them).
+    // Names every mentor without set times, in the order chosen (Rishab, Elliott and Ron aren't among them).
     expect(
       submitFixture({
         ...answered,
-        mentorIds: ["elliott-notrica", "rishab-veldur", "ron-lewis", "fixture-casey"],
-        firstChoiceMentorId: "elliott-notrica",
+        mentorIds: ["vikram-lakhwara", "rishab-veldur", "elliott-notrica", "ron-lewis", "fixture-casey"],
+        firstChoiceMentorId: "vikram-lakhwara",
         availabilityNotes: "",
       }),
-    ).toEqual({ availabilityNotes: "Tell us when you’re generally free during Founders Week. Elliott and Casey’s times aren’t set yet." });
+    ).toEqual({ availabilityNotes: "Tell us when you’re generally free during Founders Week. Vik and Casey’s times aren’t set yet." });
+    expect(
+      submitFixture({
+        ...answered,
+        mentorIds: ["fixture-morgan", "fixture-casey", "vikram-lakhwara"],
+        firstChoiceMentorId: "fixture-casey",
+        availability: [DATE_ONLY_WINDOW],
+        availabilityNotes: "",
+      }),
+    ).toEqual({ availabilityNotes: "Tell us when you’re generally free during Founders Week. Morgan, Casey and Vik’s times aren’t set yet." });
     // On an otherwise empty submit the error shows up together with the rest.
     const empty = submitFixture(state({ mentorIds: ["fixture-casey"], availability: [DATE_ONLY_WINDOW] }));
     expect(empty.availabilityNotes).toBe(NAMES_CASEY);
@@ -661,7 +794,8 @@ describe("form model", () => {
   });
 
   it("offers an “I can make …” time only for selected mentors with a published window", () => {
-    expect(knownTimes(state({ mentorIds: ["vikram-lakhwara", "elliott-notrica"] }), catalog)).toEqual([]);
+    expect(knownTimes(state({ mentorIds: ["vikram-lakhwara"] }), catalog)).toEqual([]);
+    expect(knownTimes(state({ mentorIds: ["vikram-lakhwara", "fixture-morgan"] }), fixtureCatalog)).toEqual([]);
     expect(
       knownTimes(state({ mentorIds: ["ron-lewis", "vikram-lakhwara", "arnav-mishra", "patrick-haddox"] }), catalog).map((t) => [
         t.mentor.id,
@@ -675,6 +809,7 @@ describe("form model", () => {
       ["ron-lewis", "window:ron-lewis-2026-10-01-pm", "Thu, Oct 1, 2:30–4:30 PM CT"],
     ]);
     // Rishab's window is set (Thu, Oct 1, noon to 5 PM): one "I can make …" option, on Thu, Oct 1 only.
+    // Elliott has three, by date: Wed, Sep 30 morning and afternoon, and Thu, Oct 1 afternoon.
     expect(
       knownTimes(state({ mentorIds: ["rishab-veldur", "elliott-notrica", "patrick-haddox"] }), catalog).map((t) => [
         t.mentor.id,
@@ -683,10 +818,17 @@ describe("form model", () => {
       ]),
     ).toEqual([
       ["patrick-haddox", "window:patrick-haddox-2026-10-01-am", "Thu, Oct 1, 10:00–11:30 AM CT"],
+      ["elliott-notrica", "window:elliott-notrica-2026-09-30-am", "Wed, Sep 30, 9:00 AM–12:00 PM CT"],
+      ["elliott-notrica", "window:elliott-notrica-2026-09-30-pm", "Wed, Sep 30, 2:00–5:00 PM CT"],
+      ["elliott-notrica", "window:elliott-notrica-2026-10-01-pm", "Thu, Oct 1, 12:00–5:00 PM CT"],
       ["rishab-veldur", "window:rishab-veldur-2026-10-01", "Thu, Oct 1, 12:00–5:00 PM CT"],
     ]);
     expect(focusTargetId("availability", state({ mentorIds: ["rishab-veldur"] }), catalog)).toBe(
       "apply-option-window-rishab-veldur-2026-10-01",
+    );
+    // Elliott's first window (by date) takes the focus.
+    expect(focusTargetId("availability", state({ mentorIds: ["elliott-notrica"] }), catalog)).toBe(
+      "apply-option-window-elliott-notrica-2026-09-30-am",
     );
     // A date-only window (fixture) is offered too, with the time still to be confirmed.
     expect(
@@ -787,13 +929,19 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
   const ASK = "When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday.";
 
   it("is needed whenever a selected mentor has no times yet — and says who, never “not needed”", () => {
-    // In the order chosen; Ron's times are set, so he isn't one of them.
+    // In the order chosen; Elliott's and Ron's times are set, so they aren't among them.
     expect(
       mentorsWithoutTimes(
         state({ mentorIds: ["elliott-notrica", "patrick-haddox", "ron-lewis", "vikram-lakhwara", "arnav-mishra"] }),
         catalog,
       ).map((m) => m.id),
-    ).toEqual(["elliott-notrica", "vikram-lakhwara"]);
+    ).toEqual(["vikram-lakhwara"]);
+    expect(
+      mentorsWithoutTimes(
+        state({ mentorIds: ["fixture-morgan", "elliott-notrica", "patrick-haddox", "ron-lewis", "vikram-lakhwara", "arnav-mishra"] }),
+        fixtureCatalog,
+      ).map((m) => m.id),
+    ).toEqual(["fixture-morgan", "vikram-lakhwara"]);
     // Patrick's window is ticked, but Vik's times aren't set: the note is still needed.
     const vik = broadAvailabilityGuidance(
       state({ mentorIds: ["patrick-haddox", "vikram-lakhwara"], availability: [PATRICK_WINDOW] }),
@@ -804,11 +952,34 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
     expect(vik.hint).not.toMatch(/\b(his|her)\b/);
     expect(
       broadAvailabilityGuidance(state({ mentorIds: ["vikram-lakhwara", "elliott-notrica", "ron-lewis"] }), catalog).hint,
-    ).toBe(`${ASK} Needed because Vik and Elliott’s times aren’t set yet.`);
+    ).toBe(`${ASK} Needed because Vik’s times aren’t set yet.`);
+    expect(
+      broadAvailabilityGuidance(
+        state({ mentorIds: ["vikram-lakhwara", "elliott-notrica", "fixture-morgan", "ron-lewis"], availability: [ELLIOTT_WINDOWS[0]] }),
+        fixtureCatalog,
+      ),
+    ).toEqual({ required: true, hint: `${ASK} Needed because Vik and Morgan’s times aren’t set yet.` });
     expect(joinNames([])).toBe("");
     expect(joinNames(["Vik"])).toBe("Vik");
-    expect(joinNames(["Vik", "Elliott"])).toBe("Vik and Elliott");
-    expect(joinNames(["Vik", "Elliott", "Casey"])).toBe("Vik, Elliott and Casey");
+    expect(joinNames(["Vik", "Morgan"])).toBe("Vik and Morgan");
+    expect(joinNames(["Vik", "Morgan", "Casey"])).toBe("Vik, Morgan and Casey");
+  });
+
+  it("counts Elliott as a mentor with set times: any one of his three windows ticked makes it optional", () => {
+    expect(mentorsWithoutTimes(state({ mentorIds: ["elliott-notrica"] }), catalog)).toEqual([]);
+    const alone = broadAvailabilityGuidance(state({ mentorIds: ["elliott-notrica"] }), catalog);
+    expect(alone).toEqual({ required: true, hint: `${ASK} Not needed if you tick a time above.` });
+    for (const availability of [...ELLIOTT_WINDOWS.map((w) => [w]), ELLIOTT_WINDOWS]) {
+      expect(broadAvailabilityGuidance(state({ mentorIds: ["elliott-notrica"], availability }), catalog), availability.join()).toEqual({
+        required: false,
+        hint: `${ASK} Not needed if you tick a time above.`,
+      });
+    }
+    // Next to Vik, his ticked window doesn't lift it, and only Vik is named.
+    expect(
+      broadAvailabilityGuidance(state({ mentorIds: ["elliott-notrica", "vikram-lakhwara"], availability: [ELLIOTT_WINDOWS[1]] }), catalog),
+    ).toEqual({ required: true, hint: `${ASK} Needed because Vik’s times aren’t set yet.` });
+    expect(alone.hint).not.toMatch(/Elliott|Sep 30|Oct 1/);
   });
 
   it("counts Rishab as a mentor with set times: optional once his window is ticked, never named as “not set”", () => {
@@ -818,7 +989,7 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
         state({ mentorIds: ["rishab-veldur", "patrick-haddox", "elliott-notrica", "ron-lewis", "arnav-mishra", "vikram-lakhwara"] }),
         catalog,
       ).map((m) => m.id),
-    ).toEqual(["elliott-notrica", "vikram-lakhwara"]);
+    ).toEqual(["vikram-lakhwara"]);
     // Like Patrick: required until a time is ticked, and the hint says a ticked time is enough.
     const alone = broadAvailabilityGuidance(state({ mentorIds: ["rishab-veldur"] }), catalog);
     expect(alone).toEqual({ required: true, hint: `${ASK} Not needed if you tick a time above.` });
@@ -840,7 +1011,13 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
     expect(withVik).toEqual({ required: true, hint: `${ASK} Needed because Vik’s times aren’t set yet.` });
     expect(
       broadAvailabilityGuidance(state({ mentorIds: ["rishab-veldur", "vikram-lakhwara", "elliott-notrica", "ron-lewis"] }), catalog),
-    ).toEqual({ required: true, hint: `${ASK} Needed because Vik and Elliott’s times aren’t set yet.` });
+    ).toEqual({ required: true, hint: `${ASK} Needed because Vik’s times aren’t set yet.` });
+    expect(
+      broadAvailabilityGuidance(
+        state({ mentorIds: ["rishab-veldur", "vikram-lakhwara", "elliott-notrica", "fixture-morgan", "ron-lewis"] }),
+        fixtureCatalog,
+      ),
+    ).toEqual({ required: true, hint: `${ASK} Needed because Vik and Morgan’s times aren’t set yet.` });
     // No "office hours on …, so include when you’re free that day" line for him any more.
     for (const hint of [alone.hint, withVik.hint]) {
       expect(hint).not.toMatch(/Rishab|Oct 1|Oct 2|Friday, October 2/);
@@ -853,11 +1030,20 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
     expect(
       mentorsWithoutTimes(
         state({
-          mentorIds: ["fixture-casey", "patrick-haddox", "rishab-veldur", "elliott-notrica", "ron-lewis", "arnav-mishra", "vikram-lakhwara"],
+          mentorIds: [
+            "fixture-casey",
+            "patrick-haddox",
+            "rishab-veldur",
+            "elliott-notrica",
+            "ron-lewis",
+            "arnav-mishra",
+            "vikram-lakhwara",
+            "fixture-morgan",
+          ],
         }),
         fixtureCatalog,
       ).map((m) => m.id),
-    ).toEqual(["fixture-casey", "elliott-notrica", "vikram-lakhwara"]);
+    ).toEqual(["fixture-casey", "vikram-lakhwara", "fixture-morgan"]);
     const alone = broadAvailabilityGuidance(state({ mentorIds: ["fixture-casey"] }), fixtureCatalog);
     expect(alone).toEqual({ required: true, hint: `${ASK} Needed because Casey’s times aren’t set yet. ${OCT_1}` });
     // Ticking the window doesn't make the note optional: the time on that day isn't set.
@@ -878,6 +1064,12 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
     expect(broadAvailabilityGuidance(state({ mentorIds: ["vikram-lakhwara", "fixture-casey"] }), fixtureCatalog)).toEqual({
       required: true,
       hint: `${ASK} Needed because Vik and Casey’s times aren’t set yet. ${OCT_1}`,
+    });
+    expect(
+      broadAvailabilityGuidance(state({ mentorIds: ["vikram-lakhwara", "fixture-casey", "fixture-morgan"] }), fixtureCatalog),
+    ).toEqual({
+      required: true,
+      hint: `${ASK} Needed because Vik, Casey and Morgan’s times aren’t set yet. ${OCT_1}`,
     });
     expect(alone.hint).not.toMatch(/Oct 2|Friday, October 2/);
     expect(alone.hint).not.toMatch(/\b(his|her)\b/);
@@ -917,17 +1109,22 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
       ["rishab-veldur", "patrick-haddox"],
       ["patrick-haddox", "arnav-mishra", "rishab-veldur"],
       ["rishab-veldur", "elliott-notrica"],
+      ["elliott-notrica", "vikram-lakhwara"],
+      ["elliott-notrica", "patrick-haddox"],
       ids,
     ];
     expect(ids).toHaveLength(6);
     const fixtureIds = fixtureCatalog.mentors.map((m) => m.id);
-    expect(fixtureIds).toEqual([...ids, "fixture-casey"]);
+    expect(fixtureIds).toEqual([...ids, "fixture-casey", "fixture-morgan"]);
     const fixtureCombos = [
       ...combos,
       ["fixture-casey"],
       ["fixture-casey", "patrick-haddox"],
       ["rishab-veldur", "fixture-casey"],
       ["fixture-casey", "ron-lewis"],
+      ["vikram-lakhwara", "fixture-morgan"],
+      ["fixture-morgan", "elliott-notrica"],
+      ["fixture-morgan", "fixture-casey", "vikram-lakhwara"],
       fixtureIds,
     ];
     const availabilities = [
@@ -937,6 +1134,8 @@ describe("broad availability (hint and requiredness mirror the schema's rule)", 
       ["window:rishab-veldur-2026-10-01"],
       [PATRICK_WINDOW, "window:rishab-veldur-2026-10-01"],
       ["window:ron-lewis-2026-10-01-pm"],
+      [ELLIOTT_WINDOWS[0]],
+      [ELLIOTT_WINDOWS[2], "window:rishab-veldur-2026-10-01"],
     ];
     const setups = [
       { cat: catalog, check: validate, mentorCombos: combos, windows: availabilities },
@@ -1218,7 +1417,7 @@ describe("in-progress drafts (sessionStorage)", () => {
 });
 
 describe("application catalog", () => {
-  it("offers exactly the six mentors; Vik and Elliott have no times yet; no event is an option", () => {
+  it("offers exactly the six mentors; only Vik has no times yet; no event is an option", () => {
     expect(catalog.mentors.map((m) => m.id)).toEqual([
       "patrick-haddox",
       "arnav-mishra",
@@ -1229,15 +1428,7 @@ describe("application catalog", () => {
     ]);
     const byId = Object.fromEntries(catalog.mentors.map((m) => [m.id, m]));
     expect(byId["vikram-lakhwara"]).toMatchObject({ scheduling: "in-progress", options: [] });
-    expect(byId["elliott-notrica"]).toEqual({
-      id: "elliott-notrica",
-      name: "Elliott Notrica",
-      firstName: "Elliott",
-      affiliation: "Founder & CEO, Symbio Bioculinary",
-      demo: false,
-      scheduling: "in-progress",
-      options: [],
-    });
+    expect(catalog.mentors.filter((m) => m.scheduling === "in-progress").map((m) => m.id)).toEqual(["vikram-lakhwara"]);
     expect(byId["patrick-haddox"].options.map((o) => o.key)).toEqual(["window:patrick-haddox-2026-10-01-am"]);
     expect(byId["arnav-mishra"].options.map((o) => o.key)).toEqual(["window:arnav-mishra-2026-10-02-am"]);
     expect(byId["ron-lewis"].options.map((o) => o.key)).toEqual(["window:ron-lewis-2026-10-01-pm"]);
@@ -1245,6 +1436,34 @@ describe("application catalog", () => {
     // No event of any kind is an application option: not Dan Caruso's fireside chat, not Arnav's
     // happy hour at Legends, not the canceled Saturday afterparty.
     expect(JSON.stringify(catalog)).not.toMatch(/caruso|afterparty|happy hour|legends|partiful|HERE Apartments/i);
+  });
+
+  it("gives Elliott three timed windows: Wed, Sep 30 (9:00 AM–12:00 PM and 2:00–5:00 PM CT) and Thu, Oct 1 (12:00–5:00 PM CT)", () => {
+    const window = (id: string, date: string, label: string) => ({
+      key: `window:${id}`,
+      kind: "window",
+      id,
+      mentorId: "elliott-notrica",
+      certainty: "window",
+      date,
+      label,
+      detail: "Availability window. Exact appointment times aren’t set yet.",
+      timeKnown: true,
+    });
+    expect(catalog.mentors.find((m) => m.id === "elliott-notrica")).toEqual({
+      id: "elliott-notrica",
+      name: "Elliott Notrica",
+      firstName: "Elliott",
+      affiliation: "Founder & CEO, Symbio Bioculinary",
+      demo: false,
+      scheduling: "available",
+      options: [
+        window("elliott-notrica-2026-09-30-am", "2026-09-30", "Wed, Sep 30 · 9:00 AM–12:00 PM CT"),
+        window("elliott-notrica-2026-09-30-pm", "2026-09-30", "Wed, Sep 30 · 2:00–5:00 PM CT"),
+        window("elliott-notrica-2026-10-01-pm", "2026-10-01", "Thu, Oct 1 · 12:00–5:00 PM CT"),
+      ],
+    });
+    expect(catalog.mentors.find((m) => m.id === "elliott-notrica")!.options.map((o) => o.key)).toEqual(ELLIOTT_WINDOWS);
   });
 
   it("gives Rishab one timed window on Thu, Oct 1 (12:00–5:00 PM CT); every option has a known time", () => {
@@ -1278,7 +1497,7 @@ describe("application catalog", () => {
       ["patrick-haddox", [true]],
       ["arnav-mishra", [true]],
       ["vikram-lakhwara", []],
-      ["elliott-notrica", []],
+      ["elliott-notrica", [true, true, true]],
       ["ron-lewis", [true]],
       ["rishab-veldur", [true]],
     ]);
@@ -1338,11 +1557,13 @@ describe("application catalog", () => {
       ["patrick-haddox", [true]],
       ["arnav-mishra", [true]],
       ["vikram-lakhwara", []],
-      ["elliott-notrica", []],
+      ["elliott-notrica", [true, true, true]],
       ["ron-lewis", [true]],
       ["rishab-veldur", [true]],
       ["fixture-casey", [false]],
+      ["fixture-morgan", []],
     ]);
+    expect(fixtureCatalog.mentors.find((m) => m.id === "fixture-morgan")).toMatchObject({ scheduling: "in-progress", options: [] });
   });
 });
 
@@ -1399,12 +1620,22 @@ describe("option presentation", () => {
       phrase: "Thu, Oct 1, 2:30–4:30 PM CT",
       detail: "Exact appointment times will be set within this window.",
     });
-    // Exactly one option per mentor with times, in directory order: Patrick, Arnav, Ron, Rishab.
+    // One option per window, in directory order: Patrick, Arnav, Elliott (three, by date), Ron, Rishab.
     expect(Object.keys(presentations)).toEqual([
       "window:patrick-haddox-2026-10-01-am",
       "window:arnav-mishra-2026-10-02-am",
+      ...ELLIOTT_WINDOWS,
       "window:ron-lewis-2026-10-01-pm",
       "window:rishab-veldur-2026-10-01",
+    ]);
+  });
+
+  it("reads Elliott's three windows like Patrick's, each with its own day and time", () => {
+    const detail = "Exact appointment times will be set within this window.";
+    expect(ELLIOTT_WINDOWS.map((key) => presentations[key])).toEqual([
+      { kind: "window", label: "Wed, Sep 30 · 9:00 AM–12:00 PM CT", phrase: "Wed, Sep 30, 9:00 AM–12:00 PM CT", detail },
+      { kind: "window", label: "Wed, Sep 30 · 2:00–5:00 PM CT", phrase: "Wed, Sep 30, 2:00–5:00 PM CT", detail },
+      { kind: "window", label: "Thu, Oct 1 · 12:00–5:00 PM CT", phrase: "Thu, Oct 1, 12:00–5:00 PM CT", detail },
     ]);
   });
 
@@ -1426,6 +1657,7 @@ describe("option presentation", () => {
     expect(Object.keys(fixturePresentations)).toEqual([
       "window:patrick-haddox-2026-10-01-am",
       "window:arnav-mishra-2026-10-02-am",
+      ...ELLIOTT_WINDOWS,
       "window:ron-lewis-2026-10-01-pm",
       "window:rishab-veldur-2026-10-01",
       DATE_ONLY_WINDOW,
@@ -1457,7 +1689,7 @@ describe("acknowledgment email", () => {
     orgName: "Founders – Illinois Entrepreneurs",
     officeHours: site.officeHours,
     mentors: [
-      { name: "Elliott Notrica", schedulingInProgress: true },
+      { name: "Vikram “Vik” Lakhwara", schedulingInProgress: true },
       { name: "Patrick Haddox", schedulingInProgress: false },
     ],
   };
@@ -1470,7 +1702,7 @@ describe("acknowledgment email", () => {
     expect(text).toContain("doesn’t reserve a time slot");
     expect(text).toContain("email selected students to confirm");
     expect(text).toContain("Thanks for applying for office hours during Founders Week.");
-    expect(text).toContain("- Elliott Notrica (first choice, scheduling in progress)\n- Patrick Haddox\n");
+    expect(text).toContain("- Vikram “Vik” Lakhwara (first choice, scheduling in progress)\n- Patrick Haddox\n");
     expect(text).toContain("Founders will follow up once availability is finalized.");
     expect(text).toContain(input.statusUrl);
     expect(text).not.toMatch(/accepted|congratulations|confirmed for/i);

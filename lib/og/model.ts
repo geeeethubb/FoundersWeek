@@ -97,7 +97,7 @@ export interface MentorCardModel {
   /** Verified role and company (either may be missing). */
   role: string | null;
   company: string | null;
-  /** "Thu, Oct 1 · 10:00–11:30 AM CT" (a window, never a booking) or "Scheduling in progress". */
+  /** "Thu, Oct 1 · 10:00–11:30 AM CT" (a window, never a booking; "+ 2 more" when there are more) or "Scheduling in progress". */
   availability: { known: boolean; text: string };
   /** "Apply for Office Hours" while the application is open and the mentor is selectable. */
   cta: string | null;
@@ -106,7 +106,9 @@ export interface MentorCardModel {
 
 export function mentorCardModel(mentor: Mentor, site: SiteSettings): MentorCardModel {
   const a = previewAvailability(mentor);
-  const text = a.known ? `${a.date} · ${a.time}` : a.label;
+  // Like the home preview: the first window, then how many more ("+ 2 more").
+  const more = a.known && a.more > 0 ? a.more : 0;
+  const text = a.known ? `${a.date} · ${a.time}${more ? ` + ${more} more` : ""}` : a.label;
   const affiliation = mentorAffiliation(mentor);
   const cta = site.applications.open && mentor.acceptingApplications ? PRIMARY_CTA_LABEL : null;
   return {
@@ -118,7 +120,7 @@ export function mentorCardModel(mentor: Mentor, site: SiteSettings): MentorCardM
     availability: { known: a.known, text },
     cta,
     alt: `Founders Office Hours with ${mentor.name}${affiliation ? `, ${affiliation}` : ""}. ${
-      a.known ? `Available ${a.date}, ${a.time}.` : `${a.label}.`
+      a.known ? `Available ${a.date}, ${a.time}${more ? `, and ${more} more ${more === 1 ? "time" : "times"}` : ""}.` : `${a.label}.`
     }`,
   };
 }

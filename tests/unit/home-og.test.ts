@@ -70,7 +70,7 @@ const SIX_NAMES =
   "Patrick Haddox, Arnav Mishra, Vikram “Vik” Lakhwara, Elliott Notrica, Ron Lewis and Rishab Veldur";
 const SITE_ALT = `Founders Office Hours during Founders Week (Sept 30 – Oct 3) at UIUC: meet ${SIX_NAMES}. Apply for Office Hours.`;
 const PRIVATE =
-  /commitments|much more available|extra sessions|Wednesday through Saturday|Revenue strategy|Startup financial planning|basis|student teams|phone number|email signature|Oct 1 and 2/i;
+  /commitments|much more available|extra sessions|anytime after 9 AM|sessions in all|Wednesday through Saturday|Revenue strategy|Startup financial planning|basis|student teams|phone number|email signature|Oct 1 and 2/i;
 
 describe("social image models (public data)", () => {
   beforeEach(() => {
@@ -142,16 +142,25 @@ describe("social image models (public data)", () => {
       ],
     };
     expect(mentorCardModel(morning, getSite()).availability).toEqual({ known: true, text: "Fri, Oct 2 · Morning, before noon CT" });
-    // Only Vik and Elliott are still scheduling.
-    for (const id of ["vikram-lakhwara", "elliott-notrica"]) {
-      expect(mentorModel(id).availability).toEqual({ known: false, text: "Scheduling in progress" });
-      expect(mentorModel(id).alt).toMatch(/\. Scheduling in progress\.$/);
-    }
+    // Only Vik is still scheduling.
+    expect(mentorModel("vikram-lakhwara").availability).toEqual({ known: false, text: "Scheduling in progress" });
+    expect(mentorModel("vikram-lakhwara").alt).toMatch(/\. Scheduling in progress\.$/);
     expect(
       MENTOR_IDS.filter((id) => !mentorModel(id).availability.known),
-    ).toEqual(["vikram-lakhwara", "elliott-notrica"]);
+    ).toEqual(["vikram-lakhwara"]);
     expect(mentorModel("vikram-lakhwara")).toMatchObject({ role: "Founder & Managing Member", company: "Stakehouse" });
-    expect(mentorModel("elliott-notrica")).toMatchObject({ role: "Founder & CEO", company: "Symbio Bioculinary" });
+    expect(mentorModel("vikram-lakhwara", closed()).cta).toBeNull();
+    // Elliott has three windows; the card's one line is his first (Wed Sept 30, 9 AM to noon) + 2 more.
+    expect(mentorModel("elliott-notrica")).toEqual({
+      label: "Founders Week 2026 · Office Hours",
+      person: { id: "elliott-notrica", name: "Elliott Notrica", initials: "EN", headshot: "/mentors/elliott-notrica.jpg" },
+      name: "Elliott Notrica",
+      role: "Founder & CEO",
+      company: "Symbio Bioculinary",
+      availability: { known: true, text: "Wed, Sept 30 · 9:00 AM–12:00 PM CT + 2 more" },
+      cta: "Apply for Office Hours",
+      alt: "Founders Office Hours with Elliott Notrica, Founder & CEO, Symbio Bioculinary. Available Wed, Sept 30, 9:00 AM–12:00 PM CT, and 2 more times.",
+    });
     expect(mentorModel("elliott-notrica", closed()).cta).toBeNull();
     // Ron's Thursday window at BIF.
     expect(mentorModel("ron-lewis")).toEqual({
@@ -294,15 +303,20 @@ describe("social image models (public data)", () => {
       alt: "Office hours with Rishab Veldur: Thursday, Oct 1, 12:00–5:00 PM CT, Location to be announced. Founders × Founders Week.",
     });
     expect(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), closed()).cta).toBeNull();
-    // Office-hours cards on the calendar: Patrick, Rishab and Ron on Oct 1, Arnav on Oct 2; none for Rishab on Oct 2.
+    // Office-hours cards on the calendar: Elliott twice on Sept 30; Patrick, Elliott, Rishab and Ron on
+    // Oct 1; Arnav on Oct 2; none for Rishab on Oct 2.
     expect(getScheduleEntries().filter((e) => e.kind === "office-hours").map((e) => e.id)).toEqual([
+      "office-hours-elliott-notrica-2026-09-30-am",
+      "office-hours-elliott-notrica-2026-09-30-pm",
       "office-hours-patrick-haddox-2026-10-01-am",
+      "office-hours-elliott-notrica-2026-10-01-pm",
       "office-hours-rishab-veldur-2026-10-01",
       "office-hours-ron-lewis-2026-10-01-pm",
       "office-hours-arnav-mishra-2026-10-02-am",
     ]);
-    // Thursday in start-time order: Rishab's noon window sits between the 11:45 and 3:00 PM program
-    // blocks, and Ron's 2:30 window between Rishab's and the 3:00 PM block.
+    // Thursday in start-time order: Elliott's and Rishab's noon windows (content order on the tie) sit
+    // between the 11:45 and 3:00 PM program blocks, and Ron's 2:30 window between Rishab's and the
+    // 3:00 PM block.
     expect(
       getScheduleEntries()
         .filter((e) => e.date === "2026-10-01")
@@ -310,6 +324,7 @@ describe("social image models (public data)", () => {
     ).toEqual([
       ["office-hours-patrick-haddox-2026-10-01-am", "10:00–11:30 AM CT"],
       ["science-and-practice-of-pitching", "11:45 AM–2:15 PM CT"],
+      ["office-hours-elliott-notrica-2026-10-01-pm", "12:00–5:00 PM CT"],
       ["office-hours-rishab-veldur-2026-10-01", "12:00–5:00 PM CT"],
       ["office-hours-ron-lewis-2026-10-01-pm", "2:30–4:30 PM CT"],
       ["entrepreneurial-impact-launching-from-illinois", "3:00–5:00 PM CT"],
@@ -716,8 +731,11 @@ describe("sitemap and robots", () => {
     expect(urls).toContain("https://founders.example.edu/schedule/office-hours-rishab-veldur-2026-10-01");
     expect(urls).toHaveLength(3 + getMentors().length + getScheduleEntries().length);
     expect(urls).toContain("https://founders.example.edu/schedule/office-hours-ron-lewis-2026-10-01-pm");
-    // Three public pages, six mentor profiles and sixteen calendar entries.
-    expect([getMentors().length, getScheduleEntries().length, urls.length]).toEqual([6, 16, 25]);
+    // Three public pages, six mentor profiles and nineteen calendar entries.
+    expect([getMentors().length, getScheduleEntries().length, urls.length]).toEqual([6, 19, 28]);
+    for (const w of ["2026-09-30-am", "2026-09-30-pm", "2026-10-01-pm"]) {
+      expect(urls).toContain(`https://founders.example.edu/schedule/office-hours-elliott-notrica-${w}`);
+    }
     expect(urls.every((u) => u.startsWith("https://founders.example.edu"))).toBe(true);
     expect(urls.join(" ")).not.toMatch(/organizers|\/api\/|\/apply|afterparty|demo/);
   });

@@ -37,6 +37,9 @@ const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
 const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
 const RON_OH = "office-hours-ron-lewis-2026-10-01-pm";
+const ELLIOTT_WED_AM_OH = "office-hours-elliott-notrica-2026-09-30-am";
+const ELLIOTT_WED_PM_OH = "office-hours-elliott-notrica-2026-09-30-pm";
+const ELLIOTT_THU_OH = "office-hours-elliott-notrica-2026-10-01-pm";
 const rishabOfficeHours = byId(RISHAB_OH);
 const OFFICE_HOURS_REASON = "Office hours are by application. Selected students get their confirmed time by email.";
 
@@ -118,10 +121,18 @@ describe("calendar eligibility", () => {
     expect(byId("demo-canceled-session", withDemo).calendar.available).toBe(false);
   });
 
-  it("never exports office hours: Rishab's exact noon–5 PM window, Ron's confirmed window, and a date-only window", () => {
-    expect(production).toHaveLength(16);
+  it("never exports office hours: Rishab's exact noon–5 PM window, Ron's confirmed window, Elliott's three windows, and a date-only window", () => {
+    expect(production).toHaveLength(19);
     const officeHours = production.filter((e) => e.kind === "office-hours");
-    expect(officeHours.map((e) => e.id)).toEqual([PATRICK_OH, RISHAB_OH, RON_OH, ARNAV_OH]);
+    expect(officeHours.map((e) => e.id)).toEqual([
+      ELLIOTT_WED_AM_OH,
+      ELLIOTT_WED_PM_OH,
+      PATRICK_OH,
+      ELLIOTT_THU_OH,
+      RISHAB_OH,
+      RON_OH,
+      ARNAV_OH,
+    ]);
     for (const e of officeHours) {
       expect(e.calendar, e.id).toEqual({ available: false, reason: OFFICE_HOURS_REASON });
       expect(googleCalendarUrl(e, SITE), e.id).toBeNull();
@@ -156,6 +167,20 @@ describe("calendar eligibility", () => {
     expect(ronIcs).not.toContain(RON_OH);
     expect(ronIcs).not.toContain("20261001T143000");
     expect(ronIcs).not.toContain("Business Instructional Facility");
+
+    // Elliott's three exact windows (Wed 9–noon and 2–5, Thu noon–5) are planned, not bookings,
+    // and none of them is exported.
+    const elliottWindows = [ELLIOTT_WED_AM_OH, ELLIOTT_WED_PM_OH, ELLIOTT_THU_OH].map((id) => byId(id));
+    expect(elliottWindows.map((e) => [e.date, e.time, e.status, e.startsAt, e.endsAt])).toEqual([
+      ["2026-09-30", { kind: "exact", start: "09:00", end: "12:00" }, "planned", "2026-09-30T14:00:00.000Z", "2026-09-30T17:00:00.000Z"],
+      ["2026-09-30", { kind: "exact", start: "14:00", end: "17:00" }, "planned", "2026-09-30T19:00:00.000Z", "2026-09-30T22:00:00.000Z"],
+      ["2026-10-01", { kind: "exact", start: "12:00", end: "17:00" }, "planned", "2026-10-01T17:00:00.000Z", "2026-10-01T22:00:00.000Z"],
+    ]);
+    const elliottIcs = buildIcsCalendar(elliottWindows, { siteUrl: SITE, now: NOW });
+    expect(elliottIcs).not.toContain("BEGIN:VEVENT");
+    expect(elliottIcs).not.toContain("elliott-notrica");
+    expect(elliottIcs).not.toContain("20260930T090000");
+    expect(elliottIcs).not.toContain("20261001T120000");
 
     // A date-only window (a future mentor's): no export, and no invented time on Oct 1.
     const withDateOnly = buildScheduleEntries({ events, mentors: [...mentors, DATE_ONLY_MENTOR], site });

@@ -104,6 +104,19 @@ const RISHAB_APPLY_HREF = "/office-hours?mentor=rishab-veldur&window=rishab-veld
 const RON_WINDOW_ID = "ron-lewis-2026-10-01-pm";
 const RON_TIME = "2:30–4:30 PM CT";
 const RON_LINE = "Thu, Oct 1 · 2:30–4:30 PM CT";
+// Elliott: three exact windows (organizer update, Sept 25): Wed Sept 30, 9 AM to noon and 2 to 5 PM,
+// and Thu Oct 1, noon to 5 PM. Location still being set.
+const ELLIOTT_WINDOW_NOTE =
+  "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.";
+const ELLIOTT_SESSION_NOTE =
+  "Elliott is holding office hours on Wednesday, September 30 (9 AM to noon and 2 to 5 PM) and Thursday, October 1 (noon to 5 PM). We’re still setting the location.";
+const ELLIOTT_WINDOWS = [
+  { id: "elliott-notrica-2026-09-30-am", date: "2026-09-30", start: "09:00", end: "12:00", dateShort: "Wed, Sep 30", dateLong: "Wednesday, September 30", time: "9:00 AM–12:00 PM CT" },
+  { id: "elliott-notrica-2026-09-30-pm", date: "2026-09-30", start: "14:00", end: "17:00", dateShort: "Wed, Sep 30", dateLong: "Wednesday, September 30", time: "2:00–5:00 PM CT" },
+  { id: "elliott-notrica-2026-10-01-pm", date: "2026-10-01", start: "12:00", end: "17:00", dateShort: "Thu, Oct 1", dateLong: "Thursday, October 1", time: "12:00–5:00 PM CT" },
+] as const;
+const ELLIOTT_LINES = ELLIOTT_WINDOWS.map((w) => `${w.dateShort} · ${w.time}`);
+const ELLIOTT_APPLY_HREF = "/office-hours?mentor=elliott-notrica#apply";
 
 /**
  * A synthetic mentor with one date-only window (the date is set, the time isn't), so the
@@ -178,8 +191,11 @@ const PRIVATE_FRAGMENTS = [
   "Startup financial planning",
   "Communicating business progress",
   "Verify title",
-  "Much more available",
-  "extra sessions",
+  // From Elliott's email to the organizers, and the session total they set.
+  "From his email",
+  "anytime after 9 AM",
+  "Organizers set his windows",
+  "22 sessions",
   // From Rishab's email to the organizers.
   "student teams",
   "eligibility rule",
@@ -249,9 +265,25 @@ describe("public mentor data (content loader, default env)", () => {
       role: "Founder & CEO",
       company: "Symbio Bioculinary",
       acceptingApplications: true,
-      availability: [],
       slots: [],
       askMeAbout: null,
+    });
+    // Three exact windows (Sept 25): no display labels, the same public note on each.
+    expect(publicElliott.availability).toEqual(
+      ELLIOTT_WINDOWS.map((w) => ({
+        id: w.id,
+        date: w.date,
+        time: { kind: "exact", start: w.start, end: w.end },
+        note: ELLIOTT_WINDOW_NOTE,
+      })),
+    );
+    expect(publicElliott.session).toEqual({
+      format: null,
+      durationMinutes: site.officeHours.sessionMinutes,
+      location: null,
+      sessionCount: null,
+      confirmed: false,
+      note: ELLIOTT_SESSION_NOTE,
     });
   });
 
@@ -365,13 +397,13 @@ describe("public mentor data (content loader, default env)", () => {
     expect(availabilityHeadline(publicVik)).toMatchObject({ kind: "in-progress", date: null });
   });
 
-  it("shows Elliott as scheduling in progress: no times, interest only", () => {
-    const publicElliott = byId(getMentors(), "elliott-notrica");
-    const view = availabilityView(publicElliott);
+  it("shows Vik (the one mentor still scheduling) as scheduling in progress: no times, interest only", () => {
+    const publicVik = byId(getMentors(), "vikram-lakhwara");
+    const view = availabilityView(publicVik);
     expect(view).toEqual({ status: "in-progress", windows: [], slotCount: 0 });
     expect(availabilityItems(view)).toEqual([]);
     expect(availabilityOneLiner(view)).toBe("Scheduling in progress");
-    expect(availabilityHeadline(publicElliott)).toEqual({
+    expect(availabilityHeadline(publicVik)).toEqual({
       kind: "in-progress",
       label: "Scheduling in progress",
       date: null,
@@ -379,9 +411,70 @@ describe("public mentor data (content loader, default env)", () => {
       time: "Times to be announced",
       more: 0,
     });
-    expect(buildApplicationCatalog([publicElliott]).mentors).toEqual([
-      expect.objectContaining({ id: "elliott-notrica", scheduling: "in-progress", options: [] }),
+    expect(buildApplicationCatalog([publicVik]).mentors).toEqual([
+      expect.objectContaining({ id: "vikram-lakhwara", scheduling: "in-progress", options: [] }),
     ]);
+    // Every other mentor has published times now.
+    expect(getMentors().filter((m) => availabilityView(m).status === "in-progress").map((m) => m.id)).toEqual([
+      "vikram-lakhwara",
+    ]);
+  });
+
+  it("shows Elliott's three exact windows (Wed, Sep 30 morning and afternoon; Thu, Oct 1 afternoon) with no slots", () => {
+    const publicElliott = byId(getMentors(), "elliott-notrica");
+    const view = availabilityView(publicElliott);
+    expect(view).toEqual({
+      status: "available",
+      windows: ELLIOTT_WINDOWS.map((w) => ({
+        id: w.id,
+        kind: "window",
+        date: w.date,
+        dateShort: w.dateShort,
+        dateLong: w.dateLong,
+        timeLabel: w.time,
+        label: null,
+        note: ELLIOTT_WINDOW_NOTE,
+        slots: [],
+      })),
+      slotCount: 0,
+    });
+    expect(availabilityItems(view)).toEqual(
+      ELLIOTT_WINDOWS.map((w) => ({
+        key: `window:${w.id}`,
+        kind: "window",
+        date: w.date,
+        dateShort: w.dateShort,
+        timeLabel: w.time,
+        dateTime: w.date,
+        capacity: null,
+      })),
+    );
+    expect(availabilityOneLiner(view)).toBe(ELLIOTT_LINES.join("; "));
+    expect(availabilityHeadline(publicElliott)).toEqual({
+      kind: "window",
+      label: "Availability window",
+      date: "Wed, Sep 30",
+      dateTime: "2026-09-30",
+      time: "9:00 AM–12:00 PM CT",
+      more: 2,
+    });
+    // In the application each window is its own option with a known time: no broad availability needed.
+    const [catalogElliott] = buildApplicationCatalog([publicElliott]).mentors;
+    expect(catalogElliott).toMatchObject({ id: "elliott-notrica", scheduling: "available" });
+    expect(catalogElliott.options).toEqual(
+      ELLIOTT_WINDOWS.map((w, i) => ({
+        key: `window:${w.id}`,
+        kind: "window",
+        id: w.id,
+        mentorId: "elliott-notrica",
+        certainty: "window",
+        date: w.date,
+        label: ELLIOTT_LINES[i],
+        detail: "Availability window. Exact appointment times aren’t set yet.",
+        timeKnown: true,
+      })),
+    );
+    expect(mentorNeedsBroadAvailability(catalogElliott)).toBe(false);
   });
 
   it("never offers Dan Caruso (or anyone outside the lineup) as a mentor", () => {
@@ -769,7 +862,7 @@ describe("availability", () => {
     expect(strongestAvailabilityKind(availabilityView(tbaMentor))).toBe("window-approx");
     expect(strongestAvailabilityKind(availabilityView(ron))).toBe("window");
     expect(strongestAvailabilityKind(availabilityView(vik))).toBe("in-progress");
-    expect(strongestAvailabilityKind(availabilityView(elliott))).toBe("in-progress");
+    expect(strongestAvailabilityKind(availabilityView(elliott))).toBe("window");
   });
 
   it("builds plain one-liners and card headlines", () => {
@@ -804,7 +897,19 @@ describe("availability", () => {
       time: RON_TIME,
       more: 0,
     });
-    expect(availabilityHeadline(elliott)).toMatchObject({
+    // Several windows: the first one, then how many more.
+    expect(availabilityOneLiner(availabilityView(elliott))).toBe(
+      "Wed, Sep 30 · 9:00 AM–12:00 PM CT; Wed, Sep 30 · 2:00–5:00 PM CT; Thu, Oct 1 · 12:00–5:00 PM CT",
+    );
+    expect(availabilityHeadline(elliott)).toEqual({
+      kind: "window",
+      label: "Availability window",
+      date: "Wed, Sep 30",
+      dateTime: "2026-09-30",
+      time: "9:00 AM–12:00 PM CT",
+      more: 2,
+    });
+    expect(availabilityHeadline(vik)).toMatchObject({
       kind: "in-progress",
       label: "Scheduling in progress",
       time: "Times to be announced",
@@ -927,7 +1032,7 @@ describe("calls to action", () => {
     expect(preselectedOption(avery)).toBeNull(); // two slots: let the student choose
     expect(preselectedOption(ron)).toEqual({ kind: "window", id: RON_WINDOW_ID, label: RON_LINE });
     expect(preselectedOption(vik)).toBeNull();
-    expect(preselectedOption(elliott)).toBeNull();
+    expect(preselectedOption(elliott)).toBeNull(); // three windows: let the student choose
   });
 
   it("links to the application section of /office-hours with the mentor preselected", () => {
@@ -982,11 +1087,22 @@ describe("calls to action", () => {
       },
     ]);
     expect(mentorNeedsBroadAvailability(catalogRishab)).toBe(false);
-    // Only the mentors with no windows yet still need a student's broad availability.
+    // Only the mentor with no windows yet (Vik) still needs a student's broad availability.
     expect(buildApplicationCatalog(productionMentors).mentors.filter(mentorNeedsBroadAvailability).map((m) => m.id)).toEqual([
       "vikram-lakhwara",
-      "elliott-notrica",
     ]);
+  });
+
+  it("gives Elliott 'Apply to meet Elliott' without preselecting one of his three windows", () => {
+    expect(mentorCta(elliott)).toEqual({
+      kind: "apply",
+      label: "Apply to meet Elliott",
+      href: ELLIOTT_APPLY_HREF,
+      preselects: null,
+    });
+    expect(mentorAction(elliott, { applicationsOpen: true })).toEqual({ open: true, href: ELLIOTT_APPLY_HREF });
+    expect(applyToMeetLabel(elliott)).toBe("Apply to meet Elliott");
+    expect(mentorCta(elliott, { applicationsOpen: false })).toMatchObject({ kind: "closed", href: null });
   });
 
   it("gives Ron 'Apply to meet Ron' with his Thursday 2:30–4:30 PM window preselected", () => {
@@ -1038,12 +1154,15 @@ describe("calls to action", () => {
       href: "/office-hours?mentor=vikram-lakhwara#apply",
       preselects: null,
     });
-    expect(mentorCta(elliott)).toEqual({
+    // A fixture copy of Vik with no windows or slots and a different first name reads the same way.
+    expect(mentorCta({ ...tbaMentor, availability: [], slots: [] })).toEqual({
       kind: "interest",
       label: "Express interest",
-      href: "/office-hours?mentor=elliott-notrica#apply",
+      href: "/office-hours?mentor=fixture-tba-mentor#apply",
       preselects: null,
     });
+    // Elliott has windows now, so his CTA is an application, not interest.
+    expect(mentorCta(elliott).kind).toBe("apply");
   });
 
   it("closes when applications are closed or the mentor isn't accepting", () => {
@@ -1167,9 +1286,12 @@ describe("identity copy and links", () => {
     );
     expect(mentorMetaDescription(vik)).toContain("Scheduling is in progress");
     for (const m of productionMentors) expect(mentorMetaDescription(m), m.id).not.toContain("—");
-    expect(mentorMetaDescription(vik)).toContain("Vikram “Vik” Lakhwara (Founder & Managing Member, Stakehouse)");
+    expect(mentorMetaDescription(vik)).toBe(
+      "Founders Office Hours with Vikram “Vik” Lakhwara (Founder & Managing Member, Stakehouse) during Founders Week at UIUC. Scheduling is in progress, but you can apply now. Founders will follow up once availability is finalized.",
+    );
+    // Every window, in order.
     expect(mentorMetaDescription(elliott)).toBe(
-      "Founders Office Hours with Elliott Notrica (Founder & CEO, Symbio Bioculinary) during Founders Week at UIUC. Scheduling is in progress, but you can apply now. Founders will follow up once availability is finalized.",
+      "Founders Office Hours with Elliott Notrica (Founder & CEO, Symbio Bioculinary) during Founders Week at UIUC. Availability: Wed, Sep 30 · 9:00 AM–12:00 PM CT; Wed, Sep 30 · 2:00–5:00 PM CT; Thu, Oct 1 · 12:00–5:00 PM CT. Apply to request a time.",
     );
     expect(mentorMetaDescription(rishab)).toBe(
       "Founders Office Hours with Rishab Veldur (Co-Founder & CEO, Auvi Labs) during Founders Week at UIUC. Availability: Thu, Oct 1 · 12:00–5:00 PM CT. Apply to request a time.",
@@ -1253,17 +1375,33 @@ describe("Office Hours cards and profiles", () => {
       text: RON_LINE,
       more: 0,
     });
-    for (const m of [vik, elliott]) {
-      expect(availabilityLine(m)).toEqual({
-        pending: true,
-        date: null,
-        dateTime: null,
-        detail: "Scheduling in progress",
-        text: "Scheduling in progress",
-        more: 0,
-      });
-      expect(availabilityLines(m)).toEqual([]);
-    }
+    expect(availabilityLine(vik)).toEqual({
+      pending: true,
+      date: null,
+      dateTime: null,
+      detail: "Scheduling in progress",
+      text: "Scheduling in progress",
+      more: 0,
+    });
+    expect(availabilityLines(vik)).toEqual([]);
+    // Elliott's three windows: the first, then how many more; the profile lists them all.
+    expect(availabilityLine(elliott)).toEqual({
+      pending: false,
+      date: "Wed, Sep 30",
+      dateTime: "2026-09-30",
+      detail: "9:00 AM–12:00 PM CT",
+      text: "Wed, Sep 30 · 9:00 AM–12:00 PM CT · +2 more",
+      more: 2,
+    });
+    expect(availabilityLines(elliott)).toEqual(
+      ELLIOTT_WINDOWS.map((w, i) => ({
+        pending: false,
+        date: w.dateShort,
+        dateTime: w.date,
+        detail: w.time,
+        text: ELLIOTT_LINES[i],
+      })),
+    );
     // Several published times: the first, then how many more; the profile lists them all.
     expect(availabilityLine(avery).text).toBe("Thu, Oct 1 · 2:00–2:25 PM CT · +1 more");
     expect(availabilityLines(avery).map((l) => l.text)).toEqual([
@@ -1281,7 +1419,16 @@ describe("Office Hours cards and profiles", () => {
     expect(availabilityNote(roughMentor)).toBe(ROUGH_WINDOW_NOTE);
     expect(availabilityNote(ron)).toBe(ron.availability[0].note);
     expect(availabilityNote(ron)).toBe("Ron is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.");
-    for (const m of [vik, elliott]) expect(availabilityNote(m)).toBe("Founders will follow up once availability is finalized.");
+    expect(availabilityNote(vik)).toBe("Founders will follow up once availability is finalized.");
+    // Several windows with the same note (Elliott's three): the note is shown once.
+    expect(elliott.availability.map((w) => w.note)).toEqual([ELLIOTT_WINDOW_NOTE, ELLIOTT_WINDOW_NOTE, ELLIOTT_WINDOW_NOTE]);
+    expect(availabilityNote(elliott)).toBe(ELLIOTT_WINDOW_NOTE);
+    // Windows with different notes: no single note is picked.
+    const mixed = {
+      ...elliott,
+      availability: elliott.availability.map((w, i) => (i === 0 ? { ...w, note: "A different note." } : w)),
+    };
+    expect(availabilityNote(mixed)).toBeNull();
     // Organizer notes never feed it.
     for (const m of productionMentors) expect(availabilityNote(m)).not.toBe(m.organizerNotes);
   });
@@ -1289,7 +1436,7 @@ describe("Office Hours cards and profiles", () => {
   it("states the session rule under a profile's times for exact windows or while scheduling, never a count", () => {
     const rule = site.officeHours;
     const text = `Each session is ${rule.sessionMinutes} minutes, with a ${rule.breakMinutes}-minute break between sessions.`;
-    // Exact windows (Patrick, Arnav, Ron, Rishab) and mentors still scheduling (Vik, Elliott).
+    // Exact windows (Patrick, Arnav, Elliott, Ron, Rishab) and the mentor still scheduling (Vik).
     for (const m of [patrick, arnav, rishab, vik, elliott, ron]) expect(sessionRuleLine(m, rule), m.id).toBe(text);
     // Specific slots follow the same grid.
     expect(sessionRuleLine(avery, rule)).toBe(text);
@@ -1340,10 +1487,26 @@ describe("Office Hours cards and profiles", () => {
         "Licensing a technology instead of making the product",
       ],
       intro: null,
-      availability: expect.objectContaining({ pending: true, text: "Scheduling in progress" }),
-      action: { open: true, href: "/office-hours?mentor=elliott-notrica#apply" },
+      availability: {
+        pending: false,
+        date: "Wed, Sep 30",
+        dateTime: "2026-09-30",
+        detail: "9:00 AM–12:00 PM CT",
+        text: "Wed, Sep 30 · 9:00 AM–12:00 PM CT · +2 more",
+        more: 2,
+      },
+      action: { open: true, href: ELLIOTT_APPLY_HREF },
       profileHref: "/office-hours/elliott-notrica",
       demo: false,
+    });
+    // While scheduling is in progress the card says so (Vik).
+    expect(mentorCardView(vik, { applicationsOpen: true }).availability).toEqual({
+      pending: true,
+      date: null,
+      dateTime: null,
+      detail: "Scheduling in progress",
+      text: "Scheduling in progress",
+      more: 0,
     });
     // No approved labels → the first sentence of the bio instead.
     expect(mentorCardView({ ...ron, expertise: null }, { applicationsOpen: true })).toMatchObject({

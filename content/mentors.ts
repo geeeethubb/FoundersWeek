@@ -278,15 +278,33 @@ export const mentors: Mentor[] = [
       location: null,
       sessionCount: null,
       confirmed: false,
-      note: "We’re still scheduling Elliott’s office hours. Founders will follow up once availability is finalized.",
+      note: "Elliott is holding office hours on Wednesday, September 30 (9 AM to noon and 2 to 5 PM) and Thursday, October 1 (noon to 5 PM). We’re still setting the location.",
     },
-    // Scheduling in progress — Elliott is broadly available; add windows/slots once times are set.
-    availability: [],
+    availability: [
+      {
+        id: "elliott-notrica-2026-09-30-am",
+        date: "2026-09-30",
+        time: { kind: "exact", start: "09:00", end: "12:00" },
+        note: "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.",
+      },
+      {
+        id: "elliott-notrica-2026-09-30-pm",
+        date: "2026-09-30",
+        time: { kind: "exact", start: "14:00", end: "17:00" },
+        note: "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.",
+      },
+      {
+        id: "elliott-notrica-2026-10-01-pm",
+        date: "2026-10-01",
+        time: { kind: "exact", start: "12:00", end: "17:00" },
+        note: "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.",
+      },
+    ],
     slots: [],
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/elliottnotrica/" }],
     acceptingApplications: true,
     organizerNotes:
-      "Much more available than the other mentors, so a good candidate for extra sessions. Scheduling in progress. On the TechRise Cohort 2 panel Thu Oct 1, 6:30 PM.",
+      "From his email (Sept 25): available anytime after 9 AM on Sept 30, or noon to 5 PM on Oct 1. Organizers set his windows to Wed Sept 30, 9 AM–noon and 2–5 PM, and Thu Oct 1, noon–5 PM (22 sessions in all). Location not set yet. On the TechRise Cohort 2 panel Thu Oct 1, 6:30 PM.",
     sources: [
       BRIEF,
       AGENDA,

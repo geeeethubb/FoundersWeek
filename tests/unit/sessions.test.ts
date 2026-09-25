@@ -185,10 +185,22 @@ describe("generatedSessionSlots", () => {
     ]);
   });
 
-  it("generates nothing for rough windows (part of day, time TBA) or mentors still scheduling (Vik, Elliott)", () => {
-    for (const id of ["vikram-lakhwara", "elliott-notrica"]) {
-      expect(generatedSessionSlots(mentor(id), RULE), id).toEqual([]);
-    }
+  it("gives Elliott 22 sessions across his three windows (Wed 9–12 and 2–5, Thu 12–5)", () => {
+    const elliott = generatedSessionSlots(mentor("elliott-notrica"), RULE);
+    expect(elliott).toHaveLength(22);
+    const perWindow = (windowId: string) => elliott.filter((s) => s.windowId === windowId).map((s) => s.start);
+    expect(perWindow("elliott-notrica-2026-09-30-am")).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"]);
+    expect(perWindow("elliott-notrica-2026-09-30-pm")).toEqual(["14:00", "14:30", "15:00", "15:30", "16:00", "16:30"]);
+    expect(perWindow("elliott-notrica-2026-10-01-pm")).toEqual([
+      "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+    ]);
+    expect(elliott.at(-1)).toMatchObject({ id: "elliott-notrica-2026-10-01-pm-1630", date: "2026-10-01", end: "16:55" });
+    expect(new Set(elliott.map((s) => s.id)).size).toBe(22);
+    expect(elliott.every((s) => s.capacity === 1 && s.status === "confirmed")).toBe(true);
+  });
+
+  it("generates nothing for rough windows (part of day, time TBA) or the mentor still scheduling (Vik)", () => {
+    expect(generatedSessionSlots(mentor("vikram-lakhwara"), RULE)).toEqual([]);
     const rough: Pick<Mentor, "availability" | "slots"> = {
       slots: [],
       availability: [

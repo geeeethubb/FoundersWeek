@@ -15,6 +15,8 @@ export interface AssignOption {
   generated: boolean;
   /** Why this slot can't be chosen (full, already assigned, overlaps another appointment). */
   disabledReason: string | null;
+  /** Inside a window (or is a slot) the student ticked in their application. */
+  picked?: boolean;
 }
 
 export interface AssignGroup {
@@ -57,14 +59,11 @@ export function AssignForm({
   hasActiveAppointment?: boolean;
 }) {
   const id = useId();
-  // Preselect the first open session of a mentor the student asked for — only when nothing is
-  // scheduled yet; otherwise make the organizer choose deliberately.
-  const firstOpen = hasActiveAppointment
-    ? undefined
-    : groups
-        .filter((g) => g.preferred)
-        .flatMap((g) => g.options)
-        .find((o) => !o.disabledReason);
+  // Preselect the first open session of a mentor the student asked for, preferring a time inside a
+  // window they ticked (a mentor can have several windows). Only when nothing is scheduled yet;
+  // otherwise make the organizer choose deliberately.
+  const preferredOpen = groups.filter((g) => g.preferred).flatMap((g) => g.options).filter((o) => !o.disabledReason);
+  const firstOpen = hasActiveAppointment ? undefined : (preferredOpen.find((o) => o.picked) ?? preferredOpen[0]);
   const [slotId, setSlotId] = useState(firstOpen?.slotId ?? "");
   const [done, setDone] = useState<string | null>(null);
   const { send, error, setError, pending } = useOrganizerRequest();

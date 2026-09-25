@@ -195,26 +195,42 @@ describe("home page (public data)", () => {
     expect(t).toMatch(/Ron Lewis Co-Founder\s?, Auctus Advisory/);
     expect(t).toMatch(/Rishab Veldur Co-Founder & CEO\s?, Auvi Labs/);
 
-    // One availability line each: a window for Patrick, Arnav, Ron and Rishab; "Scheduling in progress"
-    // for Vik and Elliott only.
+    // One availability line each: a window for Patrick, Arnav, Elliott (his first of three), Ron and
+    // Rishab; "Scheduling in progress" for Vik only.
     expect(t).toMatch(/Samara Aerospace Thu, Oct 1\W+10:00–11:30 AM CT/);
     expect(t).toMatch(/Doss Fri, Oct 2\W+10:00–11:30 AM CT/);
     expect(t).toMatch(/Stakehouse Scheduling in progress/);
-    expect(t).toMatch(/Symbio Bioculinary Scheduling in progress/);
+    expect(t).toMatch(/Symbio Bioculinary Wed, Sept 30\W+9:00 AM–12:00 PM CT \+ 2 more/);
     expect(t).toMatch(/Auctus Advisory Thu, Oct 1\W+2:30–4:30 PM CT/);
     expect(t).toMatch(/Auvi Labs Thu, Oct 1\W+12:00–5:00 PM CT/);
-    expect(t.match(/Scheduling in progress/g)).toHaveLength(2);
+    expect(t.match(/Scheduling in progress/g)).toHaveLength(1);
+    expect(t.match(/\bmore\b/g)).toHaveLength(1);
     expect(t).not.toContain("Time to be announced");
     // Every window shown has a time now: nothing reads "to be confirmed".
     expect(t).not.toContain("Exact time to be confirmed");
     expect([...mentors.matchAll(/<time dateTime="([^"]+)"/g)].map((m) => m[1])).toEqual([
       "2026-10-01",
       "2026-10-02",
+      "2026-09-30",
       "2026-10-01",
       "2026-10-01",
     ]);
     // Ron's openness to Oct 4 is organizer-only.
     expect(t).not.toMatch(/Oct 4|October 4/);
+  });
+
+  it("shows Elliott fourth: his first window, 'Wed, Sept 30 · 9:00 AM–12:00 PM CT + 2 more', with the orange dot", () => {
+    const items = [...section(page(), "mentors-heading").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    expect(items).toHaveLength(6);
+    const elliott = items[3];
+    expect(images(elliott)).toEqual([{ alt: "Elliott Notrica", src: "/mentors/elliott-notrica.jpg" }]);
+    expect(hrefs(elliott)).toEqual(["/office-hours/elliott-notrica"]);
+    expect(text(elliott).trim()).toBe(
+      "Elliott Notrica Founder & CEO, Symbio Bioculinary Wed, Sept 30 ·, 9:00 AM–12:00 PM CT + 2 more",
+    );
+    expect(elliott).toMatch(/<time dateTime="2026-09-30"[^>]*>Wed, Sept 30<\/time>/);
+    expect(elliott).toMatch(/rounded-full bg-accent"/);
+    expect(text(elliott)).not.toMatch(/Scheduling in progress|Time to be announced|Exact time to be confirmed/);
   });
 
   it("shows Ron fifth: 'Thu, Oct 1 · 2:30–4:30 PM CT', with the orange dot", () => {
@@ -408,7 +424,7 @@ describe("home page (public data)", () => {
   it("never shows organizer-only notes or draft topics", () => {
     const t = text(page());
     expect(t).not.toMatch(/commitments|Revenue strategy|Startup financial planning|Wednesday through Saturday/i);
-    expect(t).not.toMatch(/much more available|extra sessions|Draft/);
+    expect(t).not.toMatch(/much more available|extra sessions|anytime after 9 AM|sessions in all|Draft/);
     // Rishab's organizer notes (team preference, phone, Oct 2 presence) and no device claims.
     expect(t).not.toMatch(/student teams|phone number|email signature|Oct 1 and 2/i);
     expect(t).not.toMatch(/FDA|clinically|commercially available/i);

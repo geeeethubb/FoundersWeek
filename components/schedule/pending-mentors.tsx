@@ -1,6 +1,6 @@
 /**
  * Office-hours mentors with no published times yet ("Scheduling in progress") who match a calendar
- * search. They have no calendar rows, so a search for "Stakehouse" or "Elliott" would otherwise
+ * search. They have no calendar rows, so a search for "Stakehouse" or "Vik" would otherwise
  * come back empty. Each links to their profile and into the office-hours application with that
  * mentor preselected (/office-hours?mentor=<id>#apply); copy makes clear it reserves nothing.
  *

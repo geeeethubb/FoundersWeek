@@ -99,6 +99,9 @@ const RISHAB_WINDOW_NOTE =
   "Rishab is free anytime during this window, from noon to 5 PM, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 /** Rishab's window reads like Patrick's ("Thu, Oct 1 · 10:00–11:30 AM CT"). */
 const RISHAB_LINE = "Thu, Oct 1 · 12:00–5:00 PM CT";
+/** Elliott's three exact windows (organizer update, Sept 25), in order. */
+const ELLIOTT_LINES = ["Wed, Sep 30 · 9:00 AM–12:00 PM CT", "Wed, Sep 30 · 2:00–5:00 PM CT", "Thu, Oct 1 · 12:00–5:00 PM CT"];
+const ELLIOTT_NOTE = "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.";
 
 /**
  * A synthetic mentor with one date-only window (the date is set, the time isn't), so the
@@ -166,8 +169,11 @@ const FORBIDDEN_FRAGMENTS = [
   "Startup financial planning",
   "Communicating business progress",
   "Verify title",
-  "Much more available",
-  "extra sessions",
+  // Elliott's email to the organizers, and the session total they set (organizer-only).
+  "From his email",
+  "anytime after 9 AM",
+  "Organizers set his windows",
+  "22 sessions",
   "Dan Caruso",
   "Caruso",
   // Rishab's email to the organizers (organizer-only).
@@ -553,7 +559,11 @@ describe("mentor cards", () => {
     expect(patrick).toContain("Office hours: Thu, Oct 1 · 10:00–11:30 AM CT");
     expect(arnav).toContain("Office hours: Fri, Oct 2 · 10:00–11:30 AM CT");
     expect(ron).toContain("Office hours: Thu, Oct 1 · 2:30–4:30 PM CT");
-    for (const t of [vik, elliott]) expect(t).toContain("Office hours: Scheduling in progress");
+    expect(vik).toContain("Office hours: Scheduling in progress");
+    // Elliott's first window, then how many more (the profile lists all three).
+    expect(elliott).toContain(`Office hours: ${ELLIOTT_LINES[0]} · +2 more Select mentor`);
+    expect(elliott).not.toContain("Scheduling in progress");
+    expect(all.join(" ").split("Scheduling in progress").length - 1).toBe(1); // Vik only
     expect(rishab).toContain(`Office hours: ${RISHAB_LINE}`);
     // No real mentor has a date-only or part-of-day window any more.
     expect(all.join(" ")).not.toContain("Exact time to be confirmed");
@@ -785,19 +795,42 @@ describe("mentor profile page", () => {
     expect(t.indexOf("Hosting Wed, Sep 30")).toBeLessThan(t.indexOf("Speaking Fri, Oct 2"));
   });
 
-  it("Elliott's profile: scheduling in progress, apply without a time, and his TechRise panel", async () => {
+  it("Elliott's profile: his three windows (Wed, Sep 30 twice; Thu, Oct 1), apply without preselecting one, and his TechRise panel", async () => {
     const html = await renderProfile("elliott-notrica");
     const t = text(html);
-    expect(t).toContain(`Office hours Scheduling in progress ${SESSION_RULE} ${INTEREST_COPY.followUp}`);
+    const block = officeHoursBlock(html);
+    // All three windows, then the session rule, his windows' shared note (shown once) and the Apply
+    // action. No place yet (still being set).
+    expect(text(block).replace(/\s+/g, " ").trim()).toBe(
+      `${ELLIOTT_LINES.join(" ")} ${SESSION_RULE} ${ELLIOTT_NOTE} Apply to meet Elliott`,
+    );
+    expect(text(block).split(ELLIOTT_NOTE)).toHaveLength(2);
+    expect(block.match(/<li\b/g)).toHaveLength(3);
+    expect([...block.matchAll(/<time dateTime="([^"]+)">([^<]+)<\/time>/g)].map((m) => [m[1], m[2]])).toEqual([
+      ["2026-09-30", "Wed, Sep 30"],
+      ["2026-09-30", "Wed, Sep 30"],
+      ["2026-10-01", "Thu, Oct 1"],
+    ]);
+    expect(t).not.toContain("Scheduling in progress");
+    expect(t).not.toContain(INTEREST_COPY.followUp);
+    expect(t).not.toContain("Express interest");
     expect(anchor(html, "/schedule/techrise-pitch-competition")).toContain("Speaking Thu, Oct 1 · 6:30–6:50 PM CT");
     expect(t).toContain("TechRise × University of Illinois Founders Week Cohort 2: Where Are They Now?");
     expect(hrefs(html)).toContain("/office-hours?mentor=elliott-notrica#apply");
-    expect(hrefs(html).filter((h) => h.includes("mentor=elliott-notrica&"))).toEqual([]); // no time to preselect
+    // Three windows: the student picks one in the application, so none is preselected.
+    expect(hrefs(html).filter((h) => h.includes("mentor=elliott-notrica&"))).toEqual([]);
+    // Organizer-only details (his email, the session total) never render.
+    expect(t).not.toMatch(/\b(22|twenty-two) sessions\b/i);
+    expect(t).not.toMatch(/anytime after 9/i);
   });
 
   it("Vik's profile never shows his organizer-only constraints", async () => {
-    const t = text(await renderProfile("vikram-lakhwara"));
-    expect(t).toContain("Office hours Scheduling in progress");
+    const html = await renderProfile("vikram-lakhwara");
+    const t = text(html);
+    // Scheduling in progress: the rule and the follow-up promise, and Apply without a time to preselect.
+    expect(t).toContain(`Office hours Scheduling in progress ${SESSION_RULE} ${INTEREST_COPY.followUp}`);
+    expect(hrefs(html)).toContain("/office-hours?mentor=vikram-lakhwara#apply");
+    expect(hrefs(html).filter((h) => h.includes("mentor=vikram-lakhwara&"))).toEqual([]);
     expect(t).not.toMatch(/Wednesday|commitments|through Saturday/);
     expect(t).toContain("Speaking Fri, Oct 2 · 2:55–3:35 PM CT Funding Start-ups in the Midwest");
   });
@@ -807,7 +840,7 @@ describe("mentor profile page", () => {
       "patrick-haddox": true, // exact window
       "arnav-mishra": true, // exact window (Fri 10:00–11:30 AM since Sept 24)
       "vikram-lakhwara": true, // scheduling in progress
-      "elliott-notrica": true,
+      "elliott-notrica": true, // exact windows (Wed Sep 30 and Thu Oct 1 since Sept 25)
       "ron-lewis": true, // exact window (Thu 2:30–4:30 PM since Sept 24)
       "rishab-veldur": true, // exact window
     };
@@ -819,10 +852,16 @@ describe("mentor profile page", () => {
       expect(t.split(SESSION_RULE).length - 1, mentor.id).toBe(expected[mentor.id] ? 1 : 0);
       expect(t.split("Each session is").length - 1, mentor.id).toBe(expected[mentor.id] ? 1 : 0);
       if (expected[mentor.id]) {
-        // Right under the time lines, before the public note and the Apply button.
-        const firstLine = availabilityLines(mentor)[0]?.text ?? "Scheduling in progress";
-        expect(block.indexOf(firstLine), mentor.id).toBeLessThan(block.indexOf(SESSION_RULE));
-        expect(block.indexOf(SESSION_RULE), mentor.id).toBeLessThan(block.indexOf(availabilityNote(mentor)!));
+        // Right under the time lines (after the last one), before the public note and the Apply button.
+        const lines = availabilityLines(mentor).map((l) => l.text);
+        const lastLine = lines.at(-1) ?? "Scheduling in progress";
+        expect(block.indexOf(lastLine), mentor.id).toBeGreaterThanOrEqual(0);
+        expect(block.indexOf(lastLine), mentor.id).toBeLessThan(block.indexOf(SESSION_RULE));
+        // Every mentor has one public note (Elliott's three windows share his), after the rule.
+        const note = availabilityNote(mentor);
+        expect(note, mentor.id).not.toBeNull();
+        expect(block.indexOf(SESSION_RULE), mentor.id).toBeLessThan(block.indexOf(note ?? `Apply to meet ${mentor.firstName}`));
+        expect(block.indexOf(SESSION_RULE), mentor.id).toBeLessThan(block.indexOf(`Apply to meet ${mentor.firstName}`));
       }
       // No session count, computed from the grid or from content, ever appears.
       expect(block, mentor.id).not.toMatch(

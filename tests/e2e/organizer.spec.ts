@@ -2,9 +2,9 @@
  * Checklist 6 — the organizer view (/organizers) and /api/health.
  *   - Signed out: /organizers → the sign-in page, with the setup checklist visible;
  *     /api/organizer/export without a session cookie → 401.
- *   - Sign in; the application shaped like spec 4's (Elliott first — schedule pending — plus
- *     Patrick's window, with broad availability) is visible with its mentor preferences, the window
- *     and the broad availability.
+ *   - Sign in; the application shaped like spec 4's (Vik first — schedule pending — plus Patrick's
+ *     window, with broad availability) is visible with its mentor preferences, the window and the
+ *     broad availability.
  *   - Filters: mentor, first choice, status, "Interest only".
  *   - Capacity: the demo slot "demo-avery-slot-1400" (capacity 1) takes one appointment; a second is
  *     refused as full; the same student can't also hold an overlapping session (Rishab's 2:00 PM);
@@ -13,8 +13,10 @@
  *     with the demo mentor Avery ("Two sessions"): picking one of her slots, on her Sessions board
  *     entry (with "Booked so far: N.") and in the mentor lineup ("hosting two sessions").
  *   - Every exact window is split into 25-minute sessions (5-minute breaks) on the Sessions board and
- *     in the assignment picker: Patrick 3, Arnav 3, Ron 4, Rishab 10; Vik and Elliott have none yet.
- *     None of the six real mentors carries the session-count warning.
+ *     in the assignment picker: Patrick 3, Arnav 3, Elliott 22 (6 + 6 on Wed, Sep 30, 10 on Thu,
+ *     Oct 1), Ron 4, Rishab 10; Vik has none yet. None of the six real mentors carries the
+ *     session-count warning. The picker preselects the first open session inside a window the
+ *     student ticked (Elliott's Thursday one, not his first Wednesday session).
  *   - Sessions: students apply to Patrick's window (Thu, Oct 1, 10:00–11:30 AM); organizers see it
  *     split into three 25-minute sessions (10:00, 10:30, 11:00) with no session-count warning (he's
  *     open to hosting all three) and book each one to a different application (capacity 1: a booked
@@ -39,6 +41,8 @@ import {
   DEMO_SLOT_ID,
   E2E_EMAIL_MARKER,
   ELLIOTT,
+  ELLIOTT_SESSIONS,
+  ELLIOTT_WINDOWS,
   escapeRegExp,
   exportApplications,
   INTEREST_ONLY_LABEL,
@@ -80,7 +84,7 @@ const PATRICK_SESSIONS_CSV = PATRICK_SESSIONS.map((s) => `${PATRICK.name}: ${s.l
 const AVERY = DEMO_MENTOR_NAMES[0];
 
 let api: APIRequestContext;
-let elliottAndPatrick: CreatedApplication; // Elliott first (pending) + Patrick's window + broad availability
+let vikAndPatrick: CreatedApplication; // Vik first (pending) + Patrick's window + broad availability
 let ronOnly: CreatedApplication; // Ron only, broad availability only (no time ticked)
 let seatHolder: CreatedApplication;
 let seatSeeker: CreatedApplication;
@@ -102,12 +106,12 @@ test.beforeAll(async ({ playwright }) => {
     }
   }
 
-  elliottAndPatrick = await createApplication(api, {
+  vikAndPatrick = await createApplication(api, {
     fullName: "Morgan Organizer-Test",
-    email: uniqueEmail("org-ep"),
+    email: uniqueEmail("org-vp"),
     major: MAJOR_TAG,
-    mentorIds: [ELLIOTT.id, PATRICK.id],
-    firstChoiceMentorId: ELLIOTT.id,
+    mentorIds: [VIK.id, PATRICK.id],
+    firstChoiceMentorId: VIK.id,
     availability: [`window:${PATRICK.windowId}`],
     availabilityNotes: BROAD,
   });
@@ -222,15 +226,15 @@ test("signed out: /organizers → sign-in with the setup checklist; the export A
   await expect(setup).toContainText("All 4 checks pass");
   await expect(page.locator("body")).not.toContainText(E2E_ORGANIZER_PASSWORD);
 
-  await page.goto(`/organizers/applications/${elliottAndPatrick.id}`);
+  await page.goto(`/organizers/applications/${vikAndPatrick.id}`);
   await expect(page).toHaveURL(/\/organizers\/login\?next=/);
 
   const anonymous = await playwright.request.newContext({ baseURL: E2E_BASE_URL });
   const exportRes = await anonymous.get("/api/organizer/export");
   expect(exportRes.status()).toBe(401);
   expect(exportRes.headers()["content-type"] ?? "").not.toContain("text/csv");
-  expect(await exportRes.text()).not.toContain(elliottAndPatrick.email);
-  const mutation = await anonymous.patch(`/api/organizer/applications/${elliottAndPatrick.id}`, {
+  expect(await exportRes.text()).not.toContain(vikAndPatrick.email);
+  const mutation = await anonymous.patch(`/api/organizer/applications/${vikAndPatrick.id}`, {
     data: { status: "confirmed" },
     headers: { Origin: E2E_BASE_URL },
   });
@@ -262,7 +266,7 @@ test("/api/health returns JSON readiness checks with no applicant data or secret
   }
 
   // Nothing about applicants, and no secret values or connection details.
-  for (const app of [elliottAndPatrick, ronOnly, seatHolder]) {
+  for (const app of [vikAndPatrick, ronOnly, seatHolder]) {
     expect(raw).not.toContain(app.email);
     expect(raw).not.toContain(app.fullName);
     expect(raw).not.toContain(app.id);
@@ -292,15 +296,15 @@ test("sign in; the application shows its mentor preferences, the window and the 
   await expect(page).toHaveURL(/\/organizers$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Applications");
 
-  await applyFilters(page, { q: elliottAndPatrick.email });
-  const row = resultRow(page, elliottAndPatrick.email);
+  await applyFilters(page, { q: vikAndPatrick.email });
+  const row = resultRow(page, vikAndPatrick.email);
   await expect(row).toHaveCount(1);
-  await expect(row).toContainText(elliottAndPatrick.fullName);
+  await expect(row).toContainText(vikAndPatrick.fullName);
 
   const cells = row.getByRole("cell");
   const preferences = cells.nth(1).getByRole("listitem");
   await expect(preferences).toHaveCount(2);
-  await expect(preferences.nth(0)).toContainText(ELLIOTT.name);
+  await expect(preferences.nth(0)).toContainText(VIK.name);
   await expect(preferences.nth(0)).toContainText("1st choice");
   await expect(preferences.nth(1)).toContainText(PATRICK.name);
   await expect(cells.nth(2)).toContainText(PATRICK.name);
@@ -308,11 +312,11 @@ test("sign in; the application shows its mentor preferences, the window and the 
   await expect(cells.nth(3)).toContainText("Submitted");
 
   // The detail page tells the whole story, broad availability included.
-  await row.getByRole("link", { name: elliottAndPatrick.fullName }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(elliottAndPatrick.fullName);
+  await row.getByRole("link", { name: vikAndPatrick.fullName }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(vikAndPatrick.fullName);
   const prefs = page.getByRole("region", { name: /Mentors & availability/ });
   const first = prefs.getByRole("listitem").first();
-  await expect(first).toContainText(ELLIOTT.name);
+  await expect(first).toContainText(VIK.name);
   await expect(first).toContainText("First choice");
   await expect(first).toContainText("Interest only");
   await expect(prefs.getByRole("listitem").filter({ hasText: PATRICK.name }).first()).toContainText("10:00–11:30");
@@ -324,19 +328,19 @@ test("filters: mentor, first choice, status and Interest only", async ({ page })
   await signIn(page);
   await page.goto("/organizers");
 
-  // Elliott, first choice only → the Elliott + Patrick application (Ron is first on the other).
-  await applyFilters(page, { q: MAJOR_TAG, mentor: ELLIOTT.name, firstChoiceOnly: true, status: "Submitted" });
-  await expect(page).toHaveURL(/mentor=elliott-notrica/);
+  // Vik, first choice only → the Vik + Patrick application (Ron is first on the other).
+  await applyFilters(page, { q: MAJOR_TAG, mentor: VIK.name, firstChoiceOnly: true, status: "Submitted" });
+  await expect(page).toHaveURL(/mentor=vikram-lakhwara/);
   await expect(page).toHaveURL(/choice=first/);
   await expect(page).toHaveURL(/status=submitted/);
-  await expect(resultRow(page, elliottAndPatrick.email)).toHaveCount(1);
+  await expect(resultRow(page, vikAndPatrick.email)).toHaveCount(1);
   await expect(resultRow(page, ronOnly.email)).toHaveCount(0);
 
-  // Patrick, first choice only → none; any preference → the Elliott + Patrick application.
+  // Patrick, first choice only → none; any preference → the Vik + Patrick application.
   await applyFilters(page, { q: MAJOR_TAG, mentor: PATRICK.name, firstChoiceOnly: true });
   await expect(page.getByText("No applications match these filters")).toBeVisible();
   await applyFilters(page, { q: MAJOR_TAG, mentor: PATRICK.name });
-  await expect(resultRow(page, elliottAndPatrick.email)).toHaveCount(1);
+  await expect(resultRow(page, vikAndPatrick.email)).toHaveCount(1);
   await expect(resultRow(page, ronOnly.email)).toHaveCount(0);
 
   // Status: Confirmed → none of them.
@@ -348,7 +352,7 @@ test("filters: mentor, first choice, status and Interest only", async ({ page })
   await expect(page).toHaveURL(/availability=none/);
   await expect(resultRow(page, ronOnly.email)).toHaveCount(1);
   await expect(resultRow(page, ronOnly.email)).toContainText("Interest only");
-  await expect(resultRow(page, elliottAndPatrick.email)).toHaveCount(0);
+  await expect(resultRow(page, vikAndPatrick.email)).toHaveCount(0);
 
   // Every real mentor is a filter option, in the published order; Dan Caruso's event never is.
   const mentorOptions = (await page.getByRole("combobox", { name: "Mentor" }).locator("option").allTextContents()).map((t) =>
@@ -447,28 +451,31 @@ test("demo slot capacity: one seat assigned, the next is blocked as full; no ove
   await expect(page.getByRole("region", { name: "Appointments" })).toContainText("2:00–2:25 PM CT");
 });
 
-test("every window as 25-minute sessions: Patrick 3, Rishab 10, Ron 4, Arnav 3; Vik and Elliott have none yet", async ({
+test("every window as 25-minute sessions: Patrick 3, Arnav 3, Elliott 6 + 6 + 10, Ron 4, Rishab 10; Vik has none yet", async ({
   page,
 }) => {
   await signIn(page);
-  const grids: { mentor: MentorFixture; window: string; sessions: SessionFixture[] }[] = [
-    { mentor: PATRICK, window: "Thu, Oct 1 · 10:00–11:30 AM CT", sessions: PATRICK_SESSIONS },
-    { mentor: ARNAV, window: "Fri, Oct 2 · 10:00–11:30 AM CT", sessions: ARNAV_SESSIONS },
-    { mentor: RON, window: "Thu, Oct 1 · 2:30–4:30 PM CT", sessions: RON_SESSIONS },
-    { mentor: RISHAB, window: "Thu, Oct 1 · 12:00–5:00 PM CT", sessions: RISHAB_SESSIONS },
+  const grids: { mentor: MentorFixture; windows: { label: string; sessions: SessionFixture[] }[] }[] = [
+    { mentor: PATRICK, windows: [{ label: "Thu, Oct 1 · 10:00–11:30 AM CT", sessions: PATRICK_SESSIONS }] },
+    { mentor: ARNAV, windows: [{ label: "Fri, Oct 2 · 10:00–11:30 AM CT", sessions: ARNAV_SESSIONS }] },
+    // Elliott's three windows, in order, each on its own grid: 22 sessions in all.
+    { mentor: ELLIOTT, windows: ELLIOTT_WINDOWS.map((w, i) => ({ label: w.line, sessions: ELLIOTT_SESSIONS[i] })) },
+    { mentor: RON, windows: [{ label: "Thu, Oct 1 · 2:30–4:30 PM CT", sessions: RON_SESSIONS }] },
+    { mentor: RISHAB, windows: [{ label: "Thu, Oct 1 · 12:00–5:00 PM CT", sessions: RISHAB_SESSIONS }] },
   ];
-  expect(grids.map((g) => g.sessions.length)).toEqual([3, 3, 4, 10]);
+  expect(grids.map((g) => g.windows.map((w) => w.sessions.length))).toEqual([[3], [3], [6, 6, 10], [4], [10]]);
 
-  // The dashboard's Sessions board: the rule, then each mentor's window split on the 25 + 5 grid.
+  // The dashboard's Sessions board: the rule, then each mentor's windows split on the 25 + 5 grid.
   await page.goto("/organizers");
   const board = page.getByRole("region", { name: "Sessions", exact: true });
   await expect(board).toContainText(`${SESSION_RULE} One application (a student or a team) per session.`);
-  for (const { mentor, window, sessions } of grids) {
+  for (const { mentor, windows } of grids) {
+    const sessions = windows.flatMap((w) => w.sessions);
     const section = board.getByRole("region", { name: mentor.name, exact: true });
     await expect(section).toHaveCount(1);
     await expect(section).toContainText(new RegExp(`(?<!\\d)\\d+ of ${sessions.length} sessions booked`));
-    await expect(section).toContainText(`${window} window · ${sessions.length} sessions`);
-    const rows = section.getByRole("listitem").filter({ hasText: /^(Thu, Oct 1|Fri, Oct 2) · / });
+    for (const w of windows) await expect(section).toContainText(`${w.label} window · ${w.sessions.length} sessions`);
+    const rows = section.getByRole("listitem").filter({ hasText: /^(Wed, Sep 30|Thu, Oct 1|Fri, Oct 2) · / });
     expect(
       await rows.evaluateAll((els) => els.map((el) => (el.querySelector("p") as HTMLElement | null)?.innerText.trim() ?? "")),
       `${mentor.name}: sessions in time order`,
@@ -478,7 +485,7 @@ test("every window as 25-minute sessions: Patrick 3, Rishab 10, Ron 4, Arnav 3; 
     // No real mentor set a session count (Patrick is open to all three of his), so no warning.
     await expect(section).not.toContainText(SESSION_LIMIT_MARKER);
   }
-  for (const mentor of [VIK, ELLIOTT]) await expect(board.getByRole("region", { name: mentor.name, exact: true })).toHaveCount(0);
+  await expect(board.getByRole("region", { name: VIK.name, exact: true })).toHaveCount(0);
   // The one warning on the board is the demo mentor's (her "Two sessions"), none for a real mentor.
   expect(countMatches(await visibleText(board), SESSION_LIMIT_MARKER), "one warning on the board").toBe(1);
   await expect(board.getByRole("region", { name: AVERY, exact: true })).toContainText(
@@ -487,31 +494,57 @@ test("every window as 25-minute sessions: Patrick 3, Rishab 10, Ron 4, Arnav 3; 
   // The lineup never says how many sessions a real mentor is hosting.
   const lineup = page.getByRole("navigation", { name: "Applications by mentor", exact: true });
   for (const mentor of MENTORS) await expect(lineup.getByRole("listitem").filter({ hasText: mentor.name })).not.toContainText(/\bhosting\b/);
-  for (const { mentor, sessions } of grids) {
+  for (const { mentor, windows } of grids) {
+    const count = windows.reduce((n, w) => n + w.sessions.length, 0);
     await expect(lineup.getByRole("listitem").filter({ hasText: mentor.name })).toContainText(
-      new RegExp(`(?<!\\d)${sessions.length} sessions · \\d+/${sessions.length} booked(?! ·)`),
+      new RegExp(`(?<!\\d)${count} sessions · \\d+/${count} booked(?! ·)`),
     );
   }
 
   // An application for Ron (broad availability only): his four sessions come first, as his
-  // first choice, and the first one is preselected. Vik and Elliott have nothing to assign yet.
+  // first choice, and the first one is preselected; then every other mentor with sessions, in the
+  // published order (Elliott's 22 included). Vik has nothing to assign yet.
   await page.goto(`/organizers/applications/${ronOnly.id}`);
   const picker = sessionPicker(page);
   await waitForHydration(picker);
   const groupLabels = await picker.locator("optgroup").evaluateAll((gs) => gs.map((g) => g.getAttribute("label") ?? ""));
-  expect(groupLabels.slice(0, 4)).toEqual([
+  expect(groupLabels.slice(0, 5)).toEqual([
     `${RON.name} · 1st choice`,
     `${PATRICK.name} · not requested`,
     `${ARNAV.name} · not requested`,
+    `${ELLIOTT.name} · not requested`,
     `${RISHAB.name} · not requested`,
   ]);
-  expect(groupLabels.join(" | ")).not.toMatch(new RegExp(`${escapeRegExp(VIK.firstName)}|${escapeRegExp(ELLIOTT.name)}`));
+  expect(groupLabels.join(" | ")).not.toMatch(new RegExp(escapeRegExp(VIK.firstName)));
+  const elliottGroup = picker.locator("optgroup").filter({ has: page.locator(`option[value="${ELLIOTT_SESSIONS[0][0].id}"]`) });
+  expect(await elliottGroup.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
+    ELLIOTT_SESSIONS.flat().map((s) => s.id),
+  );
   const ronGroup = picker.locator("optgroup").first();
   expect(await ronGroup.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
     RON_SESSIONS.map((s) => s.id),
   );
   await expect(ronGroup.locator("option")).toHaveText(RON_SESSIONS.map((s) => `${s.label} · 1 of 1 open`));
   await expect(picker).toHaveValue(RON_SESSIONS[0].id);
+  await expect(page.getByRole("region", { name: "Appointments", exact: true })).not.toContainText(SESSION_LIMIT_MARKER);
+
+  // Elliott has three windows: for a student who ticked only his Thursday one, the picker preselects
+  // the first open session inside it (Thu, Oct 1, 12:00 PM), not his first session on Wednesday.
+  const elliottThursday = await createApplication(api, {
+    fullName: "Harper Window-Pick",
+    email: uniqueEmail("org-elliott"),
+    mentorIds: [ELLIOTT.id],
+    firstChoiceMentorId: ELLIOTT.id,
+    availability: [`window:${ELLIOTT_WINDOWS[2].id}`],
+  });
+  await page.goto(`/organizers/applications/${elliottThursday.id}`);
+  const elliottPicker = sessionPicker(page);
+  await waitForHydration(elliottPicker);
+  await expect(elliottPicker.locator("optgroup").first()).toHaveAttribute("label", `${ELLIOTT.name} · 1st choice`);
+  await expect(elliottPicker).toHaveValue(ELLIOTT_SESSIONS[2][0].id);
+  await expect(elliottPicker.locator(`option[value="${ELLIOTT_SESSIONS[2][0].id}"]`)).toHaveText(
+    `${ELLIOTT_SESSIONS[2][0].label} · 1 of 1 open`,
+  );
   await expect(page.getByRole("region", { name: "Appointments", exact: true })).not.toContainText(SESSION_LIMIT_MARKER);
 });
 
