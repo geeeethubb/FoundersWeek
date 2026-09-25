@@ -9,12 +9,17 @@
  *   - Capacity: the demo slot "demo-avery-slot-1400" (capacity 1) takes one appointment; a second is
  *     refused as full; the same student can't also hold an overlapping session (Rishab's 2:00 PM);
  *     confirming makes the application Confirmed.
+ *   - Session-count warning (content `session.sessionCount`): no real mentor sets one, so it's shown
+ *     with the demo mentor Avery ("Two sessions"): picking one of her slots, on her Sessions board
+ *     entry (with "Booked so far: N.") and in the mentor lineup ("hosting two sessions").
  *   - Every exact window is split into 25-minute sessions (5-minute breaks) on the Sessions board and
  *     in the assignment picker: Patrick 3, Arnav 3, Ron 4, Rishab 10; Vik and Elliott have none yet.
+ *     None of the six real mentors carries the session-count warning.
  *   - Sessions: students apply to Patrick's window (Thu, Oct 1, 10:00–11:30 AM); organizers see it
- *     split into three 25-minute sessions (10:00, 10:30, 11:00) with his "one or two sessions" note,
- *     assign one application to 10:00–10:25 AM CT (capacity 1: the next applicant can't have it),
- *     and the session shows on the dashboard, in the CSV and on the student's status page.
+ *     split into three 25-minute sessions (10:00, 10:30, 11:00) with no session-count warning (he's
+ *     open to hosting all three) and book each one to a different application (capacity 1: a booked
+ *     session is full for the next applicant); the sessions show on the dashboard, in the CSV and on
+ *     the student's status page.
  *   - CSV export (with the session) neutralizes a formula in an applicant's answer.
  *   - /api/health: JSON readiness checks, no applicant data or secrets.
  *
@@ -26,7 +31,11 @@ import { E2E_BASE_URL, E2E_ORGANIZER_PASSWORD } from "./support/env";
 import {
   ARNAV,
   ARNAV_SESSIONS,
+  countMatches,
   createApplication,
+  DEMO_MENTOR_NAMES,
+  DEMO_SECOND_SLOT_ID,
+  DEMO_SESSION_LIMIT_NOTE,
   DEMO_SLOT_ID,
   E2E_EMAIL_MARKER,
   ELLIOTT,
@@ -37,17 +46,18 @@ import {
   organizerLogin,
   ORGANIZER_NAME,
   PATRICK,
-  PATRICK_SESSION_NOTE,
   PATRICK_SESSIONS,
   RISHAB,
   RISHAB_SESSIONS,
   RON,
   RON_SESSIONS,
+  SESSION_LIMIT_MARKER,
   SESSION_RULE,
   setApplicationStatus,
   storedApplicationsFor,
   uniqueEmail,
   VIK,
+  visibleText,
   waitForHydration,
   type CreatedApplication,
   type MentorFixture,
@@ -63,26 +73,30 @@ const BROAD = "Thursdays after 3 PM; Friday mornings work too.";
 /** Rishab's generated 2:00–2:25 PM session: the same time as the demo slot, so it overlaps it. */
 const RISHAB_1400_SESSION = RISHAB_SESSIONS[4].id;
 
-/** CSV "appointments" text of an active hold on Patrick's first session (to release it after an interrupted run). */
-const PATRICK_FIRST_SESSION_CSV = `${PATRICK.name}: ${PATRICK_SESSIONS[0].label}`;
+/** CSV "appointments" text of an active hold on each of Patrick's sessions (to release them after an interrupted run). */
+const PATRICK_SESSIONS_CSV = PATRICK_SESSIONS.map((s) => `${PATRICK.name}: ${s.label}`);
+
+/** The demo mentor with a session count ("Two sessions") and the capacity-1 demo slot. */
+const AVERY = DEMO_MENTOR_NAMES[0];
 
 let api: APIRequestContext;
 let elliottAndPatrick: CreatedApplication; // Elliott first (pending) + Patrick's window + broad availability
 let ronOnly: CreatedApplication; // Ron only, broad availability only (no time ticked)
 let seatHolder: CreatedApplication;
 let seatSeeker: CreatedApplication;
-let patrickHolder: CreatedApplication; // Patrick's window → assigned his 10:00–10:25 AM session
-let patrickSeeker: CreatedApplication; // Patrick's window → that session is full for them
+let patrickHolder: CreatedApplication; // Patrick's window → his 10:00–10:25 AM session
+let patrickSeeker: CreatedApplication; // Patrick's window → 10:00 is full for them; gets 10:30–10:55 AM
+let patrickLast: CreatedApplication; // Patrick's window → 10:00 and 10:30 are full; gets 11:00–11:25 AM
 
 test.beforeAll(async ({ playwright }) => {
   api = await playwright.request.newContext({ baseURL: E2E_BASE_URL });
   await organizerLogin(api);
 
-  // Against a reused database: release the seats this spec takes (the demo slot, Patrick's first
-  // session) from any earlier, interrupted e2e run. Only e2e-… applications are touched.
+  // Against a reused database: release the seats this spec takes (the demo slot, Patrick's three
+  // sessions) from any earlier, interrupted e2e run. Only e2e-… applications are touched.
   const { records } = await exportApplications(api, { q: E2E_EMAIL_MARKER });
   for (const r of records) {
-    const holdsSeat = /Avery Sample/.test(r.appointments) || r.appointments.includes(PATRICK_FIRST_SESSION_CSV);
+    const holdsSeat = r.appointments.includes(AVERY) || PATRICK_SESSIONS_CSV.some((t) => r.appointments.includes(t));
     if (r.email.startsWith(E2E_EMAIL_MARKER) && holdsSeat && r.status !== "Canceled") {
       await setApplicationStatus(api, r.id, "canceled");
     }
@@ -132,11 +146,18 @@ test.beforeAll(async ({ playwright }) => {
     firstChoiceMentorId: PATRICK.id,
     availability: [`window:${PATRICK.windowId}`],
   });
+  patrickLast = await createApplication(api, {
+    fullName: "Casey Last-Session",
+    email: uniqueEmail("org-patrick-c"),
+    mentorIds: [PATRICK.id],
+    firstChoiceMentorId: PATRICK.id,
+    availability: [`window:${PATRICK.windowId}`],
+  });
 });
 
 test.afterAll(async () => {
   // Free the capacity-1 seats for the next run (canceling cancels active appointments).
-  for (const app of [seatHolder, seatSeeker, patrickHolder, patrickSeeker]) {
+  for (const app of [seatHolder, seatSeeker, patrickHolder, patrickSeeker, patrickLast]) {
     if (app) await setApplicationStatus(api, app.id, "canceled");
   }
   await api?.dispose();
@@ -346,12 +367,18 @@ test("demo slot capacity: one seat assigned, the next is blocked as full; no ove
   await page.goto(`/organizers/applications/${seatHolder.id}`);
   const slot = sessionPicker(page);
   await waitForHydration(slot);
-  await expect(slot.locator(`option[value="${DEMO_SLOT_ID}"]`)).toHaveText("Thu, Oct 1 · 2:00–2:25 PM CT · Confirmed · 1 of 1 open");
-  await slot.selectOption(DEMO_SLOT_ID);
-  await page.getByRole("button", { name: "Propose appointment" }).click();
   const appointments = page.getByRole("region", { name: "Appointments", exact: true });
+  await expect(slot.locator(`option[value="${DEMO_SLOT_ID}"]`)).toHaveText("Thu, Oct 1 · 2:00–2:25 PM CT · Confirmed · 1 of 1 open");
+  // Ron's first session is preselected: he set no session count, so there's no warning…
+  await expect(slot).toHaveValue(RON_SESSIONS[0].id);
+  await expect(appointments).not.toContainText(SESSION_LIMIT_MARKER);
+  // …while Avery agreed to "Two sessions": picking one of hers shows the warning, nothing booked yet.
+  await slot.selectOption(DEMO_SLOT_ID);
+  await expect(appointments).toContainText(`${DEMO_SESSION_LIMIT_NOTE} Booked so far: 0.`);
+  expect(countMatches(await visibleText(appointments), SESSION_LIMIT_MARKER), "the warning, once").toBe(1);
+  await page.getByRole("button", { name: "Propose appointment" }).click();
   await expect(appointments).toContainText("Proposed, awaiting confirmation");
-  await expect(appointments).toContainText("Avery Sample");
+  await expect(appointments).toContainText(AVERY);
   await expect(appointments).toContainText("Thu, Oct 1 · 2:00–2:25 PM CT");
 
   // The same student can't hold an overlapping session: Rishab's 2:00–2:25 PM is off for them…
@@ -372,7 +399,9 @@ test("demo slot capacity: one seat assigned, the next is blocked as full; no ove
 
   // Seat seeker: the slot is full, so it's disabled in the form and refused by the API.
   await page.goto(`/organizers/applications/${seatSeeker.id}`);
-  const fullOption = sessionPicker(page).locator(`option[value="${DEMO_SLOT_ID}"]`);
+  const seekerSlot = sessionPicker(page);
+  await waitForHydration(seekerSlot);
+  const fullOption = seekerSlot.locator(`option[value="${DEMO_SLOT_ID}"]`);
   await expect(fullOption).toBeDisabled();
   await expect(fullOption).toContainText("Full (1/1)");
   const refused = await page.request.post("/api/organizer/appointments", {
@@ -381,6 +410,27 @@ test("demo slot capacity: one seat assigned, the next is blocked as full; no ove
   });
   expect(refused.status()).toBe(409);
   expect((await refused.json()).message).toMatch(/full/i);
+  // Avery's other slot is still open, and picking it counts the one she's booked for.
+  await expect(seekerSlot.locator(`option[value="${DEMO_SECOND_SLOT_ID}"]`)).toHaveText(
+    "Thu, Oct 1 · 2:30–2:55 PM CT · Confirmed · 2 of 2 open",
+  );
+  await seekerSlot.selectOption(DEMO_SECOND_SLOT_ID);
+  await expect(page.getByRole("region", { name: "Appointments", exact: true })).toContainText(
+    `${DEMO_SESSION_LIMIT_NOTE} Booked so far: 1.`,
+  );
+
+  // The dashboard: Avery's Sessions board entry carries the warning and the count; the lineup says
+  // how many she's hosting. Only she has a session count, so hers is the only warning on the board.
+  await page.goto("/organizers");
+  const board = page.getByRole("region", { name: "Sessions", exact: true });
+  const averyBoard = board.getByRole("region", { name: AVERY, exact: true });
+  await expect(averyBoard).toContainText("1 of 2 sessions booked");
+  await expect(averyBoard).toContainText(`${DEMO_SESSION_LIMIT_NOTE} Booked so far: 1.`);
+  expect(countMatches(await visibleText(board), SESSION_LIMIT_MARKER), "one warning on the board").toBe(1);
+  const lineup = page.getByRole("navigation", { name: "Applications by mentor", exact: true });
+  await expect(lineup.getByRole("listitem").filter({ hasText: AVERY })).toContainText(
+    "2 sessions · 1/3 booked · hosting two sessions",
+  );
 
   // Confirm the seat holder's appointment → application Confirmed.
   await page.goto(`/organizers/applications/${seatHolder.id}`);
@@ -425,11 +475,23 @@ test("every window as 25-minute sessions: Patrick 3, Rishab 10, Ron 4, Arnav 3; 
     ).toEqual(sessions.map((s) => s.label));
     // One application per session.
     for (const row of await rows.all()) await expect(row).toContainText(/(?<!\d)[01]\/1 seat\b/);
-    // Only Patrick agreed to fewer sessions than his window fits.
-    if (mentor === PATRICK) await expect(section).toContainText(PATRICK_SESSION_NOTE);
-    else await expect(section).not.toContainText("Only book as many as");
+    // No real mentor set a session count (Patrick is open to all three of his), so no warning.
+    await expect(section).not.toContainText(SESSION_LIMIT_MARKER);
   }
   for (const mentor of [VIK, ELLIOTT]) await expect(board.getByRole("region", { name: mentor.name, exact: true })).toHaveCount(0);
+  // The one warning on the board is the demo mentor's (her "Two sessions"), none for a real mentor.
+  expect(countMatches(await visibleText(board), SESSION_LIMIT_MARKER), "one warning on the board").toBe(1);
+  await expect(board.getByRole("region", { name: AVERY, exact: true })).toContainText(
+    new RegExp(`${escapeRegExp(DEMO_SESSION_LIMIT_NOTE)} Booked so far: [0-2]\\.`),
+  );
+  // The lineup never says how many sessions a real mentor is hosting.
+  const lineup = page.getByRole("navigation", { name: "Applications by mentor", exact: true });
+  for (const mentor of MENTORS) await expect(lineup.getByRole("listitem").filter({ hasText: mentor.name })).not.toContainText(/\bhosting\b/);
+  for (const { mentor, sessions } of grids) {
+    await expect(lineup.getByRole("listitem").filter({ hasText: mentor.name })).toContainText(
+      new RegExp(`(?<!\\d)${sessions.length} sessions · \\d+/${sessions.length} booked(?! ·)`),
+    );
+  }
 
   // An application for Ron (broad availability only): his four sessions come first, as his
   // first choice, and the first one is preselected. Vik and Elliott have nothing to assign yet.
@@ -450,14 +512,15 @@ test("every window as 25-minute sessions: Patrick 3, Rishab 10, Ron 4, Arnav 3; 
   );
   await expect(ronGroup.locator("option")).toHaveText(RON_SESSIONS.map((s) => `${s.label} · 1 of 1 open`));
   await expect(picker).toHaveValue(RON_SESSIONS[0].id);
-  await expect(page.getByRole("region", { name: "Appointments", exact: true })).not.toContainText("Only book as many as");
+  await expect(page.getByRole("region", { name: "Appointments", exact: true })).not.toContainText(SESSION_LIMIT_MARKER);
 });
 
-test("Patrick's window as 25-minute sessions: 10:00–10:25 AM CT goes to one application (capacity 1); confirming → Confirmed", async ({
+test("Patrick's window as 25-minute sessions: no session-count warning; all three book, one application each; confirming → Confirmed", async ({
   page,
 }) => {
   await signIn(page);
   const [first, second, third] = PATRICK_SESSIONS;
+  const assign = page.getByRole("region", { name: "Appointments", exact: true });
 
   // The application page: the session rule, then Patrick's window split into exactly three
   // 25-minute sessions with a 5-minute break, each seating one application.
@@ -471,11 +534,10 @@ test("Patrick's window as 25-minute sessions: 10:00–10:25 AM CT goes to one ap
   expect(await patrickGroup.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
     PATRICK_SESSIONS.map((s) => s.id),
   );
-  // Nothing is scheduled yet, so the first open session of the student's first choice is preselected,
-  // with Patrick's "one or two sessions" note for organizers.
+  // Nothing is scheduled yet, so the first open session of the student's first choice is preselected.
+  // Patrick is open to hosting all three sessions: no session-count warning.
   await expect(picker).toHaveValue(first.id);
-  const assign = page.getByRole("region", { name: "Appointments", exact: true });
-  await expect(assign).toContainText(`${PATRICK_SESSION_NOTE} Booked so far: 0.`);
+  await expect(assign).not.toContainText(SESSION_LIMIT_MARKER);
 
   await picker.selectOption(first.id);
   await assign.getByRole("button", { name: "Propose appointment" }).click();
@@ -491,7 +553,7 @@ test("Patrick's window as 25-minute sessions: 10:00–10:25 AM CT goes to one ap
   expect(held.status).toBe("Selected, awaiting confirmation");
 
   // Next applicant: 10:00 is full (capacity 1), in the form and in the API; 10:30 is the first open
-  // session now, and the note counts the booked one.
+  // session now, still with no warning, and it books.
   await page.goto(`/organizers/applications/${patrickSeeker.id}`);
   const seekerPicker = sessionPicker(page);
   await waitForHydration(seekerPicker);
@@ -503,9 +565,7 @@ test("Patrick's window as 25-minute sessions: 10:00–10:25 AM CT goes to one ap
   ]);
   await expect(seekerPicker.locator(`option[value="${first.id}"]`)).toBeDisabled();
   await expect(seekerPicker).toHaveValue(second.id);
-  await expect(page.getByRole("region", { name: "Appointments", exact: true })).toContainText(
-    `${PATRICK_SESSION_NOTE} Booked so far: 1.`,
-  );
+  await expect(assign).not.toContainText(SESSION_LIMIT_MARKER);
   const refused = await page.request.post("/api/organizer/appointments", {
     data: { applicationId: patrickSeeker.id, slotId: first.id },
     headers: { Origin: E2E_BASE_URL },
@@ -513,22 +573,59 @@ test("Patrick's window as 25-minute sessions: 10:00–10:25 AM CT goes to one ap
   expect(refused.status()).toBe(409);
   expect((await refused.json()).message).toBe("This slot is full (1/1).");
   expect((await storedApplicationsFor(page.request, patrickSeeker.email))[0].appointments).toBe("");
+  await assign.getByRole("button", { name: "Propose appointment" }).click();
+  await expect(assign).toContainText(`Proposed ${second.label}.`);
+  expect((await storedApplicationsFor(page.request, patrickSeeker.email))[0].appointments).toBe(
+    `${PATRICK.name}: ${second.label} (proposed)`,
+  );
 
-  // The dashboard's Sessions board: Patrick's three sessions, the note, and who holds 10:00.
+  // Third applicant: 10:00 and 10:30 are full; 11:00, his third session, books too.
+  await page.goto(`/organizers/applications/${patrickLast.id}`);
+  const lastPicker = sessionPicker(page);
+  await waitForHydration(lastPicker);
+  const lastGroup = lastPicker.locator("optgroup").filter({ has: page.locator(`option[value="${first.id}"]`) });
+  await expect(lastGroup.locator("option")).toHaveText([
+    `${first.label} · Full (1/1)`,
+    `${second.label} · Full (1/1)`,
+    `${third.label} · 1 of 1 open`,
+  ]);
+  for (const s of [first, second]) await expect(lastPicker.locator(`option[value="${s.id}"]`)).toBeDisabled();
+  await expect(lastPicker).toHaveValue(third.id);
+  await expect(assign).not.toContainText(SESSION_LIMIT_MARKER);
+  await assign.getByRole("button", { name: "Propose appointment" }).click();
+  await expect(assign).toContainText(`Proposed ${third.label}.`);
+  expect((await storedApplicationsFor(page.request, patrickLast.email))[0].appointments).toBe(
+    `${PATRICK.name}: ${third.label} (proposed)`,
+  );
+
+  // The dashboard's Sessions board: all three of Patrick's sessions booked, each by one application,
+  // and no warning; the lineup counts them and never says how many he's "hosting".
   await page.goto("/organizers");
   const board = page.getByRole("region", { name: "Sessions", exact: true });
   const patrickBoard = board.getByRole("region", { name: PATRICK.name, exact: true });
-  await expect(patrickBoard).toContainText(`${PATRICK_SESSION_NOTE} Booked so far:`);
+  await expect(patrickBoard).toContainText("3 of 3 sessions booked");
   await expect(patrickBoard).toContainText("Thu, Oct 1 · 10:00–11:30 AM CT window · 3 sessions");
+  await expect(patrickBoard).not.toContainText(SESSION_LIMIT_MARKER);
   const rows = patrickBoard.getByRole("listitem").filter({ hasText: /^Thu, Oct 1 · / });
   await expect(rows).toHaveCount(3);
-  const firstRow = rows.filter({ hasText: first.label });
-  await expect(firstRow.getByRole("link", { name: patrickHolder.fullName })).toHaveAttribute(
-    "href",
-    `/organizers/applications/${patrickHolder.id}`,
-  );
-  await expect(firstRow).toContainText("1/1 seat");
-  await expect(firstRow).toContainText("Full");
+  for (const [session, holder] of [
+    [first, patrickHolder],
+    [second, patrickSeeker],
+    [third, patrickLast],
+  ] as const) {
+    const row = rows.filter({ hasText: session.label });
+    await expect(row).toHaveCount(1);
+    await expect(row.getByRole("link")).toHaveText([holder.fullName]);
+    await expect(row.getByRole("link")).toHaveAttribute("href", `/organizers/applications/${holder.id}`);
+    await expect(row).toContainText("1/1 seat");
+    await expect(row).toContainText("Full");
+  }
+  const lineupCard = page
+    .getByRole("navigation", { name: "Applications by mentor", exact: true })
+    .getByRole("listitem")
+    .filter({ hasText: PATRICK.name });
+  await expect(lineupCard).toContainText("3 sessions · 3/3 booked");
+  await expect(lineupCard).not.toContainText(/\bhosting\b/);
 
   // Confirm it: the application is Confirmed, and the student's status page shows the session.
   await page.goto(`/organizers/applications/${patrickHolder.id}`);

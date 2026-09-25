@@ -650,7 +650,7 @@ export function availabilityNote(mentor: Pick<Mentor, "availability" | "slots">)
  * 25 minutes, with a 5-minute break between sessions." from `site.officeHours`). Shown when the
  * mentor has an exact window (or specific slots), so sessions follow the grid, or while scheduling
  * is in progress; `null` for rough windows only (part of day, time to be confirmed). Never a
- * session count: how many sessions a mentor holds is theirs to say (Patrick: "one or two").
+ * session count: how many sessions a mentor holds is theirs to say (content `session.sessionCount`).
  */
 export function sessionRuleLine(mentor: Pick<Mentor, "availability" | "slots">, rule: SessionRule): string | null {
   const exact = mentor.slots.length > 0 || mentor.availability.some((w) => w.time.kind === "exact");

@@ -86,7 +86,7 @@ export function MentorLineup({
           const sessions = slots.length
             ? [
                 `${slots.length} session${slots.length === 1 ? "" : "s"} · ${seats.used}/${seats.capacity} booked`,
-                // e.g. Patrick: three sessions fit his window, but he's hosting one or two.
+                // e.g. a mentor whose window fits three sessions but who agreed to host fewer.
                 m.sessionCount ? `hosting ${m.sessionCount.charAt(0).toLowerCase()}${m.sessionCount.slice(1)}` : null,
               ]
                 .filter(Boolean)

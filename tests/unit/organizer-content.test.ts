@@ -3,7 +3,9 @@
  * headshots), organizer-only notes and drafts (including Rishab's and Ron's), the lineup balanced
  * three across, Rishab's confirmed Thu, Oct 1 12:00–5:00 PM window in filters, Ron's Thu, Oct 1
  * 2:30–4:30 PM window at BIF, the sessions generated from exact windows (Patrick 3, Arnav 3, Ron 4,
- * Rishab 10; only Vik and Elliott are still scheduling), the date-only (time not set) and
+ * Rishab 10; only Vik and Elliott are still scheduling), no session-limit warning for anyone in
+ * production (Patrick is open to all three of his sessions) but one for a fixture copy of Patrick
+ * who agreed to one or two, the date-only (time not set) and
  * part-of-day paths on test-only fixture mentors, no events (Dan Caruso, Arnav's happy hour,
  * Rishab's Showcase panel, the canceled afterparty) posing as mentors, and the "Data store"
  * indicator never exposing connection details.
@@ -98,6 +100,21 @@ const roughMentor: Mentor = {
   ],
   organizerNotes: "Fixture: part of day, no exact times.",
 };
+
+/**
+ * Test-only copy of Patrick who agreed to fewer sessions than his window fits ("One or two
+ * sessions" in a window with room for three). Production Patrick sets no count (he's open to all
+ * three), so no production mentor triggers the organizer warning; this keeps it covered.
+ */
+const productionPatrick = productionMentors.find((m) => m.id === "patrick-haddox")!;
+const limitedPatrick: Mentor = {
+  ...productionPatrick,
+  session: { ...productionPatrick.session, sessionCount: "One or two sessions" },
+  organizerNotes: "Fixture: willing to host one or two sessions in the Thu Oct 1, 10:00–11:30 AM window.",
+};
+/** Organizer content with Patrick swapped for the fixture above (same six mentors, same order). */
+const withLimitedPatrick = (): Mentor[] =>
+  getMentorsForOrganizers().map((m) => (m.id === limitedPatrick.id ? limitedPatrick : m));
 
 /** Every <img> alt text in the markup. */
 function imageAlts(html: string): string[] {
@@ -312,18 +329,36 @@ describe("organizer directory from production content", () => {
     ]);
   });
 
-  it("warns about Patrick's one or two sessions, from content, and nobody else's", () => {
+  it("warns about a session count only when content sets one: nobody in production, a fixture Patrick with one or two", () => {
+    // Patrick is open to all three sessions in his window, so he sets no count and gets no warning.
     const patrick = directory.mentorsById.get("patrick-haddox")!;
-    expect(patrick.sessionCount).toBe("One or two sessions");
-    expect(patrick.organizerNotes).toContain("one or two sessions");
-    expect(sessionLimitNote(patrick, 3)).toBe(
+    expect(patrick.sessionCount).toBeNull();
+    expect(patrick.organizerNotes).toContain(
+      "Open to hosting all three 25-minute sessions in the Thu Oct 1, 10:00–11:30 AM window (10:00, 10:30, 11:00)",
+    );
+    expect(patrick.organizerNotes).not.toMatch(/one or two/i);
+    expect(directory.slots.filter((s) => s.mentorId === "patrick-haddox")).toHaveLength(3);
+    expect(sessionLimitNote(patrick, 3)).toBeNull();
+    // Nobody in production has a count now.
+    for (const m of directory.mentors) {
+      expect(m.sessionCount, m.id).toBeNull();
+      expect(sessionLimitNote(m, directory.slots.filter((s) => s.mentorId === m.id).length), m.id).toBeNull();
+      expect(sessionLimitNote(m, 10), m.id).toBeNull();
+    }
+
+    // The warning stays for a mentor who agreed to fewer sessions than the window fits (fixture).
+    const limited = build(withLimitedPatrick());
+    const fixture = limited.mentorsById.get("patrick-haddox")!;
+    expect(fixture.sessionCount).toBe("One or two sessions");
+    expect(limited.slots.filter((s) => s.mentorId === "patrick-haddox")).toHaveLength(3);
+    expect(sessionLimitNote(fixture, 3)).toBe(
       "Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to.",
     );
-    expect(sessionLimitNote(patrick, 1)).toBe(
+    expect(sessionLimitNote(fixture, 1)).toBe(
       "Patrick is hosting one or two sessions, and 1 is listed. Only book as many as Patrick agreed to.",
     );
-    expect(sessionLimitNote(patrick, 0)).toBeNull();
-    for (const m of directory.mentors.filter((x) => x.id !== "patrick-haddox")) {
+    expect(sessionLimitNote(fixture, 0)).toBeNull();
+    for (const m of limited.mentors.filter((x) => x.id !== "patrick-haddox")) {
       expect(sessionLimitNote(m, 10), m.id).toBeNull();
     }
   });
@@ -792,13 +827,16 @@ describe("mentor notes (organizer-only)", () => {
     expect(t.match(/Scheduling in progress/g)).toHaveLength(2);
     expect(t).toContain("Vikram “Vik” Lakhwara 0 interested · 0 first choice Scheduling in progress");
     expect(t).toContain("Elliott Notrica 0 interested · 0 first choice Scheduling in progress");
-    // Patrick: his window, three sessions, and that he's hosting one or two of them.
-    expect(t).toContain("Thu, Oct 1 · 10:00–11:30 AM 3 sessions · 0/3 booked · hosting one or two sessions");
+    // Patrick: his window and three sessions, all open to booking (he sets no session count).
+    expect(t).toContain(
+      "Patrick Haddox 0 interested · 0 first choice Thu, Oct 1 · 10:00–11:30 AM 3 sessions · 0/3 booked (show applications that list this mentor)",
+    );
     // Arnav: his exact Friday window, three sessions (no session count of his own, so no limit note).
     expect(t).toContain(
       "Arnav Mishra 0 interested · 0 first choice Fri, Oct 2 · 10:00–11:30 AM 3 sessions · 0/3 booked (show applications that list this mentor)",
     );
-    expect(t.match(/hosting one or two sessions/g)).toHaveLength(1);
+    // Nobody in production sets a session count, so no card says who's "hosting" how many.
+    expect(t).not.toMatch(/\bhosting\b/i);
     expect(t).not.toContain("No sessions yet");
     // Rishab: his confirmed window, in the same compact form as Patrick's, and two sessions booked.
     expect(t).toContain(
@@ -817,6 +855,23 @@ describe("mentor notes (organizer-only)", () => {
     // Portrait-over-text cards are only for a single row of five.
     expect(html).not.toContain("lg:flex-col");
     expect(t).not.toMatch(/\b0[1-6]\b/);
+  });
+
+  it("the mentor lineup says how many sessions a mentor agreed to host (fixture Patrick: one or two), once", () => {
+    const html = renderToStaticMarkup(
+      createElement(MentorLineup, {
+        directory: build(withLimitedPatrick()),
+        interest: new Map(),
+        usage: new Map([["patrick-haddox-2026-10-01-am-1000", { proposed: 0, confirmed: 1 }]]),
+        filters: DEFAULT_APPLICATION_FILTERS,
+      }),
+    );
+    const t = text(html);
+    expect(html.match(/<li>/g)).toHaveLength(6);
+    expect(t).toContain(
+      "Patrick Haddox 0 interested · 0 first choice Thu, Oct 1 · 10:00–11:30 AM 3 sessions · 1/3 booked · hosting one or two sessions (show applications that list this mentor)",
+    );
+    expect(t.match(/\bhosting\b/gi)).toHaveLength(1);
   });
 
   it("marks Rishab's card as the active filter and keeps the other filters in every link", () => {
@@ -941,7 +996,7 @@ describe("sessions board and assign options", () => {
     expect(t).not.toContain("—");
   });
 
-  it("puts Patrick's one-or-two-sessions note, and his organizer note, right above his sessions", () => {
+  it("shows no session-limit warning for Patrick (open to all three sessions) or anyone else in production", () => {
     const patrick = getMentorsForOrganizers().find((m) => m.id === "patrick-haddox")!;
     const html = renderToStaticMarkup(
       createElement(SlotBoard, {
@@ -950,9 +1005,30 @@ describe("sessions board and assign options", () => {
       }),
     );
     const t = text(html);
+    // His header goes straight to his window and its three sessions.
     expect(t).toContain(
-      "1 of 3 sessions booked Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to. Booked so far: 1. " +
-        `Organizer note: ${patrick.organizerNotes} Thu, Oct 1 · 10:00–11:30 AM CT window`,
+      "Patrick Haddox CEO & Co-Founder, Samara Aerospace 1 of 3 sessions booked Thu, Oct 1 · 10:00–11:30 AM CT window · 3 sessions Applications that chose this window",
+    );
+    expect(t).not.toContain("Only book as many as");
+    expect(t).not.toContain("Booked so far");
+    expect(t).not.toMatch(/\bhosting\b/i);
+    // The organizer note only rides along with a warning, so none shows here.
+    expect(t).not.toContain("Organizer note:");
+    expect(t).not.toContain(patrick.organizerNotes!);
+  });
+
+  it("puts a fixture Patrick's one-or-two-sessions note, and his organizer note, right above his sessions", () => {
+    const html = renderToStaticMarkup(
+      createElement(SlotBoard, {
+        directory: build(withLimitedPatrick()),
+        usage: new Map([["patrick-haddox-2026-10-01-am-1030", { proposed: 1, confirmed: 0 }]]),
+      }),
+    );
+    const t = text(html);
+    expect(t).toContain(
+      "Patrick Haddox CEO & Co-Founder, Samara Aerospace 1 of 3 sessions booked " +
+        "Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to. Booked so far: 1. " +
+        `Organizer note: ${limitedPatrick.organizerNotes} Thu, Oct 1 · 10:00–11:30 AM CT window · 3 sessions`,
     );
     // Nobody else agreed to a session count, so nobody else gets the warning.
     expect(t.match(/Only book as many as/g)).toHaveLength(1);

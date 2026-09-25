@@ -35,8 +35,8 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
 
 **Patrick Haddox** (CEO & Co-Founder, Samara Aerospace)
 - Window: Thu Oct 1, 10:00–11:30 AM CT, in person at Espresso Royale at Grainger Library, 1301 W
-  Springfield Ave, Urbana (organizer update, Sept 24). He will host one or two 25-minute sessions;
-  exact session times are pending. Assign at most two of his three sessions.
+  Springfield Ave, Urbana (organizer update, Sept 24). He's open to all three 25-minute sessions in
+  the window (10:00, 10:30, 11:00; organizer update, Sept 24).
 - Background and expertise are composed only from his role and his Founders Showcase panel listing.
   Personal bio and mentor-confirmed topics are not supplied.
 

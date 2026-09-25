@@ -755,10 +755,14 @@ describe("mentor profile page", () => {
     expect(t).toContain(
       `Office hours Thu, Oct 1 · 10:00–11:30 AM CT ${SESSION_RULE} Espresso Royale at Grainger Library, 1301 W Springfield Ave, Urbana, IL 61801 Patrick is free during this window`,
     );
-    expect(t).toContain("Patrick is free during this window, but it isn’t a booked appointment.");
+    expect(t).toContain(
+      "Patrick is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
+    );
     expect(t).toContain("Speaking Fri, Oct 2 · 2:40–2:55 PM CT Next Generation Industrial, Manufacturing and Space Tech");
-    // His window fits three sessions on the grid, but he agreed to one or two: never a computed count.
-    expect(t).not.toMatch(/\b(three|3) sessions\b/i);
+    // His window fits three sessions on the grid (he's open to all three), but a session count is
+    // never published: no computed count, and no count of his own (content sets none).
+    expect(t).not.toMatch(/\b(one|two|three|\d+) sessions\b/i);
+    expect(t).not.toMatch(/one or two/i);
   });
 
   it("Arnav's profile: Friday 10:00–11:30 AM window, hosting his Wednesday happy hour, then speaking", async () => {
@@ -820,8 +824,8 @@ describe("mentor profile page", () => {
         expect(block.indexOf(firstLine), mentor.id).toBeLessThan(block.indexOf(SESSION_RULE));
         expect(block.indexOf(SESSION_RULE), mentor.id).toBeLessThan(block.indexOf(availabilityNote(mentor)!));
       }
-      // Patrick's own words ("one or two sessions") are his; a count from the grid never appears.
-      expect(block.replace(/one or two sessions/g, ""), mentor.id).not.toMatch(
+      // No session count, computed from the grid or from content, ever appears.
+      expect(block, mentor.id).not.toMatch(
         /\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) sessions\b/i,
       );
       expect(t, mentor.id).not.toMatch(/one[- ]on[- ]one/i);

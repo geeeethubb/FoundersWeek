@@ -45,6 +45,7 @@ import {
   PATRICK,
   PATRICK_ADDRESS,
   PATRICK_VENUE,
+  PATRICK_WINDOW_NOTE,
   preselectionNotice,
   RISHAB,
   RISHAB_SHOWCASE_SESSION,
@@ -53,6 +54,7 @@ import {
   RON_ADDRESS,
   RON_VENUE,
   RON_WINDOW_NOTE,
+  SESSION_COUNT,
   SESSION_LENGTH_HINT,
   SESSION_RULE,
   visibleText,
@@ -182,7 +184,7 @@ test.describe("Office Hours page", () => {
     expect(text).not.toMatch(/In priority order/i);
     expect(text).not.toMatch(ONE_ON_ONE);
     // How many sessions fit in a window is for organizers; the public page never counts them.
-    expect(text).not.toMatch(/\b(\d+|three|four|ten) sessions\b/i);
+    expect(text).not.toMatch(SESSION_COUNT);
     // Nothing private in the page or its serialized data either.
     const body = page.locator("body");
     for (const topic of DRAFT_TOPICS) await expect(body).not.toContainText(topic);
@@ -245,11 +247,13 @@ test.describe("Mentor profiles", () => {
       const officeHoursBlock = main.locator("header");
       await expect(officeHoursBlock).toContainText(mentor.cardLine);
       expect(countMatches(await visibleText(officeHoursBlock), SESSION_RULE), "the session rule, once").toBe(1);
-      expect(await visibleText(main)).not.toMatch(/\b(\d+|three|four|ten) sessions\b/i);
+      expect(await visibleText(main)).not.toMatch(SESSION_COUNT);
 
       if (mentor === PATRICK) {
-        // In person at Espresso Royale in Grainger Library, under his Thursday window.
+        // In person at Espresso Royale in Grainger Library, under his Thursday window, with the
+        // window's own note (and never how many sessions he's hosting).
         await expect(officeHoursBlock).toContainText(`${PATRICK_VENUE}, ${PATRICK_ADDRESS}`);
+        await expect(officeHoursBlock).toContainText(PATRICK_WINDOW_NOTE);
         await expect(officeHoursBlock).not.toContainText(/to be confirmed|to be announced/i);
       }
       if (mentor === RON) {

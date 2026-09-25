@@ -28,7 +28,7 @@ export interface MentorInfo {
   demo: boolean;
   scheduling: SchedulingStatus;
   acceptingApplications: boolean;
-  /** Content `session.sessionCount`, e.g. "One or two sessions" (null when not agreed yet). */
+  /** Content `session.sessionCount`, e.g. "One or two sessions" (null when there is no limit). */
   sessionCount: string | null;
   /** Organizer-only notes. This directory is only built for the protected organizer view. */
   organizerNotes: string | null;
@@ -251,9 +251,9 @@ export function mentorBookability(directory: OrganizerDirectory, mentorIds: read
 
 /**
  * Some mentors agreed to fewer sessions than their window fits (content `session.sessionCount`,
- * e.g. Patrick's "One or two sessions" in a window with room for three). Shown next to their
- * sessions so organizers don't overbook: "Patrick is hosting one or two sessions, and 3 are
- * listed. Only book as many as Patrick agreed to." Null when content sets no count.
+ * e.g. "One or two sessions" in a window with room for three). Shown next to their sessions so
+ * organizers don't overbook: "<Name> is hosting one or two sessions, and 3 are listed. Only book as
+ * many as <Name> agreed to." Null when content sets no count.
  */
 export function sessionLimitNote(mentor: Pick<MentorInfo, "firstName" | "sessionCount">, listed: number): string | null {
   const count = mentor.sessionCount?.trim();

@@ -1085,12 +1085,20 @@ describe("session details", () => {
   });
 
   it("fills every unknown row with 'To be confirmed'", () => {
+    // Patrick is open to all three sessions in his window, so content sets no session count.
+    expect(patrick.session.sessionCount).toBeNull();
     expect(sessionDetails(patrick.session)).toEqual([
       { label: "Format", value: "In person", known: true },
       { label: "Length", value: `${minutes} minutes`, known: true },
       { label: "Location", value: "Espresso Royale at Grainger Library, 1301 W Springfield Ave, Urbana, IL 61801", known: true },
-      { label: "Sessions", value: "One or two sessions", known: true },
+      { label: "Sessions", value: "To be confirmed", known: false },
     ]);
+    // A count in content (fixture copy of Patrick's session) is shown as written.
+    expect(sessionDetails({ ...patrick.session, sessionCount: "One or two sessions" })[3]).toEqual({
+      label: "Sessions",
+      value: "One or two sessions",
+      known: true,
+    });
     // Ron's place is confirmed: the Location row gives the building and its street address.
     expect(sessionDetails(ron.session)).toEqual([
       { label: "Format", value: "In person", known: true },
@@ -1288,8 +1296,8 @@ describe("Office Hours cards and profiles", () => {
     // Rough windows (a part-of-day or date-only window) have no sessions yet: no line.
     expect(sessionRuleLine(roughMentor, rule)).toBeNull();
     expect(sessionRuleLine(tbaMentor, rule)).toBeNull();
-    // Built from the rule it's given, and never a number of sessions (Patrick's window fits three,
-    // but he agreed to one or two).
+    // Built from the rule it's given, and never a number of sessions (Patrick's window fits three;
+    // the session count stays off public pages).
     expect(sessionRuleLine(patrick, { sessionMinutes: 20, breakMinutes: 10 })).toBe(
       "Each session is 20 minutes, with a 10-minute break between sessions.",
     );

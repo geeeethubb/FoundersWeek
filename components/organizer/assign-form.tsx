@@ -24,8 +24,8 @@ export interface AssignGroup {
   /** The student listed this mentor. */
   preferred: boolean;
   /**
-   * Shown when one of this mentor's sessions is selected, e.g. Patrick hosting one or two
-   * sessions while his window fits three.
+   * Shown when one of this mentor's sessions is selected, e.g. a mentor hosting one or two
+   * sessions while their window fits three.
    */
   note?: string | null;
   options: AssignOption[];

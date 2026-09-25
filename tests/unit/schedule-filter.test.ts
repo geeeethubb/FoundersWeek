@@ -391,9 +391,9 @@ describe("production calendar", () => {
     for (const e of oh) {
       // Said once in the entry's description, and only when it applies.
       expect(e.description.split(rule).length - 1, e.id).toBe(e.sessionRule ? 1 : 0);
-      // Never how many sessions fit (Patrick's window would fit three; he offered one or two).
+      // Never how many sessions fit or are offered (Patrick's window fits three; the count is never published).
       expect(`${e.description} ${e.summary} ${e.sessionRule ?? ""}`, e.id).not.toMatch(
-        /\b(\d+|three|four|five|six|seven|eight|nine|ten) sessions\b/i,
+        /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten) sessions\b/i,
       );
     }
     // Events never carry it.

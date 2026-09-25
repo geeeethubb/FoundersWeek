@@ -538,10 +538,11 @@ describe("calendar components (public data)", () => {
     expect(t).toContain(
       `When Thursday, October 1 10:00–11:30 AM CT Availability window, not a booked appointment. ${RULE} Where`,
     );
-    // Said once on the page, and never as a count (Patrick offered one or two sessions; the grid fits three).
+    // Said once on the page, and never as a count (the grid fits three; a session count is never published).
     expect(count(t, RULE)).toBe(1);
     expect(count(t, "25 minutes") + count(t, "25-minute")).toBe(1);
-    expect(ownText(t)).not.toMatch(/\b(\d+|three) sessions\b/i);
+    expect(ownText(t)).not.toMatch(/\b(\d+|one|two|three) sessions\b/i);
+    expect(t).not.toMatch(/one or two/i);
     expect(t).toContain("Hosted by Founders – Illinois Entrepreneurs");
     expect(t).toContain("Submitting an application doesn’t reserve a time slot.");
     expect(t).toContain("Appointments are limited.");

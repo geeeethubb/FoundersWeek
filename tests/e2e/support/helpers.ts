@@ -146,6 +146,9 @@ export const AUVI_CLAIMS = /FDA[\s-]*(approved|cleared)|\bcleared by the FDA\b|c
 /** Patrick's office hours are in person: the venue, then the street address, on his profile. */
 export const PATRICK_VENUE = "Espresso Royale at Grainger Library";
 export const PATRICK_ADDRESS = "1301 W Springfield Ave, Urbana, IL 61801";
+/** The public note under Patrick's office-hours window on his profile. */
+export const PATRICK_WINDOW_NOTE =
+  "Patrick is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 
 /** Ron's office hours are in person: the building, then the street address, on his profile. */
 export const RON_VENUE = "Business Instructional Facility (BIF)";
@@ -176,6 +179,8 @@ export const DEMO_MENTOR_NAMES = ["Avery Sample", "Jordan Placeholder"];
 
 /** The capacity-1 demo slot used by the organizer capacity test (content/demo.ts, 2:00–2:25 PM). */
 export const DEMO_SLOT_ID = "demo-avery-slot-1400";
+/** Avery's other demo slot (content/demo.ts, 2:30–2:55 PM, capacity 2). */
+export const DEMO_SECOND_SLOT_ID = "demo-avery-slot-1430";
 
 // ---------------------------------------------------------------------------
 // Office-hours sessions (site.officeHours: 25 minutes, then a 5-minute break)
@@ -201,8 +206,9 @@ function sessionsIn(mentor: MentorFixture, day: string, grid: [start: string, ti
 }
 
 /**
- * Patrick's window (Thu, Oct 1, 10:00–11:30 AM) split into three 25-minute sessions. He agreed to
- * host one or two, so organizers see a note; the grid itself is never published.
+ * Patrick's window (Thu, Oct 1, 10:00–11:30 AM) split into three 25-minute sessions. He's open to
+ * hosting all three, so organizers can book every one and see no session-count warning; the grid
+ * itself is never published.
  */
 export const PATRICK_SESSIONS: SessionFixture[] = sessionsIn(PATRICK, "Thu, Oct 1", [
   ["1000", "10:00–10:25 AM CT"],
@@ -239,9 +245,26 @@ export const ARNAV_SESSIONS: SessionFixture[] = sessionsIn(ARNAV, "Fri, Oct 2", 
   ["1100", "11:00–11:25 AM CT"],
 ]);
 
-/** What organizers see when they pick one of Patrick's sessions (before anything is booked). */
-export const PATRICK_SESSION_NOTE =
-  "Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to.";
+/**
+ * The organizer warning for a mentor who agreed to a set number of sessions (content
+ * `session.sessionCount`): "<Name> is hosting <count>, and <n> are listed. Only book as many as
+ * <Name> agreed to." then "Booked so far: <n>." This phrase appears in no other copy.
+ */
+export const SESSION_LIMIT_MARKER = "Only book as many as";
+
+/**
+ * No real mentor sets a session count (Patrick is open to all three of his sessions), so the
+ * warning is covered with the demo mentor Avery Sample (content/demo.ts: `sessionCount: "Two
+ * sessions"`, two explicit slots). Shown to organizers only, never on public pages.
+ */
+export const DEMO_SESSION_LIMIT_NOTE =
+  "Avery is hosting two sessions, and 2 are listed. Only book as many as Avery agreed to.";
+
+/**
+ * A session count ("3 sessions", "one or two sessions", "Two sessions"). How many sessions a mentor
+ * holds, or how many fit in a window, is for organizers only: public office-hours copy never says.
+ */
+export const SESSION_COUNT = /\b(\d+|one|two|three|four|five|ten) sessions\b/i;
 
 /** The one sentence explaining how matching works — exactly once on /office-hours. */
 export const MATCHING_SENTENCE =
@@ -270,7 +293,7 @@ export const DRAFT_TOPICS: RegExp[] = [/Startup financial planning/, /Communicat
 
 /** Organizer-only notes (content/mentors.ts `organizerNotes`) — stripped before anything renders. */
 export const ORGANIZER_ONLY =
-  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number|session grid fits|assign at most two|never publish a session count|also open to Oct|send details later/i;
+  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number|Open to hosting all three|as long as they fit in the window|also open to Oct|send details later/i;
 
 /** Content-maintenance notes on approved fields (`note`) — never public. */
 export const CONTENT_NOTES =

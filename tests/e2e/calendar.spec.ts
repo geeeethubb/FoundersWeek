@@ -40,6 +40,7 @@ import {
   RON,
   RON_ADDRESS,
   RON_VENUE,
+  SESSION_COUNT,
   SESSION_RULE,
   unfoldIcs,
   waitForHydration,
@@ -385,7 +386,7 @@ test.describe("Office hours on the calendar", () => {
     // Pitching block's "3 sessions", are program sessions, not office hours.)
     const [officeHoursPart] = (await main.innerText()).split("Overlaps with");
     expect(officeHoursPart).toContain(PATRICK_VENUE);
-    expect(officeHoursPart).not.toMatch(/\b(\d+|three) sessions\b/i);
+    expect(officeHoursPart).not.toMatch(SESSION_COUNT);
     await expect(main).toContainText("Submitting an application doesn’t reserve a time slot.");
     expect((await page.request.get(`/schedule/office-hours-${PATRICK.windowId}/calendar.ics`)).status()).toBe(404);
   });

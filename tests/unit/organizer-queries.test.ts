@@ -17,6 +17,26 @@ vi.mock("next/navigation", async (importOriginal) => ({
   usePathname: () => "/organizers/applications",
 }));
 
+// Patrick is open to all three sessions in his window, so no production mentor sets a session count
+// and the detail page's session-limit warning never shows for real content. To keep that warning
+// covered end to end, a test can swap in a fixture copy of Patrick who agreed to fewer sessions
+// (content `session.sessionCount`); it's null (production content, unchanged) otherwise.
+const patrickFixture = vi.hoisted(() => ({ sessionCount: null as string | null }));
+vi.mock("@/content", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/content")>();
+  return {
+    ...actual,
+    getMentorsForOrganizers: () =>
+      actual
+        .getMentorsForOrganizers()
+        .map((m) =>
+          m.id === "patrick-haddox" && patrickFixture.sessionCount
+            ? { ...m, session: { ...m.session, sessionCount: patrickFixture.sessionCount } }
+            : m,
+        ),
+  };
+});
+
 import ApplicationDetailPage from "@/app/organizers/applications/[id]/page";
 import { ApplicationResults } from "@/components/organizer/application-results";
 import { getMentorsForOrganizers, getSite } from "@/content";
@@ -457,7 +477,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
       expect(t).not.toContain("—");
     });
 
-    it("shows Rishab as a second choice, and warns that Patrick is hosting one or two sessions", async () => {
+    it("shows Rishab as a second choice, with no session limit on Patrick (open to all three sessions)", async () => {
       const { html, t } = await renderDetail(ids.omar);
       expect(t).toContain(
         "Mentors & availability 1. Patrick Haddox CEO & Co-Founder, Samara Aerospace First choice Thu, Oct 1 · 10:00–11:30 AM CT Availability window " +
@@ -479,10 +499,32 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
       ]);
       expect(options[0]).toMatchObject({ value: "patrick-haddox-2026-10-01-am-1000", selected: true });
       expect(options.filter((o) => o.selected)).toHaveLength(1);
-      // Patrick's session is selected, so his limit shows right under the picker.
-      expect(t).toContain(
-        "Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to. Booked so far: 0.",
-      );
+      // Patrick's session is selected, but he sets no session count: all three are bookable, no warning.
+      expect(options.slice(0, 3).map((o) => [o.text, o.disabled])).toEqual([
+        ["Thu, Oct 1 · 10:00–10:25 AM CT · 1 of 1 open", false],
+        ["Thu, Oct 1 · 10:30–10:55 AM CT · 1 of 1 open", false],
+        ["Thu, Oct 1 · 11:00–11:25 AM CT · 1 of 1 open", false],
+      ]);
+      expect(t).not.toContain("Only book as many as");
+      expect(t).not.toContain("Booked so far");
+      expect(t).not.toMatch(/\bhosting\b/i);
+    });
+
+    it("warns under the picker when the selected mentor agreed to fewer sessions (fixture Patrick: one or two)", async () => {
+      patrickFixture.sessionCount = "One or two sessions";
+      try {
+        const { html, t } = await renderDetail(ids.omar);
+        const { options } = sessionSelect(html);
+        // The count doesn't change which sessions are offered; it only adds the warning.
+        expect(options).toHaveLength(20);
+        expect(options[0]).toMatchObject({ value: "patrick-haddox-2026-10-01-am-1000", selected: true });
+        expect(t).toContain(
+          "Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to. Booked so far: 0.",
+        );
+        expect(t.match(/Only book as many as/g)).toHaveLength(1);
+      } finally {
+        patrickFixture.sessionCount = null;
+      }
     });
 
     it("explains that Elliott (still scheduling) has no sessions yet, and offers other mentors' sessions without preselecting one", async () => {
