@@ -752,7 +752,9 @@ describe("mentor profile page", () => {
 
   it("Patrick's profile shows his window as a window, not a booking", async () => {
     const t = text(await renderProfile("patrick-haddox"));
-    expect(t).toContain(`Office hours Thu, Oct 1 · 10:00–11:30 AM CT ${SESSION_RULE} Patrick is free during this window`);
+    expect(t).toContain(
+      `Office hours Thu, Oct 1 · 10:00–11:30 AM CT ${SESSION_RULE} Espresso Royale at Grainger Library, 1301 W Springfield Ave, Urbana, IL 61801 Patrick is free during this window`,
+    );
     expect(t).toContain("Patrick is free during this window, but it isn’t a booked appointment.");
     expect(t).toContain("Speaking Fri, Oct 2 · 2:40–2:55 PM CT Next Generation Industrial, Manufacturing and Space Tech");
     // His window fits three sessions on the grid, but he agreed to one or two: never a computed count.
@@ -881,7 +883,7 @@ describe("mentor profile page", () => {
   it("shows the place only once it's set (building, then street address)", () => {
     const patrick = getMentors().find((m) => m.id === "patrick-haddox")!;
     const ron = getMentors().find((m) => m.id === "ron-lewis")!;
-    expect(officeHoursPlace(patrick)).toBeNull();
+    expect(officeHoursPlace(patrick)).toEqual({ venue: "Espresso Royale at Grainger Library", address: "1301 W Springfield Ave, Urbana, IL 61801" });
     expect(officeHoursPlace(ron)).toEqual({
       venue: "Business Instructional Facility (BIF)",
       address: "515 E. Gregory Drive, Champaign, IL 61820",

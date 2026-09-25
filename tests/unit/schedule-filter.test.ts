@@ -1066,7 +1066,8 @@ describe("display helpers", () => {
       "405 N. Mathews Ave., Urbana, IL 61801",
     ]);
     expect(locationLines(byId(HAPPY_HOUR).location)).toEqual(["Legends", "6th & Green"]);
-    expect(locationSummary(byId(PATRICK_OH).location)).toBe("Location to be announced");
+    expect(locationSummary(byId(PATRICK_OH).location)).toBe("Espresso Royale at Grainger Library");
+    expect(locationLines(byId(PATRICK_OH).location)).toEqual(["Espresso Royale at Grainger Library", "1301 W Springfield Ave, Urbana, IL 61801"]);
     expect(locationSummary(byId(ARNAV_OH).location)).toBe("Location to be announced");
     expect(locationSummary(byId(RON_OH).location)).toBe("Business Instructional Facility (BIF)");
     expect(locationLines(byId(RON_OH).location)).toEqual([

@@ -1076,19 +1076,19 @@ describe("session details", () => {
   });
 
   it("says plainly what isn't known yet", () => {
-    expect(sessionSummary(patrick.session)).toBe(`${minutes} min · Format to be confirmed`);
+    expect(sessionSummary(patrick.session)).toBe(`In person · ${minutes} min`);
     expect(sessionSummary(rishab.session)).toBe(`${minutes} min · Format to be confirmed`);
     expect(sessionSummary(tbaMentor.session)).toBe("Format and length to be confirmed");
     expect(sessionSummary(jordan.session)).toBe("Virtual · Length to be confirmed");
     expect(sessionSummary(avery.session)).toBe("In person · 25 min");
-    expect(sessionSummary({ ...patrick.session, durationMinutes: 20 })).toBe("20 min · Format to be confirmed");
+    expect(sessionSummary({ ...patrick.session, format: null, durationMinutes: 20 })).toBe("20 min · Format to be confirmed");
   });
 
   it("fills every unknown row with 'To be confirmed'", () => {
     expect(sessionDetails(patrick.session)).toEqual([
-      { label: "Format", value: "To be confirmed", known: false },
+      { label: "Format", value: "In person", known: true },
       { label: "Length", value: `${minutes} minutes`, known: true },
-      { label: "Location", value: "To be confirmed", known: false },
+      { label: "Location", value: "Espresso Royale at Grainger Library, 1301 W Springfield Ave, Urbana, IL 61801", known: true },
       { label: "Sessions", value: "One or two sessions", known: true },
     ]);
     // Ron's place is confirmed: the Location row gives the building and its street address.

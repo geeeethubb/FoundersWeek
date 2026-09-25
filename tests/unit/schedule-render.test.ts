@@ -694,7 +694,7 @@ describe("calendar components (public data)", () => {
     );
     const sameDay = t.slice(t.indexOf("Also on Thursday, October 1"));
     expect(sameDay).toContain(
-      "10:00 AM Office hours with Patrick Haddox Location to be announced · CEO & Co-Founder, Samara Aerospace Hosted by Founders Availability window 11:45 AM The Science and Practice of Pitching Gies Business Instructional Facility · 3 sessions 5:00 PM TechRise Pitch Competition and Panel Discussion EnterpriseWorks · 4 sessions",
+      "10:00 AM Office hours with Patrick Haddox Espresso Royale at Grainger Library · CEO & Co-Founder, Samara Aerospace Hosted by Founders Availability window 11:45 AM The Science and Practice of Pitching Gies Business Instructional Facility · 3 sessions 5:00 PM TechRise Pitch Competition and Panel Discussion EnterpriseWorks · 4 sessions",
     );
     for (const id of [PATRICK_OH, PITCHING, RISHAB_OH, IMPACT, TECHRISE]) {
       expect(links.filter((h) => h === `/schedule/${id}`), id).toHaveLength(1);

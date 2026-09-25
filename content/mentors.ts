@@ -70,12 +70,13 @@ export const mentors: Mentor[] = [
     askMeAbout: null,
     goodFitFor: null,
     session: {
-      format: null,
+      format: "in-person",
       durationMinutes: SESSION_MINUTES,
-      location: null,
+      location: "Espresso Royale at Grainger Library",
+      address: "1301 W Springfield Ave, Urbana, IL 61801",
       sessionCount: "One or two sessions",
-      confirmed: false,
-      note: "Patrick will host one or two sessions in this window. We’re still setting the exact times and location.",
+      confirmed: true,
+      note: "Patrick will host one or two sessions in this window at Espresso Royale in Grainger Library. We’re still setting the exact session times.",
     },
     availability: [
       {
@@ -89,7 +90,7 @@ export const mentors: Mentor[] = [
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/patrick-haddox/" }],
     acceptingApplications: true,
     organizerNotes:
-      "Willing to host one or two sessions in the Thu Oct 1, 10:00–11:30 AM window. The session grid fits three there, so assign at most two, and never publish a session count. Location not finalized.",
+      "Willing to host one or two sessions in the Thu Oct 1, 10:00–11:30 AM window. The session grid fits three there, so assign at most two, and never publish a session count. Location: Espresso Royale at Grainger Library, 1301 W Springfield Ave, Urbana (organizer update, Sept 24).",
     sources: [
       BRIEF,
       AGENDA,

@@ -251,7 +251,7 @@ describe("social image models (public data)", () => {
       involvement: { label: "Hosted by Founders", tone: "solid" },
       status: null,
       when: "10:00–11:30 AM CT",
-      where: "Location to be announced",
+      where: "Espresso Royale at Grainger Library",
       cta: "Apply for Office Hours",
     });
     expect(eventCardModel(entry("office-hours-patrick-haddox-2026-10-01-am"), closed()).cta).toBeNull();
