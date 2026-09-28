@@ -198,7 +198,7 @@ describe("calendar eligibility", () => {
     const vikOfficeHours = byId(VIK_OH);
     expect(vikOfficeHours).toMatchObject({
       date: "2026-10-01",
-      time: { kind: "exact", start: "11:30", end: "15:30" },
+      time: { kind: "exact", start: "11:30", end: "15:00" },
       status: "confirmed",
       location: {
         kind: "in-person",
@@ -206,7 +206,7 @@ describe("calendar eligibility", () => {
         address: "111 St. Marys Rd., Champaign, IL 61820",
       },
       startsAt: "2026-10-01T16:30:00.000Z",
-      endsAt: "2026-10-01T20:30:00.000Z",
+      endsAt: "2026-10-01T20:00:00.000Z",
     });
     const vikIcs = buildIcsCalendar([vikOfficeHours], { siteUrl: SITE, now: NOW });
     expect(vikIcs).not.toContain("BEGIN:VEVENT");
@@ -434,7 +434,7 @@ describe("calendar.ics routes (public data)", () => {
     expect(body).toContain("SUMMARY:Founders Evening Showcase and Reception");
     // Both Friday Illinois Conference Center events carry the street address.
     expect(body.split("\r\n").filter((l) => l === ICC_LOCATION)).toHaveLength(2);
-    // Office hours (Rishab's noon–5 PM window and Vik's 11:30 AM–3:30 PM window included) never
+    // Office hours (Rishab's noon–5 PM window and Vik's 11:30 AM–3:00 PM window included) never
     // reach the feed.
     expect(body).not.toContain("office-hours-");
     expect(body).not.toContain("SUMMARY:Office hours");
@@ -502,7 +502,7 @@ describe("all-events feed", () => {
     // Rishab's window is the only Oct 1 listing that starts at noon, and it stays out.
     expect(unfold(feed)).not.toContain("DTSTART;TZID=America/Chicago:20261001T120000");
     expect(unfold(feed)).not.toContain("SUMMARY:Office hours with Rishab Veldur");
-    // Vik's Thursday window (11:30 AM–3:30 PM at the Illinois Conference Center) stays out too.
+    // Vik's Thursday window (11:30 AM–3:00 PM at the Illinois Conference Center) stays out too.
     expect(feed).not.toContain(`${VIK_OH}@`);
     expect(unfold(feed)).not.toContain("DTSTART;TZID=America/Chicago:20261001T113000");
     expect(unfold(feed)).not.toContain("SUMMARY:Office hours with Vikram");

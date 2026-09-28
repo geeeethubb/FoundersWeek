@@ -114,10 +114,10 @@ describe("application catalog", () => {
     expect(byId["ron-lewis"].options.map((o) => [o.key, o.label, o.timeKnown])).toEqual([
       ["window:ron-lewis-2026-10-01-pm", "Thu, Oct 1 · 2:30–4:30 PM CT", true],
     ]);
-    // Vik's window was published on Sept 27: Thu, Oct 1, 11:30 AM–3:30 PM CT.
+    // Vik's window was published on Sept 27: Thu, Oct 1, 11:30 AM–3:00 PM CT.
     expect(byId["vikram-lakhwara"].scheduling).toBe("available");
     expect(byId["vikram-lakhwara"].options.map((o) => [o.key, o.label, o.timeKnown])).toEqual([
-      ["window:vikram-lakhwara-2026-10-01", "Thu, Oct 1 · 11:30 AM–3:30 PM CT", true],
+      ["window:vikram-lakhwara-2026-10-01", "Thu, Oct 1 · 11:30 AM–3:00 PM CT", true],
     ]);
     // No real mentor is still scheduling now; a mentor who is (fixtures) gets no options at all.
     expect(catalog.mentors.filter((m) => m.scheduling === "in-progress").map((m) => m.id)).toEqual([]);
@@ -215,7 +215,7 @@ describe("application catalog", () => {
   });
 });
 
-describe("Vik (Thu, Oct 1, 11:30 AM–3:30 PM CT, from his Sept 27 email)", () => {
+describe("Vik (Thu, Oct 1, 11:30 AM–3:00 PM CT, from his Sept 27 email)", () => {
   const VIK_WINDOW = "window:vikram-lakhwara-2026-10-01";
   const PATRICK_WINDOW = "window:patrick-haddox-2026-10-01-am";
   const vik = { mentorIds: ["vikram-lakhwara"], firstChoiceMentorId: "vikram-lakhwara" };
@@ -230,7 +230,7 @@ describe("Vik (Thu, Oct 1, 11:30 AM–3:30 PM CT, from his Sept 27 email)", () =
         mentorId: "vikram-lakhwara",
         certainty: "window",
         date: "2026-10-01",
-        label: "Thu, Oct 1 · 11:30 AM–3:30 PM CT",
+        label: "Thu, Oct 1 · 11:30 AM–3:00 PM CT",
         detail: "Availability window. Exact appointment times aren’t set yet.",
         timeKnown: true,
       },
@@ -371,7 +371,7 @@ describe("Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
     );
     expect(all.success).toBe(false);
     if (!all.success) {
-      // Ron (Thu 2:30–4:30 PM), Elliott (three windows) and Vik (Thu 11:30 AM–3:30 PM) have set times,
+      // Ron (Thu 2:30–4:30 PM), Elliott (three windows) and Vik (Thu 11:30 AM–3:00 PM) have set times,
       // so they're never named, ticked or not.
       expect(toFieldErrors(all.error)).toEqual({
         availabilityNotes: "Tell us when you’re generally free during Founders Week. Morgan and Quinn’s times aren’t set yet.",

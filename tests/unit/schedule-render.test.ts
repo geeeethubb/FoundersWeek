@@ -278,7 +278,7 @@ describe("calendar components (public data)", () => {
     const withoutWindows = getMentors().filter((x) => x.availability.length === 0);
     expect(withoutWindows.map((x) => x.firstName)).toEqual([]);
     expect(getMentors().find((x) => x.id === "vikram-lakhwara")!.availability.map((w) => w.time)).toEqual([
-      { kind: "exact", start: "11:30", end: "15:30" },
+      { kind: "exact", start: "11:30", end: "15:00" },
     ]);
     expect(getMentors().find((x) => x.id === "elliott-notrica")!.availability.map((w) => w.time)).toEqual([
       { kind: "exact", start: "09:00", end: "12:00" },
@@ -340,7 +340,7 @@ describe("calendar components (public data)", () => {
       HAPPY_HOUR_TITLE,
       "Founder Failure Lab",
       "Office hours with Patrick Haddox",
-      // Vik's 11:30 AM–3:30 PM window starts as Patrick's ends, before the 11:45 AM workshop.
+      // Vik's 11:30 AM–3:00 PM window starts as Patrick's ends, before the 11:45 AM workshop.
       "Office hours with Vikram “Vik” Lakhwara",
       "The Science and Practice of Pitching",
       // Elliott's and Rishab's noon–5 PM windows sort by their start (content order on the tie), and
@@ -372,10 +372,10 @@ describe("calendar components (public data)", () => {
     expect(t).not.toContain("Exact times TBA");
     // Overlaps are named on each row: Elliott's Wednesday afternoon window with the kickoff reception
     // (both ways; his morning window clashes with nothing), Wednesday evening (both ways), Vik's
-    // Thursday window with the pitching workshop, Elliott's, Rishab's and Ron's windows and
-    // Entrepreneurial Impact (it only touches Patrick's, and ends before TechRise), Elliott's and
-    // Rishab's Thursday windows with Vik's, the two program blocks they run through, each other and
-    // Ron's window (never with Patrick's window or TechRise), Ron's window with Vik's, theirs and
+    // Thursday window with the pitching workshop and Elliott's, Rishab's and Ron's windows (it only
+    // touches Patrick's before it and Entrepreneurial Impact after it: it ends at 3:00 PM), Elliott's
+    // and Rishab's Thursday windows with Vik's, the two program blocks they run through, each other
+    // and Ron's window (never with Patrick's window or TechRise), Ron's window with Vik's, theirs and
     // Entrepreneurial Impact, and Arnav's Friday window inside the Showcase day program (both ways).
     // Arnav's Siebel talk has no end time, so it has no interval and no overlap note.
     const overlapNotes = [...html.matchAll(/Overlaps with.*?<\/p>/g)].map((m) => text(m[0]).trim());
@@ -385,18 +385,18 @@ describe("calendar components (public data)", () => {
       "Overlaps with Office hours with Elliott Notrica", // Founders Week Kickoff Reception
       "Overlaps with Founder Failure Lab", // Arnav's happy hour
       "Overlaps with Happy Hour with Arnav Mishra at Legends", // Founder Failure Lab
-      "Overlaps with The Science and Practice of Pitching, Office hours with Elliott Notrica, Office hours with Rishab Veldur, Office hours with Ron Lewis and Entrepreneurial Impact: Launching From Illinois", // Vik, Thu 11:30 AM–3:30 PM
+      "Overlaps with The Science and Practice of Pitching, Office hours with Elliott Notrica, Office hours with Rishab Veldur and Office hours with Ron Lewis", // Vik, Thu 11:30 AM–3:00 PM
       `Overlaps with ${VIK_TITLE}, Office hours with Elliott Notrica and Office hours with Rishab Veldur`, // The Science and Practice of Pitching
       `Overlaps with ${VIK_TITLE}, The Science and Practice of Pitching, Office hours with Rishab Veldur, Office hours with Ron Lewis and Entrepreneurial Impact: Launching From Illinois`, // Elliott, Thu noon–5 PM
       `Overlaps with ${VIK_TITLE}, The Science and Practice of Pitching, Office hours with Elliott Notrica, Office hours with Ron Lewis and Entrepreneurial Impact: Launching From Illinois`, // Rishab
       `Overlaps with ${VIK_TITLE}, Office hours with Elliott Notrica, Office hours with Rishab Veldur and Entrepreneurial Impact: Launching From Illinois`, // Ron
-      `Overlaps with ${VIK_TITLE}, Office hours with Elliott Notrica, Office hours with Rishab Veldur and Office hours with Ron Lewis`, // Entrepreneurial Impact
+      "Overlaps with Office hours with Elliott Notrica, Office hours with Rishab Veldur and Office hours with Ron Lewis", // Entrepreneurial Impact
       "Overlaps with Office hours with Arnav Mishra", // Founders Showcase Day Sessions
       "Overlaps with Founders Showcase Day Sessions", // Arnav
     ]);
     // Vik's row: his window at the Illinois Conference Center, with its overlaps and his own apply link.
     expect(t).toContain(
-      `11:30 AM to 3:30 PM ${VIK_TITLE} Illinois Conference Center Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse (mentor profile) Hosted by Founders Availability window Overlaps with The Science and Practice of Pitching, Office hours with Elliott Notrica, Office hours with Rishab Veldur, Office hours with Ron Lewis and Entrepreneurial Impact: Launching From Illinois Apply to meet Vik`,
+      `11:30 AM to 3:00 PM ${VIK_TITLE} Illinois Conference Center Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse (mentor profile) Hosted by Founders Availability window Overlaps with The Science and Practice of Pitching, Office hours with Elliott Notrica, Office hours with Rishab Veldur and Office hours with Ron Lewis Apply to meet Vik`,
     );
     expect(hrefs(html)).toContain(VIK_APPLY);
     expect(t).toContain(
@@ -437,7 +437,7 @@ describe("calendar components (public data)", () => {
       "Elliott Notrica", // Wed: office hours (9 AM–noon)
       "Elliott Notrica", // Wed: office hours (2–5 PM)
       "Patrick Haddox", // Thu: office hours
-      "Vikram “Vik” Lakhwara", // Thu: office hours (11:30 AM–3:30 PM)
+      "Vikram “Vik” Lakhwara", // Thu: office hours (11:30 AM–3:00 PM)
       "Elliott Notrica", // Thu: office hours (noon–5 PM)
       "Rishab Veldur", // Thu: office hours (noon–5 PM)
       "Ron Lewis", // Thu: office hours (2:30–4:30 PM)
@@ -777,10 +777,10 @@ describe("calendar components (public data)", () => {
     expectCalmStyling(html);
   });
 
-  it("Vik's office-hours row: Thursday 11:30 AM to 3:30 PM at the Illinois Conference Center, apply with his window preselected", () => {
+  it("Vik's office-hours row: Thursday 11:30 AM to 3:00 PM at the Illinois Conference Center, apply with his window preselected", () => {
     const html = render(createElement(AgendaRow, { entry: entry(VIK_OH), headshots: headshots() }));
     const t = text(html);
-    expect(t).toContain(`11:30 AM to 3:30 PM Office hours with Vikram “Vik” Lakhwara ${ICC}`);
+    expect(t).toContain(`11:30 AM to 3:00 PM Office hours with Vikram “Vik” Lakhwara ${ICC}`);
     expect([...html.matchAll(/<time dateTime="([^"]+)"/g)].map((m) => m[1])).toEqual(["2026-10-01T11:30"]);
     expect(t).not.toMatch(/Location to be announced|Time to be announced|Exact times TBA/);
     expect(t).toContain("Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse");
@@ -896,7 +896,7 @@ describe("calendar components (public data)", () => {
     expect(links.filter((h) => h.includes("#apply"))).toEqual([RON_APPLY]);
     expect(links).toContain("/office-hours/ron-lewis");
     expect(imageAlts(html)).toEqual(["Ron Lewis"]);
-    // His window overlaps Vik's (11:30 AM–3:30 PM), Elliott's and Rishab's (both noon–5 PM) and
+    // His window overlaps Vik's (11:30 AM–3:00 PM), Elliott's and Rishab's (both noon–5 PM) and
     // Entrepreneurial Impact (3–5 PM), and the page says so.
     expect(t).toContain(
       `Overlaps with This time overlaps with other listings. 11:30 AM Office hours with Vikram “Vik” Lakhwara ${ICC} · Founder & Managing Member, Stakehouse Hosted by Founders Availability window 12:00 PM Office hours with Elliott Notrica Location to be announced · Founder & CEO, Symbio Bioculinary Hosted by Founders Availability window 12:00 PM Office hours with Rishab Veldur Location to be announced · Co-Founder & CEO, Auvi Labs Hosted by Founders Availability window 3:00 PM Entrepreneurial Impact: Launching From Illinois Beckman Institute Add to calendar`,
@@ -920,14 +920,14 @@ describe("calendar components (public data)", () => {
     );
   });
 
-  it("Vik's office-hours page: Thu Oct 1, 11:30 AM–3:30 PM CT at the Illinois Conference Center, apply, overlaps, no calendar file", async () => {
+  it("Vik's office-hours page: Thu Oct 1, 11:30 AM–3:00 PM CT at the Illinois Conference Center, apply, overlaps, no calendar file", async () => {
     const html = render(await EventPage({ params: Promise.resolve({ id: VIK_OH }) }));
     const t = text(html);
     expect(html).toMatch(/<h1[^>]*>Office hours with Vikram “Vik” Lakhwara<\/h1>/);
     expect(t).toContain("Hosted by Founders Availability window Office hours with Vikram “Vik” Lakhwara");
     // Time and place are confirmed (his email, Sept 27): the venue and its street address.
     expect(t).toContain(
-      `When Thursday, October 1 11:30 AM–3:30 PM CT Availability window, not a booked appointment. ${RULE} Where ${ICC} ${ICC_ADDRESS} Hosted by Founders – Illinois Entrepreneurs`,
+      `When Thursday, October 1 11:30 AM–3:00 PM CT Availability window, not a booked appointment. ${RULE} Where ${ICC} ${ICC_ADDRESS} Hosted by Founders – Illinois Entrepreneurs`,
     );
     expect(count(t, RULE)).toBe(1);
     // His window fits eight sessions on the grid; the count is organizer-only.
@@ -945,17 +945,18 @@ describe("calendar components (public data)", () => {
     expect(links.filter((h) => h.includes("#apply"))).toEqual([VIK_APPLY]);
     expect(links).toContain("/office-hours/vikram-lakhwara");
     expect(imageAlts(html)).toEqual(["Vikram “Vik” Lakhwara"]);
-    // His window runs through the pitching workshop, Elliott's, Rishab's and Ron's windows and the
-    // start of Entrepreneurial Impact, and the page says so.
+    // His window runs through the pitching workshop and Elliott's, Rishab's and Ron's windows, and the
+    // page says so. It ends at 3:00 PM as Entrepreneurial Impact starts, so that's the rest of the day.
     expect(t).toContain(
-      `Overlaps with This time overlaps with other listings. 11:45 AM The Science and Practice of Pitching Gies Business Instructional Facility · 3 sessions 12:00 PM Office hours with Elliott Notrica Location to be announced · Founder & CEO, Symbio Bioculinary Hosted by Founders Availability window 12:00 PM Office hours with Rishab Veldur Location to be announced · Co-Founder & CEO, Auvi Labs Hosted by Founders Availability window 2:30 PM Office hours with Ron Lewis ${BIF} · Co-Founder, Auctus Advisory Hosted by Founders Availability window 3:00 PM Entrepreneurial Impact: Launching From Illinois Beckman Institute Add to calendar`,
+      `Overlaps with This time overlaps with other listings. 11:45 AM The Science and Practice of Pitching Gies Business Instructional Facility · 3 sessions 12:00 PM Office hours with Elliott Notrica Location to be announced · Founder & CEO, Symbio Bioculinary Hosted by Founders Availability window 12:00 PM Office hours with Rishab Veldur Location to be announced · Co-Founder & CEO, Auvi Labs Hosted by Founders Availability window 2:30 PM Office hours with Ron Lewis ${BIF} · Co-Founder, Auctus Advisory Hosted by Founders Availability window Add to calendar`,
     );
-    // Patrick's window ends as his starts, and TechRise starts after his ends: the rest of Thursday.
+    // Patrick's window ends as his starts, Entrepreneurial Impact starts as his ends, and TechRise is
+    // later: the rest of Thursday.
     const sameDay = t.slice(t.indexOf("Also on Thursday, October 1"));
     expect(sameDay).toContain(
-      "10:00 AM Office hours with Patrick Haddox Espresso Royale at Grainger Library · CEO & Co-Founder, Samara Aerospace Hosted by Founders Availability window 5:00 PM TechRise Pitch Competition and Panel Discussion EnterpriseWorks · 4 sessions",
+      "10:00 AM Office hours with Patrick Haddox Espresso Royale at Grainger Library · CEO & Co-Founder, Samara Aerospace Hosted by Founders Availability window 3:00 PM Entrepreneurial Impact: Launching From Illinois Beckman Institute 5:00 PM TechRise Pitch Competition and Panel Discussion EnterpriseWorks · 4 sessions",
     );
-    expect(sameDay).not.toMatch(/Science and Practice of Pitching|Entrepreneurial Impact|Ron Lewis|Elliott Notrica|Rishab Veldur/);
+    expect(sameDay).not.toMatch(/Science and Practice of Pitching|Ron Lewis|Elliott Notrica|Rishab Veldur/);
     for (const id of [PATRICK_OH, PITCHING, ELLIOTT_THU_OH, RISHAB_OH, RON_OH, IMPACT, TECHRISE]) {
       expect(links.filter((h) => h === `/schedule/${id}`), id).toHaveLength(1);
     }
@@ -970,7 +971,7 @@ describe("calendar components (public data)", () => {
     const meta = await generateMetadata({ params: Promise.resolve({ id: VIK_OH }) });
     expect(meta.title).toBe("Office hours with Vikram “Vik” Lakhwara");
     expect(meta.description).toBe(
-      "Thursday, October 1 · 11:30 AM–3:30 PM CT. By application. Meet Vik of Stakehouse during Founders Week. Appointments are limited.",
+      "Thursday, October 1 · 11:30 AM–3:00 PM CT. By application. Meet Vik of Stakehouse during Founders Week. Appointments are limited.",
     );
   });
 

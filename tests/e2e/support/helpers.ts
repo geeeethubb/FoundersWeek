@@ -81,7 +81,7 @@ export const ARNAV: MentorFixture = {
   helpsWith: ["Going from engineer to technical co-founder", "Building B2B and enterprise software"],
 };
 /**
- * Vik: one window (from his email, Sept 27), Thu, Oct 1 from 11:30 AM to 3:30 PM, in person at the
+ * Vik: one window (from his email, Sept 27), Thu, Oct 1 from 11:30 AM to 3:00 PM, in person at the
  * Illinois Conference Center. His "Apply to meet Vik" preselects it, and it's enough on its own.
  */
 export const VIK: MentorFixture = {
@@ -92,9 +92,9 @@ export const VIK: MentorFixture = {
   company: "Stakehouse",
   windowIds: ["vikram-lakhwara-2026-10-01"],
   windowId: "vikram-lakhwara-2026-10-01",
-  windows: ["Thu, Oct 1 · 11:30 AM–3:30 PM CT"],
+  windows: ["Thu, Oct 1 · 11:30 AM–3:00 PM CT"],
   timesPending: false,
-  cardLine: "Thu, Oct 1 · 11:30 AM–3:30 PM CT",
+  cardLine: "Thu, Oct 1 · 11:30 AM–3:00 PM CT",
   linkedin: "https://www.linkedin.com/in/viklakhwara/",
   bioFragment: "a St. Louis venture fund that backs early-stage founders",
   helpsWith: ["Raising a pre-seed round", "What early-stage investors look for"],
@@ -114,7 +114,7 @@ export const VIK_SHOWCASE_SESSION = "Funding Start-ups in the Midwest";
  * ORGANIZER_ONLY.
  */
 export const VIK_ORGANIZER_NOTES =
-  /fine running over|as many startups as possible|respect the panel discussions|eight 25-minute sessions|runs into the 3 PM panels|earlier note stands|Wednesday through Saturday morning/i;
+  /fine running over|as many startups as possible|respect the panel discussions|seven 25-minute sessions|dropped the 3:00 session|earlier note stands|Wednesday through Saturday morning/i;
 
 /**
  * Elliott's three office-hours windows, in order: Wed, Sep 30 in the morning and the afternoon, then
@@ -334,8 +334,9 @@ export const RON_SESSIONS: SessionFixture[] = sessionsIn(RON.windowId!, "Thu, Oc
 ]);
 
 /**
- * Vik's window (Thu, Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center): eight sessions,
- * 11:30 to 3:00 (the last one ends at 3:25).
+ * Vik's window (Thu, Oct 1, 11:30 AM–3:00 PM at the Illinois Conference Center): seven sessions,
+ * 11:30 to 2:30 (the last one ends at 2:55). No 3:00 session: organizers end his window at 3:00 PM
+ * so he's free for the 3 PM panels.
  */
 export const VIK_SESSIONS: SessionFixture[] = sessionsIn(VIK.windowId!, "Thu, Oct 1", [
   ["1130", "11:30–11:55 AM CT"],
@@ -345,8 +346,9 @@ export const VIK_SESSIONS: SessionFixture[] = sessionsIn(VIK.windowId!, "Thu, Oc
   ["1330", "1:30–1:55 PM CT"],
   ["1400", "2:00–2:25 PM CT"],
   ["1430", "2:30–2:55 PM CT"],
-  ["1500", "3:00–3:25 PM CT"],
 ]);
+/** The 3:00 PM session Vik's window no longer has (it would run into the 3 PM panels). */
+export const VIK_DROPPED_SESSION_ID = `${VIK.windowId}-1500`;
 
 /** Arnav's window (Fri, Oct 2, 10:00–11:30 AM): three sessions. */
 export const ARNAV_SESSIONS: SessionFixture[] = sessionsIn(ARNAV.windowId!, "Fri, Oct 2", [

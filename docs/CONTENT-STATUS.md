@@ -51,11 +51,11 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
   topics are not supplied.
 
 **Vikram "Vik" Lakhwara** (Founder & Managing Member, Stakehouse; title per stakehouse.fund)
-- Window (from his email, Sept 27): Thu Oct 1, 11:30 AM–3:30 PM CT, in person at the Illinois Conference
-  Center, 111 St. Marys Rd., Champaign (street address from the organizers). Eight 25-minute sessions fit.
+- Window: Thu Oct 1, 11:30 AM–3:00 PM CT, in person at the Illinois Conference Center, 111 St. Marys Rd.,
+  Champaign (street address from the organizers). His email (Sept 27) said 11:30 AM–3:30 PM; the organizers
+  dropped the 3:00 session so he's free for the 3 PM panels. Seven 25-minute sessions (11:30 to 2:55).
 - Organizer-only: he wants to fit in as many startups as possible and is fine running over, but wants to
-  respect the 3 PM panel discussions and the 5 PM TechRise Pitch Competition (the 3:00 session runs into
-  the panels). Outside the window, his existing commitments Wednesday through Saturday morning are **not**
+  respect the 3 PM panel discussions and the 5 PM TechRise Pitch Competition. Outside the window, his existing commitments Wednesday through Saturday morning are **not**
   available time.
 - No mentor is "Scheduling in progress" any more; that state (and the calendar block for pending
   mentors) stays in the code for mentors added later.

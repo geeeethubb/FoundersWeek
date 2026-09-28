@@ -359,7 +359,7 @@ describe("POST /api/applications", () => {
     ]);
   });
 
-  it("stores a Vik application with his Thu, Oct 1 window (11:30 AM–3:30 PM CT) ticked and no note: he isn't “scheduling in progress”", async () => {
+  it("stores a Vik application with his Thu, Oct 1 window (11:30 AM–3:00 PM CT) ticked and no note: he isn't “scheduling in progress”", async () => {
     const res = await handleApplicationSubmission(
       post(
         validPayload({

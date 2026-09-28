@@ -7,7 +7,7 @@
  * numbering, "To be confirmed" tables, the availability glossary, "one-on-one" claims) renders.
  * Rishab Veldur (Auvi Labs) has one exact window (Thu, Oct 1, noon to 5 PM CT), background chips and
  * a good-fit paragraph instead of a topic list, and his profile never makes medical-device claims.
- * Vik Lakhwara has one exact window too (Thu, Oct 1, 11:30 AM to 3:30 PM CT at the Illinois Conference
+ * Vik Lakhwara has one exact window too (Thu, Oct 1, 11:30 AM to 3:00 PM CT at the Illinois Conference
  * Center, from his email of Sept 27), and nothing from that email beyond the window and the place
  * (running over, the 3 PM panels, TechRise, the session count) ever renders.
  * No real mentor is still "Scheduling in progress" now, so that path, the date-only path ("Exact time
@@ -121,7 +121,7 @@ const RISHAB_LINE = "Thu, Oct 1 · 12:00–5:00 PM CT";
 const ELLIOTT_LINES = ["Wed, Sep 30 · 9:00 AM–12:00 PM CT", "Wed, Sep 30 · 2:00–5:00 PM CT", "Thu, Oct 1 · 12:00–5:00 PM CT"];
 const ELLIOTT_NOTE = "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.";
 /** Vik's one exact window (his email, Sept 27), its public note and the place (street address from the organizers). */
-const VIK_LINE = "Thu, Oct 1 · 11:30 AM–3:30 PM CT";
+const VIK_LINE = "Thu, Oct 1 · 11:30 AM–3:00 PM CT";
 const VIK_WINDOW_NOTE = "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 const VIK_PLACE = "Illinois Conference Center, 111 St. Marys Rd., Champaign, IL 61820";
 /**
@@ -755,7 +755,7 @@ describe("mentor cards", () => {
     expectNoEmDash(card);
   });
 
-  it("Vik's card: his Thursday 11:30 AM–3:30 PM window, only the date marked up, and 'Select mentor' with his window", () => {
+  it("Vik's card: his Thursday 11:30 AM–3:00 PM window, only the date marked up, and 'Select mentor' with his window", () => {
     const card = cards(renderGrid())[2];
     expect(card).toContain('id="mentor-vikram-lakhwara"');
     expect(card).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
@@ -978,7 +978,7 @@ describe("mentor profile page", () => {
     expect(t).not.toMatch(/anytime after 9/i);
   });
 
-  it("Vik's profile: his Thursday 11:30 AM–3:30 PM window at the Illinois Conference Center, Apply with it preselected", async () => {
+  it("Vik's profile: his Thursday 11:30 AM–3:00 PM window at the Illinois Conference Center, Apply with it preselected", async () => {
     const html = await renderProfile("vikram-lakhwara");
     const t = text(html);
     const block = officeHoursBlock(html);
@@ -1054,7 +1054,7 @@ describe("mentor profile page", () => {
     const expected: Record<string, boolean> = {
       "patrick-haddox": true, // exact window
       "arnav-mishra": true, // exact window (Fri 10:00–11:30 AM since Sept 24)
-      "vikram-lakhwara": true, // exact window (Thu 11:30 AM–3:30 PM since Sept 27)
+      "vikram-lakhwara": true, // exact window (Thu 11:30 AM–3:00 PM since Sept 27)
       "elliott-notrica": true, // exact windows (Wed Sep 30 and Thu Oct 1 since Sept 25)
       "ron-lewis": true, // exact window (Thu 2:30–4:30 PM since Sept 24)
       "rishab-veldur": true, // exact window

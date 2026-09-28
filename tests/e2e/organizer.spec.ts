@@ -13,8 +13,9 @@
  *     with the demo mentor Avery ("Two sessions"): picking one of her slots, on her Sessions board
  *     entry (with "Booked so far: N.") and in the mentor lineup ("hosting two sessions").
  *   - Every exact window is split into 25-minute sessions (5-minute breaks) on the Sessions board and
- *     in the assignment picker: Patrick 3, Arnav 3, Vik 8 (Thu, Oct 1, 11:30 AM to 3:00 PM), Elliott
- *     22 (6 + 6 on Wed, Sep 30, 10 on Thu, Oct 1), Ron 4, Rishab 10. None of the six real mentors
+ *     in the assignment picker: Patrick 3, Arnav 3, Vik 7 (Thu, Oct 1, 11:30 AM to 3:00 PM; the last
+ *     one 2:30–2:55 PM, no 3:00 session), Elliott 22 (6 + 6 on Wed, Sep 30, 10 on Thu, Oct 1), Ron 4,
+ *     Rishab 10. None of the six real mentors
  *     carries the session-count warning. The picker preselects the first open session inside a
  *     window the student ticked (Elliott's Thursday one, not his first Wednesday session).
  *   - Sessions: students apply to Patrick's window (Thu, Oct 1, 10:00–11:30 AM); organizers see it
@@ -61,6 +62,7 @@ import {
   storedApplicationsFor,
   uniqueEmail,
   VIK,
+  VIK_DROPPED_SESSION_ID,
   VIK_SESSIONS,
   visibleText,
   waitForHydration,
@@ -453,21 +455,21 @@ test("demo slot capacity: one seat assigned, the next is blocked as full; no ove
   await expect(page.getByRole("region", { name: "Appointments" })).toContainText("2:00–2:25 PM CT");
 });
 
-test("every window as 25-minute sessions: Patrick 3, Arnav 3, Vik 8, Elliott 6 + 6 + 10, Ron 4, Rishab 10", async ({
+test("every window as 25-minute sessions: Patrick 3, Arnav 3, Vik 7, Elliott 6 + 6 + 10, Ron 4, Rishab 10", async ({
   page,
 }) => {
   await signIn(page);
   const grids: { mentor: MentorFixture; windows: { label: string; sessions: SessionFixture[] }[] }[] = [
     { mentor: PATRICK, windows: [{ label: "Thu, Oct 1 · 10:00–11:30 AM CT", sessions: PATRICK_SESSIONS }] },
     { mentor: ARNAV, windows: [{ label: "Fri, Oct 2 · 10:00–11:30 AM CT", sessions: ARNAV_SESSIONS }] },
-    // Vik's window (from his email, Sept 27): eight sessions, the last from 3:00 to 3:25 PM.
-    { mentor: VIK, windows: [{ label: "Thu, Oct 1 · 11:30 AM–3:30 PM CT", sessions: VIK_SESSIONS }] },
+    // Vik's window (organizers end it at 3:00 PM): seven sessions, the last from 2:30 to 2:55 PM.
+    { mentor: VIK, windows: [{ label: "Thu, Oct 1 · 11:30 AM–3:00 PM CT", sessions: VIK_SESSIONS }] },
     // Elliott's three windows, in order, each on its own grid: 22 sessions in all.
     { mentor: ELLIOTT, windows: ELLIOTT_WINDOWS.map((w, i) => ({ label: w.line, sessions: ELLIOTT_SESSIONS[i] })) },
     { mentor: RON, windows: [{ label: "Thu, Oct 1 · 2:30–4:30 PM CT", sessions: RON_SESSIONS }] },
     { mentor: RISHAB, windows: [{ label: "Thu, Oct 1 · 12:00–5:00 PM CT", sessions: RISHAB_SESSIONS }] },
   ];
-  expect(grids.map((g) => g.windows.map((w) => w.sessions.length))).toEqual([[3], [3], [8], [6, 6, 10], [4], [10]]);
+  expect(grids.map((g) => g.windows.map((w) => w.sessions.length))).toEqual([[3], [3], [7], [6, 6, 10], [4], [10]]);
 
   // The dashboard's Sessions board: the rule, then each mentor's windows split on the 25 + 5 grid.
   await page.goto("/organizers");
@@ -506,7 +508,7 @@ test("every window as 25-minute sessions: Patrick 3, Arnav 3, Vik 8, Elliott 6 +
 
   // An application for Ron (broad availability only): his four sessions come first, as his
   // first choice, and the first one is preselected; then every other mentor with sessions, in the
-  // published order (Vik's eight and Elliott's 22 included).
+  // published order (Vik's seven and Elliott's 22 included).
   await page.goto(`/organizers/applications/${ronOnly.id}`);
   const picker = sessionPicker(page);
   await waitForHydration(picker);
@@ -524,6 +526,8 @@ test("every window as 25-minute sessions: Patrick 3, Arnav 3, Vik 8, Elliott 6 +
   expect(await vikGroup.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
     VIK_SESSIONS.map((s) => s.id),
   );
+  // His window ends at 3:00 PM: no 3:00 session to book.
+  await expect(picker.locator(`option[value="${VIK_DROPPED_SESSION_ID}"]`)).toHaveCount(0);
   const elliottGroup = picker.locator("optgroup").filter({ has: page.locator(`option[value="${ELLIOTT_SESSIONS[0][0].id}"]`) });
   expect(await elliottGroup.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
     ELLIOTT_SESSIONS.flat().map((s) => s.id),

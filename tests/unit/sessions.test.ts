@@ -199,10 +199,10 @@ describe("generatedSessionSlots", () => {
     expect(elliott.every((s) => s.capacity === 1 && s.status === "confirmed")).toBe(true);
   });
 
-  it("gives Vik eight sessions in his Thu 11:30 AM–3:30 PM window, the last ending 3:25 PM", () => {
+  it("gives Vik seven sessions in his Thu 11:30 AM–3:00 PM window, the last ending 2:55 PM (no 3:00 session)", () => {
     const [window] = mentor("vikram-lakhwara").availability;
     expect(window).toMatchObject({ id: "vikram-lakhwara-2026-10-01", date: "2026-10-01" });
-    expect(window.time).toEqual({ kind: "exact", start: "11:30", end: "15:30" });
+    expect(window.time).toEqual({ kind: "exact", start: "11:30", end: "15:00" });
     const vik = generatedSessionSlots(mentor("vikram-lakhwara"), RULE);
     expect(vik.map((s) => [s.id, s.date, s.start, s.end])).toEqual([
       ["vikram-lakhwara-2026-10-01-1130", "2026-10-01", "11:30", "11:55"],
@@ -212,14 +212,15 @@ describe("generatedSessionSlots", () => {
       ["vikram-lakhwara-2026-10-01-1330", "2026-10-01", "13:30", "13:55"],
       ["vikram-lakhwara-2026-10-01-1400", "2026-10-01", "14:00", "14:25"],
       ["vikram-lakhwara-2026-10-01-1430", "2026-10-01", "14:30", "14:55"],
-      ["vikram-lakhwara-2026-10-01-1500", "2026-10-01", "15:00", "15:25"],
     ]);
-    // A ninth session (3:30–3:55) would run past the window.
-    expect(vik).toHaveLength(8);
+    // The organizers dropped the 3:00 session (he said 3:30; they end the window at 3:00 so he's free
+    // for the 3 PM panels): an eighth session (3:00–3:25) would run past the window.
+    expect(vik).toHaveLength(7);
+    expect(vik.map((s) => s.id)).not.toContain("vikram-lakhwara-2026-10-01-1500");
     expect(
       vik.every((s) => s.windowId === "vikram-lakhwara-2026-10-01" && s.capacity === 1 && s.status === "confirmed"),
     ).toBe(true);
-    expect(new Set(vik.map((s) => s.id)).size).toBe(8);
+    expect(new Set(vik.map((s) => s.id)).size).toBe(7);
   });
 
   it("gives every production mentor sessions now that no one is still scheduling", () => {

@@ -360,7 +360,7 @@ describe("content", () => {
       const pub = getMentors().find((m) => m.id === "vikram-lakhwara")!;
       expect(pub.organizerNotes).toBeUndefined();
       expect(pub.availability.map((w) => [w.id, w.date, w.time])).toEqual([
-        ["vikram-lakhwara-2026-10-01", "2026-10-01", { kind: "exact", start: "11:30", end: "15:30" }],
+        ["vikram-lakhwara-2026-10-01", "2026-10-01", { kind: "exact", start: "11:30", end: "15:00" }],
       ]);
       expect(pub.session).toMatchObject({
         location: "Illinois Conference Center",
@@ -504,14 +504,14 @@ describe("content", () => {
     });
     expect(vikram.sources.map((s) => s.url)).toContain("https://www.stakehouse.fund/team");
     expect(vikram.name).toBe("Vikram “Vik” Lakhwara");
-    // Vik: Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center (his email, Sept 27; street
+    // Vik: Thu Oct 1, 11:30 AM–3:00 PM at the Illinois Conference Center (his email, Sept 27; street
     // address from the organizers). Time and place are set, so his session is confirmed; it's still
     // a window students apply to, not a booking.
     expect(vikram.availability).toEqual([
       {
         id: "vikram-lakhwara-2026-10-01",
         date: "2026-10-01",
-        time: { kind: "exact", start: "11:30", end: "15:30" },
+        time: { kind: "exact", start: "11:30", end: "15:00" },
         note: "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
       },
     ]);
@@ -523,7 +523,7 @@ describe("content", () => {
       address: "111 St. Marys Rd., Champaign, IL 61820",
       sessionCount: null,
       confirmed: true,
-      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:30 PM at the Illinois Conference Center.",
+      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:00 PM at the Illinois Conference Center.",
     });
     expect(vikram.sources.map((s) => [s.label, s.checked])).toContainEqual([
       "Organizer update: Vik’s email, Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center",
@@ -880,7 +880,7 @@ describe("content", () => {
     expect(entries.filter((e) => e.kind === "event")).toHaveLength(13);
     const oh = entries.filter((e) => e.kind === "office-hours");
     // Every mentor has published windows now (Vik's arrived Sept 27). Elliott's two Wednesday
-    // windows come first; on Oct 1, Patrick's morning window, Vik's (11:30 AM–3:30 PM), then
+    // windows come first; on Oct 1, Patrick's morning window, Vik's (11:30 AM–3:00 PM), then
     // Elliott's and Rishab's (both noon–5 PM; ties keep content order), then Ron's (2:30–4:30 PM).
     expect(oh.map((e) => e.id)).toEqual([
       ELLIOTT_WED_AM_OH,
@@ -895,7 +895,7 @@ describe("content", () => {
     expect(new Set(oh.map((e) => e.mentor!.id))).toEqual(new Set(mentors.map((m) => m.id)));
     expect(oh.every((e) => !e.calendar.available)).toBe(true);
     // All eight windows are exact: Elliott's Wednesday is 9:00 AM–12:00 PM and 2:00–5:00 PM CT
-    // (14:00–17:00Z, 19:00–22:00Z), Vik's Thursday is 11:30 AM–3:30 PM CT (16:30–20:30Z), Ron's
+    // (14:00–17:00Z, 19:00–22:00Z), Vik's Thursday is 11:30 AM–3:00 PM CT (16:30–20:30Z), Ron's
     // Thursday is 2:30–4:30 PM CT (19:30–21:30Z) and Arnav's Friday is 10:00–11:30 AM CT (15:00–16:30Z).
     expect(oh.map((e) => e.startsAt)).toEqual([
       "2026-09-30T14:00:00.000Z",
@@ -911,7 +911,7 @@ describe("content", () => {
       "2026-09-30T17:00:00.000Z",
       "2026-09-30T22:00:00.000Z",
       "2026-10-01T16:30:00.000Z",
-      "2026-10-01T20:30:00.000Z",
+      "2026-10-01T20:00:00.000Z",
       "2026-10-01T22:00:00.000Z",
       "2026-10-01T22:00:00.000Z",
       "2026-10-01T21:30:00.000Z",
@@ -924,7 +924,7 @@ describe("content", () => {
       id: VIK_OH,
       title: "Office hours with Vikram “Vik” Lakhwara",
       date: "2026-10-01",
-      time: { kind: "exact", start: "11:30", end: "15:30" },
+      time: { kind: "exact", start: "11:30", end: "15:00" },
       timeLabel: null,
       status: "confirmed",
       statusNote: null,
@@ -944,7 +944,7 @@ describe("content", () => {
       calendar: { available: false, reason: "Office hours are by application. Selected students get their confirmed time by email." },
     });
     expect(oh[3].description.split("\n\n")).toEqual([
-      "Vikram “Vik” Lakhwara (Founder & Managing Member, Stakehouse) is available for office hours: Thursday, October 1, 11:30 AM–3:30 PM CT.",
+      "Vikram “Vik” Lakhwara (Founder & Managing Member, Stakehouse) is available for office hours: Thursday, October 1, 11:30 AM–3:00 PM CT.",
       "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
       expect.stringMatching(/^Each session is 25 minutes, with a 5-minute break between sessions\. Appointments are limited\./),
     ]);

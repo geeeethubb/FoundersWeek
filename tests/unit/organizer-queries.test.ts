@@ -262,9 +262,12 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
     ...Array(6).fill("elliott-notrica-2026-09-30-pm"),
     ...Array(10).fill("elliott-notrica-2026-10-01-pm"),
   ];
-  /** Vik's one window (his email, Sept 27) and its eight sessions, 11:30 AM to 3:25 PM. */
+  /**
+   * Vik's one window (his email, Sept 27; organizers end it at 3:00) and its seven sessions,
+   * 11:30 AM to 2:55 PM. There's no 3:00–3:25 PM session (dropped so he's free for the 3 PM panels).
+   */
   const VIK_WINDOW = "vikram-lakhwara-2026-10-01";
-  const VIK_LABEL = "Thu, Oct 1 · 11:30 AM–3:30 PM CT";
+  const VIK_LABEL = "Thu, Oct 1 · 11:30 AM–3:00 PM CT";
   const VIK_SESSION_OPTIONS = [
     ["vikram-lakhwara-2026-10-01-1130", "Thu, Oct 1 · 11:30–11:55 AM CT · 1 of 1 open"],
     ["vikram-lakhwara-2026-10-01-1200", "Thu, Oct 1 · 12:00–12:25 PM CT · 1 of 1 open"],
@@ -273,8 +276,8 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
     ["vikram-lakhwara-2026-10-01-1330", "Thu, Oct 1 · 1:30–1:55 PM CT · 1 of 1 open"],
     ["vikram-lakhwara-2026-10-01-1400", "Thu, Oct 1 · 2:00–2:25 PM CT · 1 of 1 open"],
     ["vikram-lakhwara-2026-10-01-1430", "Thu, Oct 1 · 2:30–2:55 PM CT · 1 of 1 open"],
-    ["vikram-lakhwara-2026-10-01-1500", "Thu, Oct 1 · 3:00–3:25 PM CT · 1 of 1 open"],
   ];
+  const VIK_DROPPED_SESSION = "vikram-lakhwara-2026-10-01-1500";
   const VIK_PLACE = "Illinois Conference Center, 111 St. Marys Rd., Champaign, IL 61820";
   let db: Database;
   const ids: Record<string, string> = {};
@@ -304,7 +307,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
       createdAt: "2026-09-24T16:00:00Z",
     });
     // Interest only: Lena applied on Sept 24, while Vik was still scheduling, so she ticked no time.
-    // His Thu, Oct 1 window (Sept 27) now gives organizers eight sessions to offer her.
+    // His Thu, Oct 1 window (Sept 27) now gives organizers seven sessions to offer her.
     ids.lena = await insertApplication(db, {
       fullName: "Lena Ortiz",
       email: "lortiz@illinois.edu",
@@ -424,7 +427,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
       label: ELLIOTT_AM_LABEL,
       certainty: "window",
     });
-    // Vik's Thu, Oct 1 11:30 AM–3:30 PM window (Sept 27) resolves the same way, with eight sessions behind it.
+    // Vik's Thu, Oct 1 11:30 AM–3:00 PM window (Sept 27) resolves the same way, with seven sessions behind it.
     expect(resolveAvailability(directory, { kind: "window", optionId: VIK_WINDOW, mentorId: "vikram-lakhwara" })).toEqual({
       key: `window:${VIK_WINDOW}`,
       kind: "window",
@@ -434,7 +437,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
       label: VIK_LABEL,
       certainty: "window",
     });
-    // Everyone is bookable now: Vik's window gives him eight sessions, Elliott's three windows 22.
+    // Everyone is bookable now: Vik's window gives him seven sessions, Elliott's three windows 22.
     expect(
       mentorBookability(directory, ["ron-lewis", "vikram-lakhwara", "elliott-notrica"]).map((p) => [
         p.firstName,
@@ -444,9 +447,10 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
       ]),
     ).toEqual([
       ["Ron", 4, 1, "available"],
-      ["Vik", 8, 1, "available"],
+      ["Vik", 7, 1, "available"],
       ["Elliott", 22, 3, "available"],
     ]);
+    expect(directory.slotsById.has(VIK_DROPPED_SESSION)).toBe(false);
   });
 
   it("shows his window in the dashboard results", async () => {
@@ -531,7 +535,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         "Elliott Notrica · not requested",
         "Ron Lewis · not requested",
       ]);
-      expect(options).toHaveLength(50); // Rishab 10 + Patrick 3 + Arnav 3 + Vik 8 + Elliott 22 + Ron 4
+      expect(options).toHaveLength(49); // Rishab 10 + Patrick 3 + Arnav 3 + Vik 7 + Elliott 22 + Ron 4
       // Her first choice's first open session is preselected, and nothing else.
       expect(options[0]).toEqual({
         value: "rishab-veldur-2026-10-01-1200",
@@ -552,12 +556,13 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         ["arnav-mishra-2026-10-02-am-1030", "Fri, Oct 2 · 10:30–10:55 AM CT · 1 of 1 open"],
         ["arnav-mishra-2026-10-02-am-1100", "Fri, Oct 2 · 11:00–11:25 AM CT · 1 of 1 open"],
       ]);
-      // Vik's eight Thu, Oct 1 sessions, 11:30 AM to 3:25 PM, offered but not requested.
-      const vik = options.slice(16, 24);
+      // Vik's seven Thu, Oct 1 sessions, 11:30 AM to 2:55 PM, offered but not requested (no 3:00 one).
+      const vik = options.slice(16, 23);
       expect(vik.map((o) => [o.value, o.text])).toEqual(VIK_SESSION_OPTIONS);
       expect(vik.every((o) => !o.selected && !o.disabled)).toBe(true);
+      expect(options.some((o) => o.value === VIK_DROPPED_SESSION)).toBe(false);
       // Elliott's 22 sessions: Wed, Sep 30 9:00 AM–11:55 AM and 2:00–4:55 PM, Thu, Oct 1 12:00–4:55 PM.
-      const elliott = options.slice(24, 46);
+      const elliott = options.slice(23, 45);
       expect(elliott.map((o) => o.value.replace(/-\d{4}$/, ""))).toEqual(ELLIOTT_SESSION_WINDOWS);
       expect([elliott[0], elliott[5], elliott[6], elliott[11], elliott[12], elliott[21]].map((o) => [o.value, o.text])).toEqual([
         ["elliott-notrica-2026-09-30-am-0900", "Wed, Sep 30 · 9:00–9:25 AM CT · 1 of 1 open"],
@@ -568,7 +573,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         ["elliott-notrica-2026-10-01-pm-1630", "Thu, Oct 1 · 4:30–4:55 PM CT · 1 of 1 open"],
       ]);
       expect(elliott.every((o) => !o.selected && !o.disabled)).toBe(true);
-      expect(options.slice(46).map((o) => [o.value, o.text])).toEqual([
+      expect(options.slice(45).map((o) => [o.value, o.text])).toEqual([
         ["ron-lewis-2026-10-01-pm-1430", "Thu, Oct 1 · 2:30–2:55 PM CT · 1 of 1 open"],
         ["ron-lewis-2026-10-01-pm-1500", "Thu, Oct 1 · 3:00–3:25 PM CT · 1 of 1 open"],
         ["ron-lewis-2026-10-01-pm-1530", "Thu, Oct 1 · 3:30–3:55 PM CT · 1 of 1 open"],
@@ -606,7 +611,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         ...Array(3).fill("patrick-haddox-2026-10-01-am"),
         ...Array(10).fill(RISHAB_WINDOW),
         ...Array(3).fill("arnav-mishra-2026-10-02-am"),
-        ...Array(8).fill(VIK_WINDOW),
+        ...Array(7).fill(VIK_WINDOW),
         ...ELLIOTT_SESSION_WINDOWS,
         ...Array(4).fill("ron-lewis-2026-10-01-pm"),
       ]);
@@ -629,7 +634,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         const { html, t } = await renderDetail(ids.omar);
         const { options } = sessionSelect(html);
         // The count doesn't change which sessions are offered; it only adds the warning.
-        expect(options).toHaveLength(50);
+        expect(options).toHaveLength(49);
         expect(options[0]).toMatchObject({ value: "patrick-haddox-2026-10-01-am-1000", selected: true });
         expect(t).toContain(
           "Patrick is hosting one or two sessions, and 3 are listed. Only book as many as Patrick agreed to. Booked so far: 0.",
@@ -640,7 +645,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
       }
     });
 
-    it("offers Vik's eight Thu, Oct 1 sessions first for an interest-only application, the first one preselected", async () => {
+    it("offers Vik's seven Thu, Oct 1 sessions first for an interest-only application, the first one preselected", async () => {
       const { html, t } = await renderDetail(ids.lena);
       // She ticked no time (she applied while he was still scheduling); his window has sessions now.
       expect(t).toContain(
@@ -660,11 +665,13 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         "Ron Lewis · not requested",
         "Rishab Veldur · not requested",
       ]);
-      expect(options).toHaveLength(50);
-      // His eight sessions, 11:30 AM to 3:25 PM on the 25-minute grid; nothing at 3:30 (it wouldn't fit).
-      expect(options.slice(0, 8).map((o) => [o.value, o.text])).toEqual(VIK_SESSION_OPTIONS);
+      expect(options).toHaveLength(49);
+      // His seven sessions, 11:30 AM to 2:55 PM on the 25-minute grid; nothing at 3:00 (the window
+      // ends at 3:00, so he's free for the 3 PM panels) or later.
+      expect(options.slice(0, 7).map((o) => [o.value, o.text])).toEqual(VIK_SESSION_OPTIONS);
+      expect(options.some((o) => o.value === VIK_DROPPED_SESSION)).toBe(false);
       expect(options.some((o) => o.value === "vikram-lakhwara-2026-10-01-1530")).toBe(false);
-      expect(options.filter((o) => o.value.startsWith("vikram-lakhwara"))).toHaveLength(8);
+      expect(options.filter((o) => o.value.startsWith("vikram-lakhwara"))).toHaveLength(7);
       // No window ticked, so her first choice's first open session is preselected, and nothing else.
       expect(options[0]).toEqual({
         value: "vikram-lakhwara-2026-10-01-1130",
@@ -673,8 +680,8 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         disabled: false,
       });
       expect(options.filter((o) => o.selected)).toHaveLength(1);
-      // He set no session count: all eight are bookable, and there's no warning.
-      expect(options.slice(0, 8).every((o) => !o.disabled)).toBe(true);
+      // He set no session count: all seven are bookable, and there's no warning.
+      expect(options.slice(0, 7).every((o) => !o.disabled)).toBe(true);
       expect(t).not.toContain("Only book as many as");
       expect(t).not.toMatch(/\bhosting\b/i);
       // His organizer notes (running over, the 3 PM panels, TechRise) live in the mentor notes, not here.
@@ -700,15 +707,22 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
           "vikram-lakhwara-2026-10-01-1130",
         ]);
         const slots = buildOrganizerDirectory(getMentorsForOrganizers(), getSite().officeHours).slotsById;
-        await assignAppointment(db, { applicationId: id, slotId: "vikram-lakhwara-2026-10-01-1500" }, { actor: "Detail Tester", slots });
+        // The dropped 3:00 session can't be assigned: it isn't in the schedule.
+        await expect(
+          assignAppointment(db, { applicationId: id, slotId: VIK_DROPPED_SESSION }, { actor: "Detail Tester", slots }),
+        ).rejects.toMatchObject({ status: 404, code: "slot_not_found" });
+        // His last session, 2:30–2:55 PM, can.
+        await assignAppointment(db, { applicationId: id, slotId: "vikram-lakhwara-2026-10-01-1430" }, { actor: "Detail Tester", slots });
         const after = await renderDetail(id);
         expect(after.t).toContain(
-          `Appointments Proposed, awaiting confirmation Confirmed slot Vikram “Vik” Lakhwara Thu, Oct 1 · 3:00–3:25 PM CT ${VIK_PLACE} Proposed by Detail Tester`,
+          `Appointments Proposed, awaiting confirmation Confirmed slot Vikram “Vik” Lakhwara Thu, Oct 1 · 2:30–2:55 PM CT ${VIK_PLACE} Proposed by Detail Tester`,
         );
-        expect(sessionSelect(after.html).options.find((o) => o.value === "vikram-lakhwara-2026-10-01-1500")).toMatchObject({
-          text: "Thu, Oct 1 · 3:00–3:25 PM CT · Already assigned",
+        expect(sessionSelect(after.html).options.find((o) => o.value === "vikram-lakhwara-2026-10-01-1430")).toMatchObject({
+          text: "Thu, Oct 1 · 2:30–2:55 PM CT · Already assigned",
           disabled: true,
         });
+        expect(after.html).not.toContain(VIK_DROPPED_SESSION);
+        expect(after.t).not.toContain(`Thu, Oct 1 · 3:00–3:25 PM CT ${VIK_PLACE}`);
       } finally {
         await db.query(`delete from applications where id = $1`, [id]);
       }
@@ -744,7 +758,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
           "Ron Lewis · not requested",
           "Rishab Veldur · not requested",
         ]);
-        expect(options).toHaveLength(50);
+        expect(options).toHaveLength(49);
         expect(options.filter((o) => o.selected)).toEqual([]);
         expect(options.some((o) => o.value.startsWith(PENDING_MENTOR.id))).toBe(false);
         expect(t).not.toContain("Only book as many as");
@@ -771,7 +785,7 @@ describe("applications listing Rishab (Thu, Oct 1, 12:00–5:00 PM CT)", () => {
         "Ron Lewis · not requested",
         "Rishab Veldur · not requested",
       ]);
-      expect(options).toHaveLength(50);
+      expect(options).toHaveLength(49);
       expect(options.slice(0, 22).map((o) => o.value.replace(/-\d{4}$/, ""))).toEqual(ELLIOTT_SESSION_WINDOWS);
       // His first open session (the first one in the window Jonah chose) is preselected, and nothing else.
       expect(options[0]).toEqual({

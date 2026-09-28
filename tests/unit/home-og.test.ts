@@ -154,9 +154,9 @@ describe("social image models (public data)", () => {
       name: "Vikram “Vik” Lakhwara",
       role: "Founder & Managing Member",
       company: "Stakehouse",
-      availability: { known: true, text: "Thu, Oct 1 · 11:30 AM–3:30 PM CT" },
+      availability: { known: true, text: "Thu, Oct 1 · 11:30 AM–3:00 PM CT" },
       cta: "Apply for Office Hours",
-      alt: "Founders Office Hours with Vikram “Vik” Lakhwara, Founder & Managing Member, Stakehouse. Available Thu, Oct 1, 11:30 AM–3:30 PM CT.",
+      alt: "Founders Office Hours with Vikram “Vik” Lakhwara, Founder & Managing Member, Stakehouse. Available Thu, Oct 1, 11:30 AM–3:00 PM CT.",
     });
     expect(mentorModel("vikram-lakhwara", closed()).cta).toBeNull();
     // No production mentor is still scheduling...
@@ -339,7 +339,7 @@ describe("social image models (public data)", () => {
         .map((e) => [e.id, eventCardModel(e, site).when]),
     ).toEqual([
       ["office-hours-patrick-haddox-2026-10-01-am", "10:00–11:30 AM CT"],
-      ["office-hours-vikram-lakhwara-2026-10-01", "11:30 AM–3:30 PM CT"],
+      ["office-hours-vikram-lakhwara-2026-10-01", "11:30 AM–3:00 PM CT"],
       ["science-and-practice-of-pitching", "11:45 AM–2:15 PM CT"],
       ["office-hours-elliott-notrica-2026-10-01-pm", "12:00–5:00 PM CT"],
       ["office-hours-rishab-veldur-2026-10-01", "12:00–5:00 PM CT"],
@@ -372,7 +372,7 @@ describe("social image models (public data)", () => {
     );
   });
 
-  it("Vik's office-hours calendar entry: Thu, Oct 1, 11:30 AM–3:30 PM CT at the Illinois Conference Center, hosted by Founders", () => {
+  it("Vik's office-hours calendar entry: Thu, Oct 1, 11:30 AM–3:00 PM CT at the Illinois Conference Center, hosted by Founders", () => {
     const site = getSite();
     const VIK_OH = "office-hours-vikram-lakhwara-2026-10-01";
     expect(eventCardModel(entry(VIK_OH), site)).toEqual({
@@ -385,10 +385,10 @@ describe("social image models (public data)", () => {
       title: "Office hours with Vikram “Vik” Lakhwara",
       people: [],
       morePeople: 0,
-      when: "11:30 AM–3:30 PM CT",
+      when: "11:30 AM–3:00 PM CT",
       where: "Illinois Conference Center",
       cta: "Apply for Office Hours",
-      alt: "Office hours with Vikram “Vik” Lakhwara: Thursday, Oct 1, 11:30 AM–3:30 PM CT, Illinois Conference Center. Founders × Founders Week.",
+      alt: "Office hours with Vikram “Vik” Lakhwara: Thursday, Oct 1, 11:30 AM–3:00 PM CT, Illinois Conference Center. Founders × Founders Week.",
     });
     expect(eventCardModel(entry(VIK_OH), closed()).cta).toBeNull();
     const json = JSON.stringify(eventCardModel(entry(VIK_OH), site));

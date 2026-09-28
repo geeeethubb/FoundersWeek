@@ -23,7 +23,7 @@
  *     preselected. Arnav: Fri, Oct 2, 10:00–11:30 AM CT in person at the Atrium, Siebel Center for
  *     Computer Science, 201 N. Goodwin Ave., and his appearances in time order: his Siebel
  *     School talk (Wed, 3:30 PM CT, no end time), his happy hour, the Launching From Illinois panel
- *     (Thu) and his Friday Showcase talk. Vik: Thu, Oct 1, 11:30 AM–3:30 PM CT in person at the
+ *     (Thu) and his Friday Showcase talk. Vik: Thu, Oct 1, 11:30 AM–3:00 PM CT in person at the
  *     Illinois Conference Center, 111 St. Marys Rd., with the window's note; "Apply to meet Vik"
  *     preselects that window; his Friday Showcase panel is a separate appearance; nothing from his
  *     organizer-only notes.
@@ -385,7 +385,7 @@ test.describe("Mentor profiles", () => {
         await expect(items.nth(3)).toContainText(SHOWCASE_TITLE);
       }
       if (mentor === VIK) {
-        // His one window (from his email, Sept 27): Thu, Oct 1, 11:30 AM–3:30 PM, in person at the
+        // His one window (from his email, Sept 27): Thu, Oct 1, 11:30 AM–3:00 PM, in person at the
         // Illinois Conference Center (the venue, then the street address), with the window's note.
         await expect(officeHoursBlock.locator("time")).toHaveText("Thu, Oct 1");
         await expect(officeHoursBlock.locator("time")).toHaveAttribute("datetime", "2026-10-01");
@@ -404,11 +404,11 @@ test.describe("Mentor profiles", () => {
         // His description and share card carry the same window.
         await expect(page.locator('meta[name="description"]')).toHaveAttribute(
           "content",
-          /Availability: Thu, Oct 1 · 11:30 AM–3:30 PM CT\./,
+          /Availability: Thu, Oct 1 · 11:30 AM–3:00 PM CT\./,
         );
         await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
           "content",
-          /Available Thu, Oct 1, 11:30 AM–3:30 PM CT\.$/,
+          /Available Thu, Oct 1, 11:30 AM–3:00 PM CT\.$/,
         );
         // His Friday Showcase panel is a separate appearance, not office hours.
         const appearances = page.getByRole("region", { name: `${VIK.firstName} at Founders Week`, exact: true });

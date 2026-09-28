@@ -117,14 +117,14 @@ const ELLIOTT_WINDOWS = [
 ] as const;
 const ELLIOTT_LINES = ELLIOTT_WINDOWS.map((w) => `${w.dateShort} · ${w.time}`);
 const ELLIOTT_APPLY_HREF = "/office-hours?mentor=elliott-notrica#apply";
-// Vik: one exact window Thu Oct 1, 11:30 AM–3:30 PM CT, in person at the Illinois Conference Center
+// Vik: one exact window Thu Oct 1, 11:30 AM–3:00 PM CT, in person at the Illinois Conference Center
 // (his email, Sept 27; street address from the organizers).
 const VIK_WINDOW_ID = "vikram-lakhwara-2026-10-01";
-const VIK_TIME = "11:30 AM–3:30 PM CT";
-const VIK_LINE = "Thu, Oct 1 · 11:30 AM–3:30 PM CT";
+const VIK_TIME = "11:30 AM–3:00 PM CT";
+const VIK_LINE = "Thu, Oct 1 · 11:30 AM–3:00 PM CT";
 const VIK_WINDOW_NOTE = "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
 const VIK_SESSION_NOTE =
-  "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:30 PM at the Illinois Conference Center.";
+  "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:00 PM at the Illinois Conference Center.";
 const VIK_VENUE = "Illinois Conference Center";
 const VIK_ADDRESS = "111 St. Marys Rd., Champaign, IL 61820";
 const VIK_APPLY_HREF = "/office-hours?mentor=vikram-lakhwara&window=vikram-lakhwara-2026-10-01#apply";
@@ -431,11 +431,11 @@ describe("public mentor data (content loader, default env)", () => {
     expect(JSON.stringify(productionMentors)).not.toContain("—");
   });
 
-  it("publishes Vik's one window (Thu, Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center), never his existing commitments", () => {
+  it("publishes Vik's one window (Thu, Oct 1, 11:30 AM–3:00 PM at the Illinois Conference Center), never his existing commitments", () => {
     const publicVik = byId(getMentors(), "vikram-lakhwara");
     // From his email (Sept 27): one exact window, no display label, the standard public note.
     expect(publicVik.availability).toEqual([
-      { id: VIK_WINDOW_ID, date: "2026-10-01", time: { kind: "exact", start: "11:30", end: "15:30" }, note: VIK_WINDOW_NOTE },
+      { id: VIK_WINDOW_ID, date: "2026-10-01", time: { kind: "exact", start: "11:30", end: "15:00" }, note: VIK_WINDOW_NOTE },
     ]);
     expect(publicVik.availability[0]).not.toHaveProperty("label");
     expect(publicVik.slots).toEqual([]);
@@ -917,7 +917,7 @@ describe("Founders Week appearances", () => {
     expect(views.map((v) => v.href)).not.toContain(`/schedule/${officeHours[0].id}`);
   });
 
-  it("lists Vik's office hours (Thu, Oct 1, 11:30 AM–3:30 PM, Illinois Conference Center) as a calendar entry of their own, never an appearance", () => {
+  it("lists Vik's office hours (Thu, Oct 1, 11:30 AM–3:00 PM, Illinois Conference Center) as a calendar entry of their own, never an appearance", () => {
     const entries = getScheduleEntries();
     const views = mentorAppearanceViews(entries, "vikram-lakhwara");
     expect(views.map(appearanceLabel)).toEqual(["Speaking Fri, Oct 2 · 2:55–3:35 PM CT"]);
@@ -926,7 +926,7 @@ describe("Founders Week appearances", () => {
       [
         officeHoursEntryId({ id: VIK_WINDOW_ID }),
         "2026-10-01",
-        { kind: "exact", start: "11:30", end: "15:30" },
+        { kind: "exact", start: "11:30", end: "15:00" },
         "confirmed",
         { kind: "in-person", venue: VIK_VENUE, address: VIK_ADDRESS },
       ],
@@ -937,7 +937,7 @@ describe("Founders Week appearances", () => {
     // The copy students read carries nothing from his email beyond the window and the place (not
     // the 3 PM panels, TechRise at 5 PM or running over), and no session count.
     const copy = [officeHours[0].title, officeHours[0].summary, officeHours[0].description].join("\n");
-    expect(copy).toContain("Thursday, October 1, 11:30 AM–3:30 PM CT");
+    expect(copy).toContain("Thursday, October 1, 11:30 AM–3:00 PM CT");
     expect(copy).toContain(VIK_WINDOW_NOTE);
     expect(copy).not.toMatch(
       /running over|as many startups|3 PM panels|panel discussions|TechRise|commitments|\beight\b|\d+ sessions|\b[35] PM\b/i,
@@ -1367,7 +1367,7 @@ describe("calls to action", () => {
     ).toEqual(["fixture-pending-mentor"]);
   });
 
-  it("gives Vik 'Apply to meet Vik' with his Thursday 11:30 AM–3:30 PM window preselected", () => {
+  it("gives Vik 'Apply to meet Vik' with his Thursday 11:30 AM–3:00 PM window preselected", () => {
     expect(mentorCta(vik)).toEqual({ kind: "apply", label: "Apply to meet Vik", href: VIK_APPLY_HREF, preselects: VIK_LINE });
     expect(mentorAction(vik, { applicationsOpen: true })).toEqual({ open: true, href: VIK_APPLY_HREF });
     expect(applyToMeetLabel(vik)).toBe("Apply to meet Vik");

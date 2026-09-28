@@ -16,9 +16,9 @@
  *     (TechRise starts as it ends); never exported to calendars.
  *   - Ron's office hours: Thu, Oct 1, 2:30–4:30 PM CT at the Business Instructional Facility (BIF),
  *     overlapping Elliott's, Rishab's and Vik's windows and Launching From Illinois; nothing about Oct 4.
- *   - Vik's office hours: Thu, Oct 1, 11:30 AM–3:30 PM CT at the Illinois Conference Center, 111 St.
- *     Marys Rd., overlapping Pitching, Elliott's, Rishab's and Ron's windows and Launching From
- *     Illinois (Patrick's window ends as his starts); Apply preselects his window; never exported;
+ *   - Vik's office hours: Thu, Oct 1, 11:30 AM–3:00 PM CT at the Illinois Conference Center, 111 St.
+ *     Marys Rd., overlapping Pitching, Elliott's, Rishab's and Ron's windows (Patrick's window ends as
+ *     his starts; Launching From Illinois starts as his ends); Apply preselects his window; never exported;
  *     nothing from his organizer-only notes. Searching "Stakehouse" finds his listing (no
  *     "Scheduling in progress" block: every mentor's times are set).
  *   - Elliott's office hours: three windows, location to be announced. Wed, Sep 30, 9:00 AM–12:00 PM
@@ -665,7 +665,7 @@ test.describe("Office hours on the calendar", () => {
     const titles = (await thursday.getByRole("article").getByRole("heading").allInnerTexts()).map((t) => t.trim());
     expect(titles.indexOf(RON_OFFICE_HOURS)).toBeGreaterThan(titles.indexOf(RISHAB_OFFICE_HOURS));
     expect(titles.indexOf(LAUNCHING_TITLE)).toBeGreaterThan(titles.indexOf(RON_OFFICE_HOURS));
-    // 2:30–4:30 PM overlaps Vik's (until 3:30 PM), Elliott's and Rishab's windows and Launching From
+    // 2:30–4:30 PM overlaps Vik's (until 3:00 PM), Elliott's and Rishab's windows and Launching From
     // Illinois (3:00 PM); never Pitching (ends 2:15 PM) or TechRise (5:00 PM).
     const overlapLine = row.getByText(/^Overlaps with /);
     for (const other of [VIK_OFFICE_HOURS, ELLIOTT_OFFICE_HOURS, RISHAB_OFFICE_HOURS, LAUNCHING_TITLE]) {
@@ -780,7 +780,7 @@ test.describe("Office hours on the calendar", () => {
     }
   });
 
-  test("Vik: office hours on Thu, Oct 1, 11:30 AM–3:30 PM CT at the Illinois Conference Center, in time order; Apply preselects his window", async ({
+  test("Vik: office hours on Thu, Oct 1, 11:30 AM–3:00 PM CT at the Illinois Conference Center, in time order; Apply preselects his window", async ({
     page,
   }) => {
     await openCalendar(page);
@@ -792,7 +792,8 @@ test.describe("Office hours on the calendar", () => {
     await expect(start).toHaveCount(1);
     await expect(start).toHaveAttribute("datetime", "2026-10-01T11:30");
     await expect(start).toHaveText("11:30 AM");
-    await expect(row).toContainText("to 3:30 PM");
+    await expect(row).toContainText("to 3:00 PM");
+    await expect(row).not.toContainText("3:30 PM");
     await expect(row).toContainText(VIK_VENUE);
     await expect(row).toContainText("Availability window");
     await expect(row).not.toContainText(/Scheduling in progress|Location to be announced|Time to be announced|to be confirmed/);
@@ -812,20 +813,21 @@ test.describe("Office hours on the calendar", () => {
     // Only on Thursday.
     await expect(page.getByRole("article").filter({ has: page.getByRole("heading", { name: VIK_OFFICE_HOURS, exact: true }) })).toHaveCount(1);
 
-    // 11:30 AM–3:30 PM overlaps Pitching (11:45 AM), Elliott's, Rishab's and Ron's windows and
-    // Launching From Illinois (3:00 PM), and every one of those rows says so. Patrick's window ends at
-    // 11:30 AM as his starts, and TechRise starts at 5:00 PM: neither overlaps it. (The exact line,
-    // without demo content: production-content.spec.ts.)
+    // 11:30 AM–3:00 PM overlaps Pitching (11:45 AM), Elliott's, Rishab's and Ron's windows, and every
+    // one of those rows says so. Patrick's window ends at 11:30 AM as his starts, Launching From
+    // Illinois starts at 3:00 PM as his ends, and TechRise starts at 5:00 PM: none of them overlaps
+    // it. (The exact line, without demo content: production-content.spec.ts.)
     const overlapLine = (scope: Locator) => scope.getByText(/^Overlaps with /);
-    const overlapping = [PITCHING_TITLE, ELLIOTT_OFFICE_HOURS, RISHAB_OFFICE_HOURS, RON_OFFICE_HOURS, LAUNCHING_TITLE];
+    const overlapping = [PITCHING_TITLE, ELLIOTT_OFFICE_HOURS, RISHAB_OFFICE_HOURS, RON_OFFICE_HOURS];
+    const backToBack = [PATRICK_OFFICE_HOURS, LAUNCHING_TITLE, TECHRISE_TITLE];
     for (const other of overlapping) {
       await expect(overlapLine(row)).toContainText(other);
       await expect(overlapLine(entry(thursday, page, other))).toContainText(VIK_OFFICE_HOURS);
     }
-    await expect(overlapLine(row)).not.toContainText(PATRICK_OFFICE_HOURS);
-    await expect(overlapLine(row)).not.toContainText(TECHRISE_TITLE);
-    await expect(entry(thursday, page, PATRICK_OFFICE_HOURS)).not.toContainText(VIK_OFFICE_HOURS);
-    await expect(entry(thursday, page, TECHRISE_TITLE)).not.toContainText(VIK_OFFICE_HOURS);
+    for (const other of backToBack) {
+      await expect(overlapLine(row)).not.toContainText(other);
+      await expect(entry(thursday, page, other)).not.toContainText(VIK_OFFICE_HOURS);
+    }
 
     // His page: when, where (the venue, then the street address), the session rule, the overlaps.
     await row.getByRole("link", { name: VIK_OFFICE_HOURS, exact: true }).click();
@@ -834,7 +836,7 @@ test.describe("Office hours on the calendar", () => {
     const main = page.getByRole("main");
     const header = main.locator("header").first();
     await expect(header).toContainText("Thursday, October 1");
-    await expect(header).toContainText("11:30 AM–3:30 PM CT");
+    await expect(header).toContainText("11:30 AM–3:00 PM CT");
     await expect(main).toContainText(`Availability window, not a booked appointment. ${SESSION_RULE}`);
     await expect(header).toContainText(VIK_VENUE);
     await expect(header).toContainText(VIK_ADDRESS);
@@ -845,7 +847,7 @@ test.describe("Office hours on the calendar", () => {
     for (const other of overlapping) {
       await expect(overlaps.getByRole("heading", { name: other, exact: true })).toHaveCount(1);
     }
-    for (const other of [PATRICK_OFFICE_HOURS, TECHRISE_TITLE]) {
+    for (const other of backToBack) {
       await expect(overlaps.getByRole("heading", { name: other, exact: true })).toHaveCount(0);
     }
     const applyLinks = main.getByRole("link", { name: `Apply to meet ${VIK.firstName}`, exact: true });
@@ -875,7 +877,7 @@ test.describe("Office hours on the calendar", () => {
     await expect(page).toHaveURL(new RegExp(`/office-hours\\?mentor=${VIK.id}&window=${VIK.windowId}#apply$`));
     const form = applicationForm(page);
     await expect(form.getByRole("checkbox", { name: new RegExp(`^${escapeRegExp(VIK.name)}\\b`) })).toBeChecked();
-    await expect(form.getByRole("checkbox", { name: /^I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window$/ })).toBeChecked();
+    await expect(form.getByRole("checkbox", { name: /^I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window$/ })).toBeChecked();
   });
 
   test("Arnav: office hours on Fri, Oct 2, 10:00–11:30 AM CT in the Siebel Center atrium, during the Showcase Day Sessions", async ({

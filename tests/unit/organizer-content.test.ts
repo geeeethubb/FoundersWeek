@@ -2,10 +2,10 @@
  * The organizer view against the current content: the six mentors (names, verified roles,
  * headshots), organizer-only notes and drafts (including Rishab's and Ron's), the lineup balanced
  * three across, Rishab's confirmed Thu, Oct 1 12:00–5:00 PM window in filters, Ron's Thu, Oct 1
- * 2:30–4:30 PM window at BIF, Vik's Thu, Oct 1 11:30 AM–3:30 PM window at the Illinois Conference
+ * 2:30–4:30 PM window at BIF, Vik's Thu, Oct 1 11:30 AM–3:00 PM window at the Illinois Conference
  * Center (his email, Sept 27; its details beyond the window stay organizer-only), Elliott's three
  * windows (Wed, Sep 30 9–12 and 2–5; Thu, Oct 1 12–5), the sessions generated from exact windows
- * (Patrick 3, Arnav 3, Vik 8, Elliott 22, Ron 4, Rishab 10; nobody is still scheduling), no
+ * (Patrick 3, Arnav 3, Vik 7, Elliott 22, Ron 4, Rishab 10; nobody is still scheduling), no
  * session-limit warning for anyone in production (Patrick is open to all three of his sessions) but
  * one for a fixture copy of Patrick who agreed to one or two, the pending ("Scheduling in progress"),
  * date-only (time not set) and part-of-day paths on test-only fixture mentors, no events (Dan Caruso,
@@ -59,9 +59,12 @@ const ELLIOTT_WINDOWS = [
 const ELLIOTT_WINDOW_IDS = ELLIOTT_WINDOWS.map(([id]) => id);
 /** Vik's one exact window (his email, Sept 27), in person at the Illinois Conference Center. */
 const VIK_WINDOW = "vikram-lakhwara-2026-10-01";
-const VIK_LABEL = "Thu, Oct 1 · 11:30 AM–3:30 PM CT";
+const VIK_LABEL = "Thu, Oct 1 · 11:30 AM–3:00 PM CT";
 const VIK_PLACE = "Illinois Conference Center, 111 St. Marys Rd., Champaign, IL 61820";
-/** Vik's window on the 25-minute grid with 5-minute breaks: eight sessions, the last ending at 3:25. */
+/**
+ * Vik's window on the 25-minute grid with 5-minute breaks: seven sessions, the last ending at 2:55.
+ * The window ends at 3:00 (organizers dropped the 3:00 session so he's free for the 3 PM panels).
+ */
 const VIK_SESSIONS = [
   ["vikram-lakhwara-2026-10-01-1130", "Thu, Oct 1 · 11:30–11:55 AM CT"],
   ["vikram-lakhwara-2026-10-01-1200", "Thu, Oct 1 · 12:00–12:25 PM CT"],
@@ -70,8 +73,9 @@ const VIK_SESSIONS = [
   ["vikram-lakhwara-2026-10-01-1330", "Thu, Oct 1 · 1:30–1:55 PM CT"],
   ["vikram-lakhwara-2026-10-01-1400", "Thu, Oct 1 · 2:00–2:25 PM CT"],
   ["vikram-lakhwara-2026-10-01-1430", "Thu, Oct 1 · 2:30–2:55 PM CT"],
-  ["vikram-lakhwara-2026-10-01-1500", "Thu, Oct 1 · 3:00–3:25 PM CT"],
 ] as const;
+/** The 3:00–3:25 PM session organizers dropped (Sept 27): it must not exist anywhere. */
+const VIK_DROPPED_SESSION = "vikram-lakhwara-2026-10-01-1500";
 
 /**
  * Test-only mentor still "Scheduling in progress" (no windows or slots), with the kind of constraint
@@ -216,7 +220,7 @@ describe("organizer directory from production content", () => {
       demo: false,
       scheduling: "available",
       acceptingApplications: true,
-      // He set a window, not a number of sessions (the eight it holds are generated), so no limit to warn about.
+      // He set a window, not a number of sessions (the seven it holds are generated), so no limit to warn about.
       sessionCount: null,
       organizerNotes: productionMentors.find((m) => m.id === "vikram-lakhwara")!.organizerNotes,
     });
@@ -264,21 +268,21 @@ describe("organizer directory from production content", () => {
       "rishab-veldur": "available",
     });
     for (const m of directory.mentors) expect(m.headshot).toMatchObject({ src: `/mentors/${m.id}.jpg`, alt: m.name });
-    // Vik: ONE exact window, Thu, Oct 1 11:30 AM–3:30 PM (never his other commitments, Wednesday
-    // through Saturday morning), split into eight sessions.
+    // Vik: ONE exact window, Thu, Oct 1 11:30 AM–3:00 PM (never his other commitments, Wednesday
+    // through Saturday morning), split into seven sessions.
     expect(directory.windows.filter((w) => w.mentorId === "vikram-lakhwara")).toEqual([
       {
         id: VIK_WINDOW,
         mentorId: "vikram-lakhwara",
         mentorName: "Vikram “Vik” Lakhwara",
         date: "2026-10-01",
-        time: { kind: "exact", start: "11:30", end: "15:30" },
+        time: { kind: "exact", start: "11:30", end: "15:00" },
         kind: "window",
         demo: false,
         label: VIK_LABEL,
       },
     ]);
-    expect(directory.slots.filter((s) => s.mentorId === "vikram-lakhwara")).toHaveLength(8);
+    expect(directory.slots.filter((s) => s.mentorId === "vikram-lakhwara")).toHaveLength(7);
     expect(
       [...directory.windows, ...directory.slots].some((x) => x.mentorId === "vikram-lakhwara" && x.date !== "2026-10-01"),
     ).toBe(false);
@@ -335,19 +339,19 @@ describe("organizer directory from production content", () => {
     ]);
   });
 
-  it("splits exact windows into sessions: Patrick 3, Arnav 3, Vik 8, Elliott 22, Ron 4, Rishab 10", () => {
+  it("splits exact windows into sessions: Patrick 3, Arnav 3, Vik 7, Elliott 22, Ron 4, Rishab 10", () => {
     const sessionsOf = (id: string) => directory.slots.filter((s) => s.mentorId === id);
     expect(Object.fromEntries(MENTOR_IDS.map((id) => [id, sessionsOf(id).length]))).toEqual({
       "patrick-haddox": 3,
       "arnav-mishra": 3, // Fri 10:00–11:30 AM (exact since Sept 24)
-      "vikram-lakhwara": 8, // Thu 11:30 AM–3:30 PM at the Illinois Conference Center (exact since Sept 27)
+      "vikram-lakhwara": 7, // Thu 11:30 AM–3:00 PM at the Illinois Conference Center (exact since Sept 27)
       "elliott-notrica": 22, // Wed 9–12 (6) and 2–5 (6), Thu 12–5 (10) (exact since Sept 25)
       "ron-lewis": 4, // Thu 2:30–4:30 PM at BIF (exact since Sept 24)
       "rishab-veldur": 10,
     });
-    expect(directory.slots).toHaveLength(50);
-    // Vik: eight sessions on the grid, the last one 3:00–3:25 PM (a 3:30 start wouldn't fit the
-    // window), each in person at his place so organizers can tell students where to go.
+    expect(directory.slots).toHaveLength(49);
+    // Vik: seven sessions on the grid, the last one 2:30–2:55 PM (the window ends at 3:00, so a 3:00
+    // start wouldn't fit), each in person at his place so organizers can tell students where to go.
     const vik = sessionsOf("vikram-lakhwara");
     expect(vik.map((s) => [s.id, s.label])).toEqual(VIK_SESSIONS.map(([id, label]) => [id, label]));
     expect(vik[0]).toEqual({
@@ -368,7 +372,12 @@ describe("organizer directory from production content", () => {
       label: "Thu, Oct 1 · 11:30–11:55 AM CT",
     });
     expect(vik.every((s) => s.windowId === VIK_WINDOW && s.format === "in-person" && s.location === VIK_PLACE)).toBe(true);
-    expect(directory.slotsById.get("vikram-lakhwara-2026-10-01-1500")).toMatchObject({ start: "15:00", end: "15:25" });
+    expect(vik.at(-1)).toMatchObject({ id: "vikram-lakhwara-2026-10-01-1430", start: "14:30", end: "14:55" });
+    expect(vik.every((s) => s.end <= "15:00")).toBe(true);
+    // No 3:00–3:25 PM session (organizers dropped it, Sept 27), and nothing later.
+    expect(directory.slotsById.has(VIK_DROPPED_SESSION)).toBe(false);
+    expect(directory.slots.some((s) => s.id === VIK_DROPPED_SESSION)).toBe(false);
+    expect(fixtureDirectory.slotsById.has(VIK_DROPPED_SESSION)).toBe(false);
     expect(directory.slotsById.has("vikram-lakhwara-2026-10-01-1530")).toBe(false);
     // Elliott: each window on the 25-minute grid with 5-minute breaks; the last session starts at 11:30 or 4:30.
     const elliott = sessionsOf("elliott-notrica");
@@ -480,11 +489,11 @@ describe("organizer directory from production content", () => {
       "Thu, Oct 1 · 2:30–3:25 PM CT",
       "Thu, Oct 1 · 3:30–4:25 PM CT",
     ]);
+    // Vik's window ends at 3:00, so an hour-long 2:30 session wouldn't fit.
     expect(hourly.slots.filter((s) => s.mentorId === "vikram-lakhwara").map((s) => s.label)).toEqual([
       "Thu, Oct 1 · 11:30 AM–12:25 PM CT",
       "Thu, Oct 1 · 12:30–1:25 PM CT",
       "Thu, Oct 1 · 1:30–2:25 PM CT",
-      "Thu, Oct 1 · 2:30–3:25 PM CT",
     ]);
     // A mentor still scheduling (fixture) has no windows, so no sessions.
     expect(build([pendingMentor]).slots).toEqual([]);
@@ -542,13 +551,15 @@ describe("organizer directory from production content", () => {
     expect(everything).not.toMatch(/caruso|afterparty|happy hour|legends|HERE Apartments/i);
     expect(everything).not.toMatch(/Health Innovation|Therapeutics|Showcase/i);
     // The Friday Showcase is at the Illinois Conference Center, and so are Vik's Thursday office hours
-    // (his email, Sept 27): the venue appears only as the place of his eight Oct 1 sessions, never
+    // (his email, Sept 27): the venue appears only as the place of his seven Oct 1 sessions, never
     // as a window, slot or option of its own.
     const atConferenceCenter = directory.slots.filter((s) => s.location?.includes("Conference Center"));
     expect(atConferenceCenter.map((s) => [s.mentorId, s.windowId, s.date])).toEqual(
-      Array(8).fill(["vikram-lakhwara", VIK_WINDOW, "2026-10-01"]),
+      Array(7).fill(["vikram-lakhwara", VIK_WINDOW, "2026-10-01"]),
     );
-    expect(everything.split("Conference Center").length - 1).toBe(8);
+    expect(everything.split("Conference Center").length - 1).toBe(7);
+    // The dropped 3:00 session is in no mentor, window, slot or option record.
+    expect(everything).not.toContain(VIK_DROPPED_SESSION);
 
     // A filter URL naming an event is dropped instead of silently filtering to nothing.
     for (const eventId of ["dan-caruso-fireside-chat", "happy-hour-at-legends-with-arnav-mishra", "founders-week-afterparty"]) {
@@ -675,7 +686,7 @@ describe("organizer directory from production content", () => {
       })),
     );
     expect(mentorNeedsBroadAvailability(elliott)).toBe(false);
-    // Vik's Thu, Oct 1 11:30 AM–3:30 PM window (Sept 27) is timed too.
+    // Vik's Thu, Oct 1 11:30 AM–3:00 PM window (Sept 27) is timed too.
     const vik = catalog.mentors.find((m) => m.id === "vikram-lakhwara")!;
     expect(vik).toMatchObject({ firstName: "Vik", affiliation: "Founder & Managing Member, Stakehouse", scheduling: "available", demo: false });
     expect(vik.options).toEqual([
@@ -734,10 +745,10 @@ describe("organizer directory from production content", () => {
 
   it("explains which preferred mentors can't be booked yet", () => {
     const prefs = mentorBookability(directory, ["vikram-lakhwara", "elliott-notrica", "ron-lewis", "arnav-mishra", "patrick-haddox"]);
-    // Everyone can be booked now: Vik's Thu 11:30–3:30 window gives him eight sessions, Elliott's three
+    // Everyone can be booked now: Vik's Thu 11:30–3:00 window gives him seven sessions, Elliott's three
     // windows 22, Ron's Thu 2:30–4:30 window four.
     expect(prefs.map((p) => [p.firstName, p.slots.length, p.windows.length, p.scheduling])).toEqual([
-      ["Vik", 8, 1, "available"],
+      ["Vik", 7, 1, "available"],
       ["Elliott", 22, 3, "available"],
       ["Ron", 4, 1, "available"],
       ["Arnav", 3, 1, "available"],
@@ -746,6 +757,7 @@ describe("organizer directory from production content", () => {
     expect(prefs.filter((p) => p.slots.length === 0)).toEqual([]);
     expect(prefs[0].windows.map((w) => [w.id, w.label, w.kind])).toEqual([[VIK_WINDOW, VIK_LABEL, "window"]]);
     expect(prefs[0].slots.map((s) => s.id)).toEqual(VIK_SESSIONS.map(([id]) => id));
+    expect(prefs[0].slots.some((s) => s.id === VIK_DROPPED_SESSION)).toBe(false);
     expect(prefs[1].windows.map((w) => [w.id, w.label, w.kind])).toEqual(
       ELLIOTT_WINDOWS.map(([id, , , , label]) => [id, label, "window"]),
     );
@@ -859,9 +871,9 @@ describe("mentor notes (organizer-only)", () => {
     // Elliott's email and the session total organizers set from it.
     expect(publicMentors).not.toMatch(/From his email|anytime after 9 AM|Organizers set his windows|22 sessions/);
     // Vik's email beyond his window and its place (running over, the 3 PM panels, TechRise at 5 PM,
-    // the eight sessions the window holds).
+    // the 3:00 session organizers dropped, the seven sessions the window holds).
     expect(publicMentors).not.toMatch(
-      /running over|as many startups|panel discussions starting at 3 PM|3 PM panels|TechRise Pitch Competition at 5 PM|eight 25-minute sessions/,
+      /running over|as many startups|panel discussions starting at 3 PM|3 PM panels|TechRise Pitch Competition at 5 PM|dropped the 3:00 session|(seven|eight) 25-minute sessions/,
     );
     const organizer = getMentorsForOrganizers();
     expect(organizer.map((m) => m.id)).toEqual(MENTOR_IDS);
@@ -897,7 +909,7 @@ describe("mentor notes (organizer-only)", () => {
     });
   });
 
-  it("keeps Vik's email details (running over, the 3 PM panels, TechRise at 5 PM, eight sessions, his commitments) organizer-only", () => {
+  it("keeps Vik's email details (running over, the 3 PM panels, TechRise at 5 PM, the dropped 3:00 session, seven sessions, his commitments) organizer-only", () => {
     const vik = getMentorsForOrganizers().find((m) => m.id === "vikram-lakhwara")!;
     expect(vik.organizerNotes).toContain(
       "From his email (Sept 27): Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center (street address from the organizers: 111 St Marys Rd, Champaign).",
@@ -906,7 +918,7 @@ describe("mentor notes (organizer-only)", () => {
       "He’d like to fit in as many startups as possible and is fine running over, but wants to respect the panel discussions starting at 3 PM and the TechRise Pitch Competition at 5 PM.",
     );
     expect(vik.organizerNotes).toContain(
-      "The window holds eight 25-minute sessions (11:30 to 3:25); the 3:00 one runs into the 3 PM panels.",
+      "Organizers dropped the 3:00 session so he’s free for the 3 PM panels (Sept 27): the window is published as 11:30 AM–3:00 PM, seven 25-minute sessions (11:30 to 2:55).",
     );
     expect(vik.organizerNotes).toContain(
       "Outside this window his earlier note stands: existing commitments Wednesday through Saturday morning, so don’t schedule him then.",
@@ -915,14 +927,17 @@ describe("mentor notes (organizer-only)", () => {
     expect(publicVik).not.toHaveProperty("organizerNotes");
     const json = JSON.stringify(publicVik);
     expect(json).not.toContain(vik.organizerNotes!);
-    expect(json).not.toMatch(/running over|as many startups|panel discussions|3 PM panels|\beight\b|3:25|commitments|Wednesday|Saturday/i);
-    // Students see one window, Thu, Oct 1 from 11:30 AM to 3:30 PM (no label override), at the
+    expect(json).not.toMatch(
+      /running over|as many startups|panel discussions|3 PM panels|dropped|\bseven\b|\beight\b|2:55|3:25|commitments|Wednesday|Saturday/i,
+    );
+    expect(json).not.toContain(VIK_DROPPED_SESSION);
+    // Students see one window, Thu, Oct 1 from 11:30 AM to 3:00 PM (no label override), at the
     // Illinois Conference Center with the street address as published for the Friday events there.
     expect(publicVik.availability).toEqual([
       {
         id: VIK_WINDOW,
         date: "2026-10-01",
-        time: { kind: "exact", start: "11:30", end: "15:30" },
+        time: { kind: "exact", start: "11:30", end: "15:00" },
         note: "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
       },
     ]);
@@ -933,7 +948,7 @@ describe("mentor notes (organizer-only)", () => {
       address: "111 St. Marys Rd., Champaign, IL 61820",
       sessionCount: null,
       confirmed: true,
-      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:30 PM at the Illinois Conference Center.",
+      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:00 PM at the Illinois Conference Center.",
     });
     const showcaseAddresses = events
       .filter((e) => e.location.kind === "in-person" && e.location.venue === "Illinois Conference Center")
@@ -1008,14 +1023,14 @@ describe("mentor notes (organizer-only)", () => {
     expect(html).not.toMatch(/href="\/apply/);
   });
 
-  it("shows Vik's Thu, Oct 1 11:30 AM–3:30 PM window, its eight sessions, his session note and his organizer notes", () => {
+  it("shows Vik's Thu, Oct 1 11:30 AM–3:00 PM window, its seven sessions, his session note and his organizer notes", () => {
     const vik = getMentorsForOrganizers().find((m) => m.id === "vikram-lakhwara")!;
     const html = renderToStaticMarkup(createElement(MentorNotes, { mentors: [vik], sessionRule: RULE }));
     const t = text(html);
     expect(t).toContain("Vikram “Vik” Lakhwara Founder & Managing Member · Stakehouse");
     expect(imageAlts(html)).toEqual(["Vikram “Vik” Lakhwara"]);
     expect(t).toContain(
-      `Scheduling ${VIK_LABEL} Availability window 8 sessions (see Sessions). Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:30 PM at the Illinois Conference Center. Organizer notes ${vik.organizerNotes}`,
+      `Scheduling ${VIK_LABEL} Availability window 7 sessions (see Sessions). Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:00 PM at the Illinois Conference Center. Organizer notes ${vik.organizerNotes}`,
     );
     expect(t).not.toContain("Scheduling in progress");
     expect(t).not.toContain("No sessions yet");
@@ -1067,12 +1082,12 @@ describe("mentor notes (organizer-only)", () => {
     // No decorative numbering ("01 / 06") — mentors are listed by name.
     expect(t).not.toMatch(/\b0\d \/ 0\d\b/);
     // What Vik said in his email (running over, the 3 PM panels, TechRise at 5 PM) and his existing
-    // commitments outside the window: organizers see all of it, next to his window and eight sessions.
+    // commitments outside the window: organizers see all of it, next to his window and seven sessions.
     const vik = mentors.find((m) => m.id === "vikram-lakhwara")!;
     expect(t).toContain(
-      `Scheduling ${VIK_LABEL} Availability window 8 sessions (see Sessions). ${vik.session.note} Organizer notes ${vik.organizerNotes}`,
+      `Scheduling ${VIK_LABEL} Availability window 7 sessions (see Sessions). ${vik.session.note} Organizer notes ${vik.organizerNotes}`,
     );
-    expect(sessionsSummary(vik, RULE)).toBe("8 sessions (see Sessions).");
+    expect(sessionsSummary(vik, RULE)).toBe("7 sessions (see Sessions).");
     expect(t).toMatch(/fine running over, but wants to respect the panel discussions starting at 3 PM and the TechRise Pitch Competition at 5 PM/);
     expect(t).toContain("existing commitments Wednesday through Saturday morning, so don’t schedule him then");
     // What Elliott said in his email and the windows organizers set from it: organizers see that, students don't.
@@ -1100,10 +1115,11 @@ describe("mentor notes (organizer-only)", () => {
     expect(t.match(/Hidden on the public site until marked approved/g)).toHaveLength(1);
     expect(t).toContain("Draft");
     // Nobody is still scheduling: every mentor has an exact window, split into sessions (Patrick 3,
-    // Arnav 3, Vik 8, Elliott 22, Ron 4, Rishab 10). The pending badge is covered with a fixture below.
+    // Arnav 3, Vik 7, Elliott 22, Ron 4, Rishab 10). The pending badge is covered with a fixture below.
     expect(html).not.toMatch(/>Scheduling in progress</);
     expect(t.match(/\b3 sessions \(see Sessions\)\./g)).toHaveLength(2);
-    expect(t.match(/\b8 sessions \(see Sessions\)\./g)).toHaveLength(1);
+    expect(t.match(/\b7 sessions \(see Sessions\)\./g)).toHaveLength(1);
+    expect(t).not.toMatch(/\b8 sessions \(see Sessions\)\./);
     expect(t.match(/\b4 sessions \(see Sessions\)\./g)).toHaveLength(1);
     expect(t.match(/\b10 sessions \(see Sessions\)\./g)).toHaveLength(1);
     expect(t.match(/\b22 sessions \(see Sessions\)\./g)).toHaveLength(1);
@@ -1169,10 +1185,10 @@ describe("mentor notes (organizer-only)", () => {
     expect(t).toContain(
       "Ron Lewis 5 interested · 2 first choice Thu, Oct 1 · 2:30–4:30 PM 4 sessions · 0/4 booked (filtering by this mentor; select to show all mentors)",
     );
-    // Nobody is still scheduling. Vik: his Thu 11:30–3:30 window (Sept 27) and eight sessions.
+    // Nobody is still scheduling. Vik: his Thu 11:30–3:00 window (Sept 27) and seven sessions.
     expect(t).not.toContain("Scheduling in progress");
     expect(t).toContain(
-      "Vikram “Vik” Lakhwara 0 interested · 0 first choice Thu, Oct 1 · 11:30 AM–3:30 PM 8 sessions · 0/8 booked (show applications that list this mentor)",
+      "Vikram “Vik” Lakhwara 0 interested · 0 first choice Thu, Oct 1 · 11:30 AM–3:00 PM 7 sessions · 0/7 booked (show applications that list this mentor)",
     );
     // Elliott: all three windows and 22 sessions.
     expect(t).toContain(
@@ -1333,15 +1349,21 @@ describe("sessions board and assign options", () => {
     const t = text(html);
     // Only mentors with sessions get a group, in content order: all six now (Vik's since Sept 27).
     expect([...html.matchAll(/<h3 id="slots-([^"]+)"/g)].map((m) => m[1])).toEqual(MENTOR_IDS);
-    // Vik: one window, eight sessions, each with his place so organizers can tell students where to go.
+    // Vik: one window, seven sessions, each with his place so organizers can tell students where to go.
     expect(t).toContain(
-      `Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse 0 of 8 sessions booked ${VIK_LABEL} window · 8 sessions Applications that chose this window`,
+      `Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse 0 of 7 sessions booked ${VIK_LABEL} window · 7 sessions Applications that chose this window`,
     );
     expect(html).toContain(`href="/organizers?availability=window%3A${VIK_WINDOW}"`);
     for (const [, label] of VIK_SESSIONS) {
       expect(t).toContain(`${label} ${VIK_PLACE} Confirmed slot 0/1 seat used (0 confirmed, 0 proposed) 1 open`);
     }
-    expect(t.split(VIK_PLACE).length - 1).toBe(8);
+    expect(t.split(VIK_PLACE).length - 1).toBe(7);
+    // His 2:30 session is the last one in his group: no 3:00–3:25 PM session (dropped, Sept 27).
+    expect(t).toContain(
+      `Thu, Oct 1 · 2:30–2:55 PM CT ${VIK_PLACE} Confirmed slot 0/1 seat used (0 confirmed, 0 proposed) 1 open Elliott Notrica`,
+    );
+    expect(t).not.toContain(`Thu, Oct 1 · 3:00–3:25 PM CT ${VIK_PLACE}`);
+    expect(html).not.toContain(VIK_DROPPED_SESSION);
     // His organizer notes stay in the mentor notes; the board carries none (no session limit to warn about).
     expect(t).not.toContain(getMentorsForOrganizers().find((m) => m.id === "vikram-lakhwara")!.organizerNotes!);
     // Elliott: three windows (6, 6 and 10 sessions), each with its own filter link.

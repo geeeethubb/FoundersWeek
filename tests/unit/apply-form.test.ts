@@ -110,7 +110,7 @@ const ELLIOTT_WINDOWS = [
   "window:elliott-notrica-2026-09-30-pm",
   "window:elliott-notrica-2026-10-01-pm",
 ];
-/** Vik's one window (Thu, Oct 1, 11:30 AM–3:30 PM CT), from his Sept 27 email. */
+/** Vik's one window (Thu, Oct 1, 11:30 AM–3:00 PM CT), from his Sept 27 email. */
 const VIK_WINDOW = "window:vikram-lakhwara-2026-10-01";
 const fixtureMentors = [...mentors, DATE_ONLY_MENTOR, SCHEDULING_MENTOR, SECOND_SCHEDULING_MENTOR];
 const fixtureCatalog = buildApplicationCatalog(fixtureMentors);
@@ -232,7 +232,7 @@ describe("prefill from deep links", () => {
     );
   });
 
-  it("preselects Vik and ticks his Thu, Oct 1 window (11:30 AM–3:30 PM CT) from his “Apply to meet Vik” link", () => {
+  it("preselects Vik and ticks his Thu, Oct 1 window (11:30 AM–3:00 PM CT) from his “Apply to meet Vik” link", () => {
     const vik = {
       mentorIds: ["vikram-lakhwara"],
       firstChoiceMentorId: "vikram-lakhwara",
@@ -259,13 +259,13 @@ describe("prefill from deep links", () => {
       expect(resolvePrefill(catalog, params), JSON.stringify(params)).toEqual({ ...vik, availability: [] });
     }
     expect(prefillNote(catalog, vik, presentations)).toBe(
-      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” ticked. Add anyone else you’d like to meet.",
+      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” ticked. Add anyone else you’d like to meet.",
     );
     expect(prefillNotice(catalog, vik, presentations, 0)).toEqual({
       id: 0,
       kind: "top",
       message:
-        "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” ticked. Add anyone else you’d like to meet.",
+        "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” ticked. Add anyone else you’d like to meet.",
       mentorId: "vikram-lakhwara",
       optionKey: VIK_WINDOW,
     });
@@ -468,7 +468,7 @@ describe("prefill merge while the form is open (or into a restored draft)", () =
     expect(mergeAnnouncement(fixtureCatalog, quinn.outcome!, fixturePresentations)).toBe("Quinn Fixture added to your mentors.");
   });
 
-  it("adds Vik with his Thu, Oct 1 window (11:30 AM–3:30 PM CT) next to answers already given", () => {
+  it("adds Vik with his Thu, Oct 1 window (11:30 AM–3:00 PM CT) next to answers already given", () => {
     const { state: next, outcome, changed } = mergeSearchParams(answered, catalog, {
       mentor: "vikram-lakhwara",
       window: "vikram-lakhwara-2026-10-01",
@@ -482,7 +482,7 @@ describe("prefill merge while the form is open (or into a restored draft)", () =
       referrerMentorId: "vikram-lakhwara",
     });
     expect(mergeAnnouncement(catalog, outcome!, presentations)).toBe(
-      "Vikram “Vik” Lakhwara added to your mentors. “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” is ticked. Vik is your first choice.",
+      "Vikram “Vik” Lakhwara added to your mentors. “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” is ticked. Vik is your first choice.",
     );
     // Added after Patrick: Patrick stays first choice, both windows are ticked.
     const withPatrick = {
@@ -499,7 +499,7 @@ describe("prefill merge while the form is open (or into a restored draft)", () =
       referrerMentorId: "vikram-lakhwara",
     });
     expect(mergeAnnouncement(catalog, both.outcome!, presentations)).toBe(
-      "Vikram “Vik” Lakhwara added to your mentors. “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” is ticked.",
+      "Vikram “Vik” Lakhwara added to your mentors. “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” is ticked.",
     );
     // A window he doesn't have is ignored.
     const madeUp = mergeSearchParams(answered, catalog, { mentor: "vikram-lakhwara", window: "vikram-lakhwara-2026-10-02" });
@@ -700,7 +700,7 @@ describe("form model", () => {
       availabilityNotes: "Tell us when you’re generally free during Founders Week. Morgan’s times aren’t set yet.",
     });
     expect(submitFixture(patrickAndMorgan)).toEqual({});
-    // Vik's times are set (Thu, Oct 1, 11:30 AM–3:30 PM CT): his ticked window is enough, and so is
+    // Vik's times are set (Thu, Oct 1, 11:30 AM–3:00 PM CT): his ticked window is enough, and so is
     // Patrick's next to him; with nothing ticked and no note, the general rule applies.
     const vik = { ...answered, mentorIds: ["vikram-lakhwara"], availability: [VIK_WINDOW], availabilityNotes: "" };
     expect(submit(vik)).toEqual({});
@@ -900,13 +900,13 @@ describe("form model", () => {
       // Directory order, not selection order; Morgan (still scheduling, fixture) has none.
       ["patrick-haddox", "window:patrick-haddox-2026-10-01-am", "Thu, Oct 1, 10:00–11:30 AM CT"],
       ["arnav-mishra", "window:arnav-mishra-2026-10-02-am", "Fri, Oct 2, 10:00–11:30 AM CT"],
-      ["vikram-lakhwara", VIK_WINDOW, "Thu, Oct 1, 11:30 AM–3:30 PM CT"],
+      ["vikram-lakhwara", VIK_WINDOW, "Thu, Oct 1, 11:30 AM–3:00 PM CT"],
       ["ron-lewis", "window:ron-lewis-2026-10-01-pm", "Thu, Oct 1, 2:30–4:30 PM CT"],
     ]);
-    // Vik's window is set (Thu, Oct 1, 11:30 AM to 3:30 PM): one "I can make …" option, and it takes the focus.
+    // Vik's window is set (Thu, Oct 1, 11:30 AM to 3:00 PM): one "I can make …" option, and it takes the focus.
     expect(
       knownTimes(state({ mentorIds: ["vikram-lakhwara"] }), catalog).map((t) => [t.mentor.id, t.option.key, presentations[t.option.key].phrase]),
-    ).toEqual([["vikram-lakhwara", VIK_WINDOW, "Thu, Oct 1, 11:30 AM–3:30 PM CT"]]);
+    ).toEqual([["vikram-lakhwara", VIK_WINDOW, "Thu, Oct 1, 11:30 AM–3:00 PM CT"]]);
     expect(focusTargetId("availability", state({ mentorIds: ["vikram-lakhwara"] }), catalog)).toBe(
       "apply-option-window-vikram-lakhwara-2026-10-01",
     );
@@ -938,7 +938,7 @@ describe("form model", () => {
         (t) => [t.mentor.id, t.option.key, fixturePresentations[t.option.key].phrase],
       ),
     ).toEqual([
-      ["vikram-lakhwara", VIK_WINDOW, "Thu, Oct 1, 11:30 AM–3:30 PM CT"],
+      ["vikram-lakhwara", VIK_WINDOW, "Thu, Oct 1, 11:30 AM–3:00 PM CT"],
       ["rishab-veldur", "window:rishab-veldur-2026-10-01", "Thu, Oct 1, 12:00–5:00 PM CT"],
       ["fixture-casey", DATE_ONLY_WINDOW, "Thu, Oct 1 (exact time to be confirmed)"],
     ]);
@@ -1590,7 +1590,7 @@ describe("application catalog", () => {
     expect(JSON.stringify(catalog)).not.toMatch(/caruso|afterparty|happy hour|legends|partiful|HERE Apartments/i);
   });
 
-  it("gives Vik one timed window on Thu, Oct 1 (11:30 AM–3:30 PM CT), and nothing from his organizer notes", () => {
+  it("gives Vik one timed window on Thu, Oct 1 (11:30 AM–3:00 PM CT), and nothing from his organizer notes", () => {
     expect(catalog.mentors.find((m) => m.id === "vikram-lakhwara")).toEqual({
       id: "vikram-lakhwara",
       name: "Vikram “Vik” Lakhwara",
@@ -1606,7 +1606,7 @@ describe("application catalog", () => {
           mentorId: "vikram-lakhwara",
           certainty: "window",
           date: "2026-10-01",
-          label: "Thu, Oct 1 · 11:30 AM–3:30 PM CT",
+          label: "Thu, Oct 1 · 11:30 AM–3:00 PM CT",
           detail: "Availability window. Exact appointment times aren’t set yet.",
           timeKnown: true,
         },
@@ -1816,11 +1816,11 @@ describe("option presentation", () => {
     ]);
   });
 
-  it("reads Vik's window like Patrick's: “Thu, Oct 1, 11:30 AM–3:30 PM CT”", () => {
+  it("reads Vik's window like Patrick's: “Thu, Oct 1, 11:30 AM–3:00 PM CT”", () => {
     expect(presentations[VIK_WINDOW]).toEqual({
       kind: "window",
-      label: "Thu, Oct 1 · 11:30 AM–3:30 PM CT",
-      phrase: "Thu, Oct 1, 11:30 AM–3:30 PM CT",
+      label: "Thu, Oct 1 · 11:30 AM–3:00 PM CT",
+      phrase: "Thu, Oct 1, 11:30 AM–3:00 PM CT",
       detail: "Exact appointment times will be set within this window.",
     });
     // The same with the fixtures next to him.

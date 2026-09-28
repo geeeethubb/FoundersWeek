@@ -184,16 +184,16 @@ describe("the application form", () => {
     expect(attr(tagWithId(html, "apply-availabilityNotes"), "aria-required")).toBe("true");
   });
 
-  it("opens from Vik's link with him selected, his Thu, Oct 1 window (11:30 AM–3:30 PM CT) ticked, and the note optional", () => {
+  it("opens from Vik's link with him selected, his Thu, Oct 1 window (11:30 AM–3:00 PM CT) ticked, and the note optional", () => {
     const html = renderForm(resolvePrefill(catalog, { mentor: "vikram-lakhwara", window: "vikram-lakhwara-2026-10-01" }));
     const t = text(html);
     expect(t).toContain(
-      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” ticked. Add anyone else you’d like to meet.",
+      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” ticked. Add anyone else you’d like to meet.",
     );
     expect(attr(tagWithId(html, "apply-mentor-vikram-lakhwara"), "checked")).toBe("");
     expect(attr(tagWithId(html, "apply-mentor-patrick-haddox"), "checked")).toBeNull();
     expect(attr(tagWithId(html, "apply-option-window-vikram-lakhwara-2026-10-01"), "checked")).toBe("");
-    expect(t).toContain("I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window");
+    expect(t).toContain("I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window");
     // His time is set, so his ticked window is enough: the note is optional, like with Patrick.
     expect(t).toContain(
       "Broad availability (optional) When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.",
@@ -208,7 +208,7 @@ describe("the application form", () => {
     const nameOnly = renderForm(resolvePrefill(catalog, { mentor: "vikram-lakhwara" }));
     expect(text(nameOnly)).toContain("Vikram “Vik” Lakhwara is selected below. Add anyone else you’d like to meet.");
     expect(text(nameOnly)).toContain(
-      "I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.",
+      "I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.",
     );
     expect(attr(tagWithId(nameOnly, "apply-option-window-vikram-lakhwara-2026-10-01"), "checked")).toBeNull();
     expect(attr(tagWithId(nameOnly, "apply-availabilityNotes"), "aria-required")).toBe("true");
@@ -338,7 +338,7 @@ describe("broad availability", () => {
       availability: ["window:rishab-veldur-2026-10-01"],
     });
     expect(text(withVik)).toBe(
-      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window I can make Thu, Oct 1, 12:00–5:00 PM CT Rishab’s office-hours window ${optional}`,
+      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window I can make Thu, Oct 1, 12:00–5:00 PM CT Rishab’s office-hours window ${optional}`,
     );
     expect(attr(tagWithId(withVik, "apply-availabilityNotes"), "aria-required")).toBeNull();
     expect(attr(tagWithId(withVik, "apply-option-window-vikram-lakhwara-2026-10-01"), "checked")).toBeNull();
@@ -370,7 +370,7 @@ describe("broad availability", () => {
       availability: ["window:ron-lewis-2026-10-01-pm"],
     });
     expect(text(withVik)).toBe(
-      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window I can make Thu, Oct 1, 2:30–4:30 PM CT Ron’s office-hours window Broad availability (optional) When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.`,
+      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window I can make Thu, Oct 1, 2:30–4:30 PM CT Ron’s office-hours window Broad availability (optional) When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.`,
     );
     expect(attr(tagWithId(withVik, "apply-availabilityNotes"), "aria-required")).toBeNull();
     // Next to a mentor still scheduling (fixture), only that mentor is named, and the note is required.
@@ -383,13 +383,13 @@ describe("broad availability", () => {
     expect(attr(tagWithId(withMorgan, "apply-availabilityNotes"), "aria-required")).toBe("true");
   });
 
-  it("with Vik, offers “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” and, once it's ticked, makes the note optional", () => {
+  it("with Vik, offers “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” and, once it's ticked, makes the note optional", () => {
     const optional =
       "Broad availability (optional) When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.";
     const html = renderAvailability({ mentorIds: ["vikram-lakhwara"], availability: ["window:vikram-lakhwara-2026-10-01"] });
     const t = text(html);
     expect(t).toBe(
-      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window ${optional}`,
+      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window ${optional}`,
     );
     expect(attr(tagWithId(html, "apply-option-window-vikram-lakhwara-2026-10-01"), "checked")).toBe("");
     const textarea = tagWithId(html, "apply-availabilityNotes");
@@ -400,7 +400,7 @@ describe("broad availability", () => {
     // Nothing ticked yet: the note is required until a time is ticked, never "Vik’s times aren’t set yet".
     const nothingTicked = renderAvailability({ mentorIds: ["vikram-lakhwara"] });
     expect(text(nothingTicked)).toBe(
-      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.`,
+      `Can you make these times? (optional) ${TIMES_HINT} I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window Broad availability When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday. Not needed if you tick a time above.`,
     );
     expect(attr(tagWithId(nothingTicked, "apply-availabilityNotes"), "aria-required")).toBe("true");
     expect(attr(tagWithId(nothingTicked, "apply-option-window-vikram-lakhwara-2026-10-01"), "checked")).toBeNull();

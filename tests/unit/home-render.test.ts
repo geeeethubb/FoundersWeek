@@ -200,7 +200,7 @@ describe("home page (public data)", () => {
     // "Scheduling in progress" any more: Vik's Thursday window arrived Sept 27.
     expect(t).toMatch(/Samara Aerospace Thu, Oct 1\W+10:00–11:30 AM CT/);
     expect(t).toMatch(/Doss Fri, Oct 2\W+10:00–11:30 AM CT/);
-    expect(t).toMatch(/Stakehouse Thu, Oct 1\W+11:30 AM–3:30 PM CT/);
+    expect(t).toMatch(/Stakehouse Thu, Oct 1\W+11:30 AM–3:00 PM CT/);
     expect(t).toMatch(/Symbio Bioculinary Wed, Sept 30\W+9:00 AM–12:00 PM CT \+ 2 more/);
     expect(t).toMatch(/Auctus Advisory Thu, Oct 1\W+2:30–4:30 PM CT/);
     expect(t).toMatch(/Auvi Labs Thu, Oct 1\W+12:00–5:00 PM CT/);
@@ -224,18 +224,18 @@ describe("home page (public data)", () => {
     expect(t).not.toMatch(/Oct 4|October 4/);
   });
 
-  it("shows Vik third: 'Thu, Oct 1 · 11:30 AM–3:30 PM CT', with the orange dot and nothing organizer-only", () => {
+  it("shows Vik third: 'Thu, Oct 1 · 11:30 AM–3:00 PM CT', with the orange dot and nothing organizer-only", () => {
     const items = [...section(page(), "mentors-heading").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
     expect(items).toHaveLength(6);
     const vik = items[2];
     expect(images(vik)).toEqual([{ alt: "Vikram “Vik” Lakhwara", src: "/mentors/vikram-lakhwara.jpg" }]);
     expect(hrefs(vik)).toEqual(["/office-hours/vikram-lakhwara"]);
     expect(text(vik).trim()).toBe(
-      "Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse Thu, Oct 1 ·, 11:30 AM–3:30 PM CT",
+      "Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse Thu, Oct 1 ·, 11:30 AM–3:00 PM CT",
     );
     // An exact range: kept on one line.
     expect(vik).toMatch(
-      /<time dateTime="2026-10-01"[^>]*>Thu, Oct 1<\/time><span aria-hidden="true"[^>]*> · <\/span><span class="sr-only">, <\/span><span class="[^"]*whitespace-nowrap[^"]*">11:30 AM–3:30 PM CT<\/span>/,
+      /<time dateTime="2026-10-01"[^>]*>Thu, Oct 1<\/time><span aria-hidden="true"[^>]*> · <\/span><span class="sr-only">, <\/span><span class="[^"]*whitespace-nowrap[^"]*">11:30 AM–3:00 PM CT<\/span>/,
     );
     expect(vik).toMatch(/rounded-full bg-accent"/);
     expect(text(vik)).not.toMatch(
@@ -408,8 +408,8 @@ describe("home page (public data)", () => {
     // Patrick and Arnav (both 10:00–11:30 AM), Vik, Ron and Rishab.
     expect(timeClasses("10:00–11:30 AM CT")).toHaveLength(2);
     for (const c of timeClasses("10:00–11:30 AM CT")) expect(c).toContain("whitespace-nowrap");
-    expect(timeClasses("11:30 AM–3:30 PM CT")).toHaveLength(1);
-    for (const c of timeClasses("11:30 AM–3:30 PM CT")) expect(c).toContain("whitespace-nowrap");
+    expect(timeClasses("11:30 AM–3:00 PM CT")).toHaveLength(1);
+    for (const c of timeClasses("11:30 AM–3:00 PM CT")) expect(c).toContain("whitespace-nowrap");
     expect(timeClasses("2:30–4:30 PM CT")).toHaveLength(1);
     for (const c of timeClasses("2:30–4:30 PM CT")) expect(c).toContain("whitespace-nowrap");
     for (const c of timeClasses("12:00–5:00 PM CT")) expect(c).toContain("whitespace-nowrap");

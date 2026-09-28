@@ -4,7 +4,7 @@
  *     first screen.
  *   - All six mentors previewed (photo, name, role and company, one availability line): Patrick
  *     "Thu, Oct 1 · 10:00–11:30 AM CT", Arnav "Fri, Oct 2 · 10:00–11:30 AM CT", Ron "Thu, Oct 1 ·
- *     2:30–4:30 PM CT", Rishab "Thu, Oct 1 · 12:00–5:00 PM CT", Vik "Thu, Oct 1 · 11:30 AM–3:30 PM CT",
+ *     2:30–4:30 PM CT", Rishab "Thu, Oct 1 · 12:00–5:00 PM CT", Vik "Thu, Oct 1 · 11:30 AM–3:00 PM CT",
  *     Elliott his first window "Wed, Sept 30 · 9:00 AM–12:00 PM CT" plus "+ 2 more". Every mentor's
  *     times are set: "Scheduling in progress" appears nowhere.
  *   - Featured events (a 2×2 grid): Dan Caruso's fireside chat, the Sept 29 panel, Arnav's happy
@@ -113,11 +113,11 @@ test.describe("Home", () => {
     await expect(card(ELLIOTT.name)).toContainText("9:00 AM–12:00 PM CT");
     await expect(card(ELLIOTT.name)).toContainText("+ 2 more");
     await expect(card(ELLIOTT.name)).not.toContainText(/Scheduling in progress|to be confirmed|to be announced/i);
-    // Vik: his window from his Sept 27 email, Thu, Oct 1 from 11:30 AM to 3:30 PM (no longer
+    // Vik: his window from his Sept 27 email, Thu, Oct 1 from 11:30 AM to 3:00 PM (no longer
     // "Scheduling in progress").
     await expect(card(VIK.name).locator("time")).toHaveText("Thu, Oct 1");
     await expect(card(VIK.name).locator("time")).toHaveAttribute("datetime", "2026-10-01");
-    await expect(card(VIK.name)).toContainText("11:30 AM–3:30 PM CT");
+    await expect(card(VIK.name)).toContainText("11:30 AM–3:00 PM CT");
     await expect(card(VIK.name)).not.toContainText(/Scheduling in progress|to be confirmed|to be announced/i);
     // Every mentor's times are set now: nobody is "Scheduling in progress" (demo mentors included).
     expect(PENDING_MENTORS).toEqual([]);

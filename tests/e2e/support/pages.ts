@@ -93,8 +93,8 @@ export const FAILURE_LAB_SPEAKERS = [
  * Thursday, Oct 1 program blocks around Rishab's noon–5 PM office-hours window: Pitching (11:45 AM–2:15 PM)
  * and Launching From Illinois (3:00–5:00 PM) overlap it; TechRise (5:00–7:00 PM) starts as it ends.
  * Ron's 2:30–4:30 PM window overlaps Rishab's and Launching From Illinois, but not Pitching. Vik's
- * 11:30 AM–3:30 PM window overlaps Pitching, Launching From Illinois and every Thursday window but
- * Patrick's (which ends as Vik's starts).
+ * 11:30 AM–3:00 PM window overlaps Pitching and every Thursday window but Patrick's (which ends as
+ * Vik's starts); Launching From Illinois starts as Vik's window ends.
  */
 export const PITCHING_PATH = "/schedule/science-and-practice-of-pitching";
 export const PITCHING_TITLE = "The Science and Practice of Pitching";

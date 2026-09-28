@@ -5,7 +5,7 @@
  *   - The availability rule: neither a listed window nor broad availability → an error; either one
  *     is enough. Every mentor lists a time now (Vik since Sept 27), so the form never says a
  *     mentor's times aren't set yet, even with all six chosen.
- *   - Vik: "I can make Thu, Oct 1, 11:30 AM–3:30 PM CT"; Rishab: "I can make Thu, Oct 1, 12:00–5:00
+ *   - Vik: "I can make Thu, Oct 1, 11:30 AM–3:00 PM CT"; Rishab: "I can make Thu, Oct 1, 12:00–5:00
  *     PM CT"; Ron: "I can make Thu, Oct 1, 2:30–4:30 PM CT". Like Patrick's window, ticking any of
  *     them is enough on its own.
  *   - Elliott: three windows (Wed, Sep 30, 9:00 AM–12:00 PM and 2:00–5:00 PM CT; Thu, Oct 1,
@@ -217,7 +217,7 @@ test.describe("Validation", () => {
       await expect(mentorWindows(page, mentor), `${mentor.name}: listed times`).toHaveCount(mentor.windowIds.length);
     }
     await expect(mentorWindows(page, ELLIOTT)).toHaveCount(3);
-    await expect(mentorWindows(page, VIK)).toHaveAccessibleName("I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window");
+    await expect(mentorWindows(page, VIK)).toHaveAccessibleName("I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window");
 
     // Nothing ticked yet: a time or broad availability is needed, and the hint says a ticked time is
     // enough (never that anyone's times aren't set yet).
@@ -456,7 +456,7 @@ test.describe("Submitting", () => {
     expect(stored[0].availability_notes).toBe("");
   });
 
-  test("Vik: his Thu, Oct 1 window (11:30 AM–3:30 PM CT) is enough on its own → stored without broad availability", async ({
+  test("Vik: his Thu, Oct 1 window (11:30 AM–3:00 PM CT) is enough on its own → stored without broad availability", async ({
     page,
   }) => {
     const email = uniqueEmail("apply-vik");
@@ -466,9 +466,9 @@ test.describe("Submitting", () => {
     const vikWindow = mentorWindows(page, VIK);
     await expect(vikWindow).toHaveCount(1);
     await expect(vikWindow).toBeChecked();
-    await expect(vikWindow).toHaveAccessibleName("I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window");
+    await expect(vikWindow).toHaveAccessibleName("I can make Thu, Oct 1, 11:30 AM–3:00 PM CT Vik’s office-hours window");
     await expect(applySection(page)).toContainText(
-      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” ticked. Add anyone else you’d like to meet.",
+      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” ticked. Add anyone else you’d like to meet.",
     );
     await expect(applicationForm(page)).toContainText(
       "Sessions are 25 minutes. If you’re matched, Founders will email you a specific session time inside the window you picked.",
@@ -493,7 +493,7 @@ test.describe("Submitting", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].first_choice).toBe(VIK.name);
     expect(stored[0].preferred_mentors).toBe(`1. ${VIK.name}`);
-    expect(stored[0].availability).toBe(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:30 PM CT (window)`);
+    expect(stored[0].availability).toBe(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:00 PM CT (window)`);
     expect(stored[0].availability_notes).toBe("");
   });
 
@@ -615,7 +615,7 @@ test.describe("Submitting", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].first_choice).toBe(VIK.name);
     expect(stored[0].availability).toContain(`${PATRICK.name}: Thu, Oct 1 · 10:00–11:30 AM CT (window)`);
-    expect(stored[0].availability).toContain(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:30 PM CT (window)`);
+    expect(stored[0].availability).toContain(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:00 PM CT (window)`);
     expect(stored[0].availability_notes).toBe(BROAD_AVAILABILITY);
   });
 
@@ -785,7 +785,7 @@ test.describe("Mentor selections survive", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].first_choice).toBe(VIK.name);
     expect(stored[0].availability).toContain(PATRICK.name);
-    expect(stored[0].availability).toContain(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:30 PM CT (window)`);
+    expect(stored[0].availability).toContain(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:00 PM CT (window)`);
     expect(stored[0].availability_notes).toBe("");
   });
 });
@@ -815,7 +815,7 @@ test.describe("Links into the application", () => {
     await expect(mentorWindows(page, VIK)).toBeChecked();
     await expect(applicationForm(page).getByRole("checkbox", { checked: true })).toHaveCount(2);
     await expect(applySection(page)).toContainText(
-      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” ticked.",
+      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:00 PM CT” ticked.",
     );
     await expectClearOfHeader(page, applicationHeading(page), "application heading after /apply redirect");
   });

@@ -224,14 +224,15 @@ export const mentors: Mentor[] = [
       address: "111 St. Marys Rd., Champaign, IL 61820",
       sessionCount: null,
       confirmed: true,
-      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:30 PM at the Illinois Conference Center.",
+      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:00 PM at the Illinois Conference Center.",
     },
-    // From Vik's email (Sept 27). Window ids are stored with applications: never rename them.
+    // From Vik's email (Sept 27): free 11:30 AM–3:30 PM. Organizers end the window at 3:00 so he's free
+    // for the 3 PM panels (no 3:00 session). Window ids are stored with applications: never rename them.
     availability: [
       {
         id: "vikram-lakhwara-2026-10-01",
         date: "2026-10-01",
-        time: { kind: "exact", start: "11:30", end: "15:30" },
+        time: { kind: "exact", start: "11:30", end: "15:00" },
         note: "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
       },
     ],
@@ -239,7 +240,7 @@ export const mentors: Mentor[] = [
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/viklakhwara/" }],
     acceptingApplications: true,
     organizerNotes:
-      "From his email (Sept 27): Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center (street address from the organizers: 111 St Marys Rd, Champaign). He’d like to fit in as many startups as possible and is fine running over, but wants to respect the panel discussions starting at 3 PM and the TechRise Pitch Competition at 5 PM. The window holds eight 25-minute sessions (11:30 to 3:25); the 3:00 one runs into the 3 PM panels. Outside this window his earlier note stands: existing commitments Wednesday through Saturday morning, so don’t schedule him then.",
+      "From his email (Sept 27): Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center (street address from the organizers: 111 St Marys Rd, Champaign). He’d like to fit in as many startups as possible and is fine running over, but wants to respect the panel discussions starting at 3 PM and the TechRise Pitch Competition at 5 PM. Organizers dropped the 3:00 session so he’s free for the 3 PM panels (Sept 27): the window is published as 11:30 AM–3:00 PM, seven 25-minute sessions (11:30 to 2:55). Outside this window his earlier note stands: existing commitments Wednesday through Saturday morning, so don’t schedule him then.",
     sources: [
       BRIEF,
       AGENDA,

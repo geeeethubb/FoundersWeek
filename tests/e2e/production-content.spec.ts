@@ -9,7 +9,7 @@
  *   - Home: exactly six mentor previews, in order — one row of six on wide screens.
  *   - Calendar: 21 entries across 6 days (Mon Sep 28 – Sat Oct 3), with office hours for Elliott
  *     (9:00 AM–12:00 PM and 2:00–5:00 PM) on Wed, Sep 30; Patrick (10:00–11:30 AM, Espresso Royale
- *     at Grainger Library), Vik (11:30 AM–3:30 PM, Illinois Conference Center), Elliott and Rishab
+ *     at Grainger Library), Vik (11:30 AM–3:00 PM, Illinois Conference Center), Elliott and Rishab
  *     (both 12:00–5:00 PM) and Ron (2:30–4:30 PM, BIF) on Thu, Oct 1; and Arnav (10:00–11:30 AM, in
  *     the Siebel Center atrium) on Fri, Oct 2, each sorted by start between the day's program
  *     blocks, with exact overlap lines. Wednesday also lists Arnav's Siebel School talk (3:30 PM, no
@@ -229,7 +229,8 @@ test.describe("Production content (no demo)", () => {
     await expect(row(thursday, patrick)).toContainText("to 11:30 AM");
     await expect(row(thursday, patrick)).toContainText(PATRICK_VENUE);
     await expect(row(thursday, patrick)).not.toContainText(/Location to be announced/);
-    await expect(row(thursday, vik)).toContainText("to 3:30 PM");
+    await expect(row(thursday, vik)).toContainText("to 3:00 PM");
+    await expect(row(thursday, vik)).not.toContainText("3:30 PM");
     await expect(row(thursday, vik)).toContainText(VIK_VENUE);
     await expect(row(thursday, vik)).not.toContainText(/Location to be announced|Scheduling in progress/);
     await expect(row(thursday, elliott)).toContainText("to 5:00 PM");
@@ -239,14 +240,12 @@ test.describe("Production content (no demo)", () => {
     await expect(row(thursday, ron)).toContainText("Business Instructional Facility (BIF)");
     await expect(row(thursday, LAUNCHING_TITLE)).toContainText(`${ARNAV.name} of ${ARNAV.company} is on the panel.`);
 
-    // Overlaps, exactly (in listing order). Vik (11:30 AM–3:30 PM) covers Pitching (11:45 AM–2:15 PM),
-    // Elliott and Rishab (both noon–5 PM), Ron (2:30–4:30 PM) and Launching From Illinois (3:00–5:00
-    // PM); Elliott and Rishab cover each other and the same four; Ron misses Pitching. Patrick's
-    // window ends at 11:30 AM, as Vik's starts, and TechRise starts at 5:00 PM, so neither overlaps
-    // anything.
-    await expect(overlapLine(thursday, vik)).toHaveText(
-      `Overlaps with ${PITCHING_TITLE}, ${elliott}, ${rishab}, ${ron} and ${LAUNCHING_TITLE}`,
-    );
+    // Overlaps, exactly (in listing order). Vik (11:30 AM–3:00 PM) covers Pitching (11:45 AM–2:15 PM),
+    // Elliott and Rishab (both noon–5 PM) and Ron (2:30–4:30 PM); Launching From Illinois (3:00–5:00
+    // PM) starts as his window ends, so it doesn't overlap it. Elliott and Rishab cover each other,
+    // Vik, Pitching, Ron and Launching From Illinois; Ron misses Pitching. Patrick's window ends at
+    // 11:30 AM, as Vik's starts, and TechRise starts at 5:00 PM, so neither overlaps anything.
+    await expect(overlapLine(thursday, vik)).toHaveText(`Overlaps with ${PITCHING_TITLE}, ${elliott}, ${rishab} and ${ron}`);
     await expect(overlapLine(thursday, elliott)).toHaveText(
       `Overlaps with ${vik}, ${PITCHING_TITLE}, ${rishab}, ${ron} and ${LAUNCHING_TITLE}`,
     );
@@ -255,7 +254,7 @@ test.describe("Production content (no demo)", () => {
     );
     await expect(overlapLine(thursday, ron)).toHaveText(`Overlaps with ${vik}, ${elliott}, ${rishab} and ${LAUNCHING_TITLE}`);
     await expect(overlapLine(thursday, PITCHING_TITLE)).toHaveText(`Overlaps with ${vik}, ${elliott} and ${rishab}`);
-    await expect(overlapLine(thursday, LAUNCHING_TITLE)).toHaveText(`Overlaps with ${vik}, ${elliott}, ${rishab} and ${ron}`);
+    await expect(overlapLine(thursday, LAUNCHING_TITLE)).toHaveText(`Overlaps with ${elliott}, ${rishab} and ${ron}`);
     await expect(overlapLine(thursday, patrick)).toHaveCount(0);
     await expect(overlapLine(thursday, TECHRISE_TITLE)).toHaveCount(0);
 
