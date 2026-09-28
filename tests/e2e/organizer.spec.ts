@@ -2,9 +2,9 @@
  * Checklist 6 — the organizer view (/organizers) and /api/health.
  *   - Signed out: /organizers → the sign-in page, with the setup checklist visible;
  *     /api/organizer/export without a session cookie → 401.
- *   - Sign in; the application shaped like spec 4's (Vik first — schedule pending — plus Patrick's
- *     window, with broad availability) is visible with its mentor preferences, the window and the
- *     broad availability.
+ *   - Sign in; the application shaped like spec 4's (Vik first, none of his times ticked, plus
+ *     Patrick's window, with broad availability) is visible with its mentor preferences, the window
+ *     and the broad availability.
  *   - Filters: mentor, first choice, status, "Interest only".
  *   - Capacity: the demo slot "demo-avery-slot-1400" (capacity 1) takes one appointment; a second is
  *     refused as full; the same student can't also hold an overlapping session (Rishab's 2:00 PM);
@@ -13,10 +13,10 @@
  *     with the demo mentor Avery ("Two sessions"): picking one of her slots, on her Sessions board
  *     entry (with "Booked so far: N.") and in the mentor lineup ("hosting two sessions").
  *   - Every exact window is split into 25-minute sessions (5-minute breaks) on the Sessions board and
- *     in the assignment picker: Patrick 3, Arnav 3, Elliott 22 (6 + 6 on Wed, Sep 30, 10 on Thu,
- *     Oct 1), Ron 4, Rishab 10; Vik has none yet. None of the six real mentors carries the
- *     session-count warning. The picker preselects the first open session inside a window the
- *     student ticked (Elliott's Thursday one, not his first Wednesday session).
+ *     in the assignment picker: Patrick 3, Arnav 3, Vik 8 (Thu, Oct 1, 11:30 AM to 3:00 PM), Elliott
+ *     22 (6 + 6 on Wed, Sep 30, 10 on Thu, Oct 1), Ron 4, Rishab 10. None of the six real mentors
+ *     carries the session-count warning. The picker preselects the first open session inside a
+ *     window the student ticked (Elliott's Thursday one, not his first Wednesday session).
  *   - Sessions: students apply to Patrick's window (Thu, Oct 1, 10:00–11:30 AM); organizers see it
  *     split into three 25-minute sessions (10:00, 10:30, 11:00) with no session-count warning (he's
  *     open to hosting all three) and book each one to a different application (capacity 1: a booked
@@ -61,6 +61,7 @@ import {
   storedApplicationsFor,
   uniqueEmail,
   VIK,
+  VIK_SESSIONS,
   visibleText,
   waitForHydration,
   type CreatedApplication,
@@ -84,7 +85,7 @@ const PATRICK_SESSIONS_CSV = PATRICK_SESSIONS.map((s) => `${PATRICK.name}: ${s.l
 const AVERY = DEMO_MENTOR_NAMES[0];
 
 let api: APIRequestContext;
-let vikAndPatrick: CreatedApplication; // Vik first (pending) + Patrick's window + broad availability
+let vikAndPatrick: CreatedApplication; // Vik first (no time of his ticked) + Patrick's window + broad availability
 let ronOnly: CreatedApplication; // Ron only, broad availability only (no time ticked)
 let seatHolder: CreatedApplication;
 let seatSeeker: CreatedApplication;
@@ -318,6 +319,7 @@ test("sign in; the application shows its mentor preferences, the window and the 
   const first = prefs.getByRole("listitem").first();
   await expect(first).toContainText(VIK.name);
   await expect(first).toContainText("First choice");
+  // The student ticked none of Vik's times (only Patrick's window): interest only, for him.
   await expect(first).toContainText("Interest only");
   await expect(prefs.getByRole("listitem").filter({ hasText: PATRICK.name }).first()).toContainText("10:00–11:30");
   await expect(prefs).toContainText("Availability notes");
@@ -451,19 +453,21 @@ test("demo slot capacity: one seat assigned, the next is blocked as full; no ove
   await expect(page.getByRole("region", { name: "Appointments" })).toContainText("2:00–2:25 PM CT");
 });
 
-test("every window as 25-minute sessions: Patrick 3, Arnav 3, Elliott 6 + 6 + 10, Ron 4, Rishab 10; Vik has none yet", async ({
+test("every window as 25-minute sessions: Patrick 3, Arnav 3, Vik 8, Elliott 6 + 6 + 10, Ron 4, Rishab 10", async ({
   page,
 }) => {
   await signIn(page);
   const grids: { mentor: MentorFixture; windows: { label: string; sessions: SessionFixture[] }[] }[] = [
     { mentor: PATRICK, windows: [{ label: "Thu, Oct 1 · 10:00–11:30 AM CT", sessions: PATRICK_SESSIONS }] },
     { mentor: ARNAV, windows: [{ label: "Fri, Oct 2 · 10:00–11:30 AM CT", sessions: ARNAV_SESSIONS }] },
+    // Vik's window (from his email, Sept 27): eight sessions, the last from 3:00 to 3:25 PM.
+    { mentor: VIK, windows: [{ label: "Thu, Oct 1 · 11:30 AM–3:30 PM CT", sessions: VIK_SESSIONS }] },
     // Elliott's three windows, in order, each on its own grid: 22 sessions in all.
     { mentor: ELLIOTT, windows: ELLIOTT_WINDOWS.map((w, i) => ({ label: w.line, sessions: ELLIOTT_SESSIONS[i] })) },
     { mentor: RON, windows: [{ label: "Thu, Oct 1 · 2:30–4:30 PM CT", sessions: RON_SESSIONS }] },
     { mentor: RISHAB, windows: [{ label: "Thu, Oct 1 · 12:00–5:00 PM CT", sessions: RISHAB_SESSIONS }] },
   ];
-  expect(grids.map((g) => g.windows.map((w) => w.sessions.length))).toEqual([[3], [3], [6, 6, 10], [4], [10]]);
+  expect(grids.map((g) => g.windows.map((w) => w.sessions.length))).toEqual([[3], [3], [8], [6, 6, 10], [4], [10]]);
 
   // The dashboard's Sessions board: the rule, then each mentor's windows split on the 25 + 5 grid.
   await page.goto("/organizers");
@@ -485,7 +489,6 @@ test("every window as 25-minute sessions: Patrick 3, Arnav 3, Elliott 6 + 6 + 10
     // No real mentor set a session count (Patrick is open to all three of his), so no warning.
     await expect(section).not.toContainText(SESSION_LIMIT_MARKER);
   }
-  await expect(board.getByRole("region", { name: VIK.name, exact: true })).toHaveCount(0);
   // The one warning on the board is the demo mentor's (her "Two sessions"), none for a real mentor.
   expect(countMatches(await visibleText(board), SESSION_LIMIT_MARKER), "one warning on the board").toBe(1);
   await expect(board.getByRole("region", { name: AVERY, exact: true })).toContainText(
@@ -503,19 +506,24 @@ test("every window as 25-minute sessions: Patrick 3, Arnav 3, Elliott 6 + 6 + 10
 
   // An application for Ron (broad availability only): his four sessions come first, as his
   // first choice, and the first one is preselected; then every other mentor with sessions, in the
-  // published order (Elliott's 22 included). Vik has nothing to assign yet.
+  // published order (Vik's eight and Elliott's 22 included).
   await page.goto(`/organizers/applications/${ronOnly.id}`);
   const picker = sessionPicker(page);
   await waitForHydration(picker);
   const groupLabels = await picker.locator("optgroup").evaluateAll((gs) => gs.map((g) => g.getAttribute("label") ?? ""));
-  expect(groupLabels.slice(0, 5)).toEqual([
+  expect(groupLabels.slice(0, 6)).toEqual([
     `${RON.name} · 1st choice`,
     `${PATRICK.name} · not requested`,
     `${ARNAV.name} · not requested`,
+    `${VIK.name} · not requested`,
     `${ELLIOTT.name} · not requested`,
     `${RISHAB.name} · not requested`,
   ]);
-  expect(groupLabels.join(" | ")).not.toMatch(new RegExp(escapeRegExp(VIK.firstName)));
+  const vikGroup = picker.locator("optgroup").filter({ has: page.locator(`option[value="${VIK_SESSIONS[0].id}"]`) });
+  await expect(vikGroup).toHaveAttribute("label", `${VIK.name} · not requested`);
+  expect(await vikGroup.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
+    VIK_SESSIONS.map((s) => s.id),
+  );
   const elliottGroup = picker.locator("optgroup").filter({ has: page.locator(`option[value="${ELLIOTT_SESSIONS[0][0].id}"]`) });
   expect(await elliottGroup.locator("option").evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))).toEqual(
     ELLIOTT_SESSIONS.flat().map((s) => s.id),

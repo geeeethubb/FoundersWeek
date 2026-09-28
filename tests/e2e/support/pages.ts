@@ -17,6 +17,7 @@ export const PUBLIC_PAGES = [
   "/schedule/office-hours-elliott-notrica-2026-09-30-am",
   "/schedule/office-hours-elliott-notrica-2026-09-30-pm",
   "/schedule/office-hours-patrick-haddox-2026-10-01-am",
+  "/schedule/office-hours-vikram-lakhwara-2026-10-01",
   "/schedule/office-hours-elliott-notrica-2026-10-01-pm",
   "/schedule/office-hours-rishab-veldur-2026-10-01",
   "/schedule/office-hours-ron-lewis-2026-10-01-pm",
@@ -91,7 +92,9 @@ export const FAILURE_LAB_SPEAKERS = [
 /**
  * Thursday, Oct 1 program blocks around Rishab's noon–5 PM office-hours window: Pitching (11:45 AM–2:15 PM)
  * and Launching From Illinois (3:00–5:00 PM) overlap it; TechRise (5:00–7:00 PM) starts as it ends.
- * Ron's 2:30–4:30 PM window overlaps Rishab's and Launching From Illinois, but not Pitching.
+ * Ron's 2:30–4:30 PM window overlaps Rishab's and Launching From Illinois, but not Pitching. Vik's
+ * 11:30 AM–3:30 PM window overlaps Pitching, Launching From Illinois and every Thursday window but
+ * Patrick's (which ends as Vik's starts).
  */
 export const PITCHING_PATH = "/schedule/science-and-practice-of-pitching";
 export const PITCHING_TITLE = "The Science and Practice of Pitching";
@@ -100,6 +103,9 @@ export const LAUNCHING_PATH = "/schedule/entrepreneurial-impact-launching-from-i
 export const LAUNCHING_TITLE = "Entrepreneurial Impact: Launching From Illinois";
 export const TECHRISE_PATH = "/schedule/techrise-pitch-competition";
 export const TECHRISE_TITLE = "TechRise Pitch Competition and Panel Discussion";
+/** Friday's two university events are at the Illinois Conference Center (street address from the organizers). */
+export const ICC_VENUE = "Illinois Conference Center";
+export const ICC_ADDRESS = "111 St. Marys Rd., Champaign, IL 61820";
 export const SHOWCASE_PATH = "/schedule/founders-showcase-day-sessions";
 export const SHOWCASE_TITLE = "Founders Showcase Day Sessions";
 /** The university's Friday evening event — a separate event that stays on the calendar. */

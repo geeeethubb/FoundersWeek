@@ -420,7 +420,7 @@ export const events: ScheduleEvent[] = [
     involvement: "week",
     foundersPick: true,
     organizer: UNIVERSITY,
-    location: { kind: "in-person", venue: "Illinois Conference Center" },
+    location: { kind: "in-person", venue: "Illinois Conference Center", address: "111 St. Marys Rd., Champaign, IL 61820" },
     summary:
       "A full day of talks and panels on quantum, physical AI, health innovation and funding in the Midwest. Office-hours mentors Rishab Veldur, Arnav Mishra, Patrick Haddox and Vik Lakhwara are on stage.",
     description:
@@ -519,7 +519,14 @@ export const events: ScheduleEvent[] = [
       },
       { start: "15:50", end: "17:30", title: "Innovation Tours and Structured Networking", people: [] },
     ],
-    sources: [AGENDA],
+    sources: [
+      AGENDA,
+      {
+        label: "Organizer update: Illinois Conference Center, 111 St Marys Rd, Champaign, IL 61820",
+        note: "Street address supplied by Founders organizers.",
+        checked: "2026-09-27",
+      },
+    ],
   },
   {
     id: "founders-evening-showcase-and-reception",
@@ -531,7 +538,7 @@ export const events: ScheduleEvent[] = [
     involvement: "week",
     foundersPick: false,
     organizer: UNIVERSITY,
-    location: { kind: "in-person", venue: "Illinois Conference Center" },
+    location: { kind: "in-person", venue: "Illinois Conference Center", address: "111 St. Marys Rd., Champaign, IL 61820" },
     summary:
       "Live music, the Entrepreneurship FamILLy Meeting panel, a fast-pitch showcase of 10 startups, awards and networking.",
     description:
@@ -539,7 +546,14 @@ export const events: ScheduleEvent[] = [
     speakers: [],
     topics: ["pitching", "networking"],
     registration: null,
-    sources: [AGENDA],
+    sources: [
+      AGENDA,
+      {
+        label: "Organizer update: Illinois Conference Center, 111 St Marys Rd, Champaign, IL 61820",
+        note: "Street address supplied by Founders organizers.",
+        checked: "2026-09-27",
+      },
+    ],
   },
 
   // ── Saturday, October 3 ────────────────────────────────────────────────────────────

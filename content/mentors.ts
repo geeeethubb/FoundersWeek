@@ -218,24 +218,36 @@ export const mentors: Mentor[] = [
     askMeAbout: null,
     goodFitFor: null,
     session: {
-      format: null,
+      format: "in-person",
       durationMinutes: SESSION_MINUTES,
-      location: null,
+      location: "Illinois Conference Center",
+      address: "111 St. Marys Rd., Champaign, IL 61820",
       sessionCount: null,
-      confirmed: false,
-      note: "We’re still working out when and how Vik will hold office hours. Founders will follow up once availability is finalized.",
+      confirmed: true,
+      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:30 PM at the Illinois Conference Center.",
     },
-    // Scheduling in progress. Vik has existing commitments Wednesday through Saturday morning —
-    // those are NOT available slots; do not add a window in that period.
-    availability: [],
+    // From Vik's email (Sept 27). Window ids are stored with applications: never rename them.
+    availability: [
+      {
+        id: "vikram-lakhwara-2026-10-01",
+        date: "2026-10-01",
+        time: { kind: "exact", start: "11:30", end: "15:30" },
+        note: "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
+      },
+    ],
     slots: [],
     links: [{ label: "LinkedIn", url: "https://www.linkedin.com/in/viklakhwara/" }],
     acceptingApplications: true,
     organizerNotes:
-      "Existing commitments Wednesday through Saturday morning. These are not available slots, so don’t schedule or show that period as available.",
+      "From his email (Sept 27): Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center (street address from the organizers: 111 St Marys Rd, Champaign). He’d like to fit in as many startups as possible and is fine running over, but wants to respect the panel discussions starting at 3 PM and the TechRise Pitch Competition at 5 PM. The window holds eight 25-minute sessions (11:30 to 3:25); the 3:00 one runs into the 3 PM panels. Outside this window his earlier note stands: existing commitments Wednesday through Saturday morning, so don’t schedule him then.",
     sources: [
       BRIEF,
       AGENDA,
+      {
+        label: "Organizer update: Vik’s email, Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center",
+        note: "From Vikram Lakhwara (Sept 27), relayed by Founders organizers. Street address from the organizers.",
+        checked: "2026-09-27",
+      },
       {
         label: "Stakehouse team page (title: Founder & Managing Member)",
         url: "https://www.stakehouse.fund/team",

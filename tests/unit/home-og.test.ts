@@ -47,6 +47,11 @@ const DATE_ONLY_MENTOR: Mentor = {
   acceptingApplications: true,
   sources: [],
 };
+/**
+ * A synthetic mentor with no published windows yet ("Scheduling in progress"). Every real mentor
+ * has a window now (Vik's arrived Sept 27), but the path stays for future mentors.
+ */
+const SCHEDULING_MENTOR: Mentor = { ...DATE_ONLY_MENTOR, id: "fixture-scheduling", availability: [], slots: [] };
 /** The fixture mentor's generated office-hours calendar entry. */
 const dateOnlyEntry = () => {
   const entries = officeHoursToEntries(DATE_ONLY_MENTOR, getSite());
@@ -70,7 +75,7 @@ const SIX_NAMES =
   "Patrick Haddox, Arnav Mishra, Vikram “Vik” Lakhwara, Elliott Notrica, Ron Lewis and Rishab Veldur";
 const SITE_ALT = `Founders Office Hours during Founders Week (Sept 30 – Oct 3) at UIUC: meet ${SIX_NAMES}. Apply for Office Hours.`;
 const PRIVATE =
-  /commitments|much more available|extra sessions|anytime after 9 AM|sessions in all|Wednesday through Saturday|Revenue strategy|Startup financial planning|basis|student teams|phone number|email signature|Oct 1 and 2/i;
+  /commitments|much more available|extra sessions|anytime after 9 AM|sessions in all|Wednesday through Saturday|running over|as many startups|panel discussions starting|Revenue strategy|Startup financial planning|basis|student teams|phone number|email signature|Oct 1 and 2/i;
 
 describe("social image models (public data)", () => {
   beforeEach(() => {
@@ -142,14 +147,24 @@ describe("social image models (public data)", () => {
       ],
     };
     expect(mentorCardModel(morning, getSite()).availability).toEqual({ known: true, text: "Fri, Oct 2 · Morning, before noon CT" });
-    // Only Vik is still scheduling.
-    expect(mentorModel("vikram-lakhwara").availability).toEqual({ known: false, text: "Scheduling in progress" });
-    expect(mentorModel("vikram-lakhwara").alt).toMatch(/\. Scheduling in progress\.$/);
-    expect(
-      MENTOR_IDS.filter((id) => !mentorModel(id).availability.known),
-    ).toEqual(["vikram-lakhwara"]);
-    expect(mentorModel("vikram-lakhwara")).toMatchObject({ role: "Founder & Managing Member", company: "Stakehouse" });
+    // Vik's Thursday window at the Illinois Conference Center (his email, Sept 27).
+    expect(mentorModel("vikram-lakhwara")).toEqual({
+      label: "Founders Week 2026 · Office Hours",
+      person: { id: "vikram-lakhwara", name: "Vikram “Vik” Lakhwara", initials: "VL", headshot: "/mentors/vikram-lakhwara.jpg" },
+      name: "Vikram “Vik” Lakhwara",
+      role: "Founder & Managing Member",
+      company: "Stakehouse",
+      availability: { known: true, text: "Thu, Oct 1 · 11:30 AM–3:30 PM CT" },
+      cta: "Apply for Office Hours",
+      alt: "Founders Office Hours with Vikram “Vik” Lakhwara, Founder & Managing Member, Stakehouse. Available Thu, Oct 1, 11:30 AM–3:30 PM CT.",
+    });
     expect(mentorModel("vikram-lakhwara", closed()).cta).toBeNull();
+    // No production mentor is still scheduling...
+    expect(MENTOR_IDS.filter((id) => !mentorModel(id).availability.known)).toEqual([]);
+    // ...but the path stays for future mentors (fixture with no windows).
+    expect(mentorCardModel(SCHEDULING_MENTOR, getSite()).availability).toEqual({ known: false, text: "Scheduling in progress" });
+    expect(mentorCardModel(SCHEDULING_MENTOR, getSite()).alt).toMatch(/\. Scheduling in progress\.$/);
+    expect(mentorCardModel(SCHEDULING_MENTOR, closed()).cta).toBeNull();
     // Elliott has three windows; the card's one line is his first (Wed Sept 30, 9 AM to noon) + 2 more.
     expect(mentorModel("elliott-notrica")).toEqual({
       label: "Founders Week 2026 · Office Hours",
@@ -303,26 +318,28 @@ describe("social image models (public data)", () => {
       alt: "Office hours with Rishab Veldur: Thursday, Oct 1, 12:00–5:00 PM CT, Location to be announced. Founders × Founders Week.",
     });
     expect(eventCardModel(entry("office-hours-rishab-veldur-2026-10-01"), closed()).cta).toBeNull();
-    // Office-hours cards on the calendar: Elliott twice on Sept 30; Patrick, Elliott, Rishab and Ron on
-    // Oct 1; Arnav on Oct 2; none for Rishab on Oct 2.
+    // Office-hours cards on the calendar: Elliott twice on Sept 30; Patrick, Vik, Elliott, Rishab and
+    // Ron on Oct 1; Arnav on Oct 2; none for Rishab on Oct 2.
     expect(getScheduleEntries().filter((e) => e.kind === "office-hours").map((e) => e.id)).toEqual([
       "office-hours-elliott-notrica-2026-09-30-am",
       "office-hours-elliott-notrica-2026-09-30-pm",
       "office-hours-patrick-haddox-2026-10-01-am",
+      "office-hours-vikram-lakhwara-2026-10-01",
       "office-hours-elliott-notrica-2026-10-01-pm",
       "office-hours-rishab-veldur-2026-10-01",
       "office-hours-ron-lewis-2026-10-01-pm",
       "office-hours-arnav-mishra-2026-10-02-am",
     ]);
-    // Thursday in start-time order: Elliott's and Rishab's noon windows (content order on the tie) sit
-    // between the 11:45 and 3:00 PM program blocks, and Ron's 2:30 window between Rishab's and the
-    // 3:00 PM block.
+    // Thursday in start-time order: Vik's 11:30 window starts as Patrick's ends; Elliott's and
+    // Rishab's noon windows (content order on the tie) sit between the 11:45 and 3:00 PM program
+    // blocks, and Ron's 2:30 window between Rishab's and the 3:00 PM block.
     expect(
       getScheduleEntries()
         .filter((e) => e.date === "2026-10-01")
         .map((e) => [e.id, eventCardModel(e, site).when]),
     ).toEqual([
       ["office-hours-patrick-haddox-2026-10-01-am", "10:00–11:30 AM CT"],
+      ["office-hours-vikram-lakhwara-2026-10-01", "11:30 AM–3:30 PM CT"],
       ["science-and-practice-of-pitching", "11:45 AM–2:15 PM CT"],
       ["office-hours-elliott-notrica-2026-10-01-pm", "12:00–5:00 PM CT"],
       ["office-hours-rishab-veldur-2026-10-01", "12:00–5:00 PM CT"],
@@ -353,6 +370,30 @@ describe("social image models (public data)", () => {
     expect(JSON.stringify(eventCardModel(entry("office-hours-ron-lewis-2026-10-01-pm"), site))).not.toMatch(
       /Oct 4|October 4|2026-10-04/,
     );
+  });
+
+  it("Vik's office-hours calendar entry: Thu, Oct 1, 11:30 AM–3:30 PM CT at the Illinois Conference Center, hosted by Founders", () => {
+    const site = getSite();
+    const VIK_OH = "office-hours-vikram-lakhwara-2026-10-01";
+    expect(eventCardModel(entry(VIK_OH), site)).toEqual({
+      label: "Founders Week 2026 · Calendar",
+      weekday: "Thursday",
+      day: "1",
+      month: "October",
+      involvement: { label: "Hosted by Founders", tone: "solid" },
+      status: null,
+      title: "Office hours with Vikram “Vik” Lakhwara",
+      people: [],
+      morePeople: 0,
+      when: "11:30 AM–3:30 PM CT",
+      where: "Illinois Conference Center",
+      cta: "Apply for Office Hours",
+      alt: "Office hours with Vikram “Vik” Lakhwara: Thursday, Oct 1, 11:30 AM–3:30 PM CT, Illinois Conference Center. Founders × Founders Week.",
+    });
+    expect(eventCardModel(entry(VIK_OH), closed()).cta).toBeNull();
+    const json = JSON.stringify(eventCardModel(entry(VIK_OH), site));
+    expect(json).not.toMatch(PRIVATE);
+    expect(json).not.toMatch(/Scheduling in progress|to be announced|TechRise/i);
   });
 
   it("Arnav's office-hours calendar entry: Fri, Oct 2, 10:00–11:30 AM CT in the Atrium, Siebel Center for Computer Science", () => {
@@ -517,6 +558,8 @@ describe("social image assets and rendering", () => {
     // A date-only window, and a mentor without a headshot (initials are drawn).
     await isPng(await renderMentorCard(mentorCardModel(DATE_ONLY_MENTOR, site)));
     await isPng(await renderEventCard(eventCardModel(dateOnlyEntry(), site)));
+    // A mentor still scheduling (fixture): "Scheduling in progress".
+    await isPng(await renderMentorCard(mentorCardModel(SCHEDULING_MENTOR, site)));
   }, 60_000);
 });
 
@@ -741,8 +784,9 @@ describe("social image fonts cover every rendered character", () => {
     const s = siteCardModel(site, getMentors());
     const text: string[] = [s.label, s.kicker, s.headline, s.sub, s.peopleLine, s.cta ?? "", "Founders"];
     text.push(...s.people.map((p) => p.initials));
-    // The fixture mentor keeps the date-only wording ("Exact time to be confirmed") covered.
-    for (const m of [...getMentors(), DATE_ONLY_MENTOR]) {
+    // The fixture mentors keep the date-only wording ("Exact time to be confirmed") and "Scheduling in
+    // progress" covered now that no real mentor shows either.
+    for (const m of [...getMentors(), DATE_ONLY_MENTOR, SCHEDULING_MENTOR]) {
       const model = mentorCardModel(m, site);
       text.push(model.label, model.name, model.role ?? "", model.company ?? "", model.availability.text, model.cta ?? "");
     }
@@ -786,8 +830,13 @@ describe("sitemap and robots", () => {
     expect(urls).toHaveLength(3 + getMentors().length + getScheduleEntries().length);
     expect(urls).toContain("https://founders.example.edu/schedule/office-hours-ron-lewis-2026-10-01-pm");
     expect(urls).toContain("https://founders.example.edu/schedule/building-an-ai-native-company");
-    // Three public pages, six mentor profiles and twenty calendar entries (Arnav's Siebel talk included).
-    expect([getMentors().length, getScheduleEntries().length, urls.length]).toEqual([6, 20, 29]);
+    expect(urls).toContain("https://founders.example.edu/schedule/office-hours-vikram-lakhwara-2026-10-01");
+    // Three public pages, six mentor profiles and twenty-one calendar entries (Arnav's Siebel talk and
+    // Vik's Thursday office hours included).
+    expect([getMentors().length, getScheduleEntries().length, urls.length]).toEqual([6, 21, 30]);
+    // Every page was last reviewed with the content (site.week.lastReviewed, Sept 27).
+    expect(getSite().week.lastReviewed).toBe("2026-09-27");
+    expect(new Set(sitemap().map((u) => u.lastModified))).toEqual(new Set(["2026-09-27"]));
     for (const w of ["2026-09-30-am", "2026-09-30-pm", "2026-10-01-pm"]) {
       expect(urls).toContain(`https://founders.example.edu/schedule/office-hours-elliott-notrica-${w}`);
     }

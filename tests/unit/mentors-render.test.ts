@@ -7,8 +7,12 @@
  * numbering, "To be confirmed" tables, the availability glossary, "one-on-one" claims) renders.
  * Rishab Veldur (Auvi Labs) has one exact window (Thu, Oct 1, noon to 5 PM CT), background chips and
  * a good-fit paragraph instead of a topic list, and his profile never makes medical-device claims.
- * The date-only path ("Exact time to be confirmed") and the part-of-day path ("Morning, exact window
- * pending") are rendered with synthetic fixture mentors: every real mentor with a window has exact times.
+ * Vik Lakhwara has one exact window too (Thu, Oct 1, 11:30 AM to 3:30 PM CT at the Illinois Conference
+ * Center, from his email of Sept 27), and nothing from that email beyond the window and the place
+ * (running over, the 3 PM panels, TechRise, the session count) ever renders.
+ * No real mentor is still "Scheduling in progress" now, so that path, the date-only path ("Exact time
+ * to be confirmed") and the part-of-day path ("Morning, exact window pending") are rendered with
+ * synthetic fixture mentors.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -24,6 +28,20 @@ vi.mock("@/components/apply/apply-section", () => ({
     ),
 }));
 
+// Every production mentor has published times now, but the pending path ("Scheduling in progress")
+// stays for future mentors. A test can add fixture mentors to the public content the pages read
+// (getMentors / getMentor) to render that path through the real pages; the list is empty otherwise,
+// so every other test sees production content unchanged.
+const extraMentors = vi.hoisted(() => ({ list: [] as Mentor[] }));
+vi.mock("@/content", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/content")>();
+  return {
+    ...actual,
+    getMentors: () => [...actual.getMentors(), ...extraMentors.list],
+    getMentor: (id: string) => actual.getMentor(id) ?? extraMentors.list.find((m) => m.id === id),
+  };
+});
+
 import OfficeHoursPage, { generateMetadata as officeHoursMetadata } from "@/app/office-hours/page";
 import MentorProfilePage, { generateMetadata as profileMetadata } from "@/app/office-hours/[id]/page";
 import MentorNotFound from "@/app/office-hours/[id]/not-found";
@@ -33,7 +51,7 @@ import { site } from "@/content/site";
 import type { Mentor } from "@/content/types";
 import { MentorCard, MentorGrid } from "@/components/mentors/mentor-card";
 import { OfficeHoursLines } from "@/components/mentors/mentor-profile";
-import { buildApplicationCatalog } from "@/lib/applications/catalog";
+import { buildApplicationCatalog, mentorNeedsBroadAvailability } from "@/lib/applications/catalog";
 import { resolvePrefill } from "@/lib/applications/prefill";
 import { INTEREST_COPY } from "@/lib/mentors";
 import {
@@ -83,7 +101,7 @@ const LINKS: Record<string, { label: string; url: string }[]> = {
 const SELECT_HREFS: Record<string, string> = {
   "patrick-haddox": "/office-hours?mentor=patrick-haddox&window=patrick-haddox-2026-10-01-am#apply",
   "arnav-mishra": "/office-hours?mentor=arnav-mishra&window=arnav-mishra-2026-10-02-am#apply",
-  "vikram-lakhwara": "/office-hours?mentor=vikram-lakhwara#apply",
+  "vikram-lakhwara": "/office-hours?mentor=vikram-lakhwara&window=vikram-lakhwara-2026-10-01#apply",
   "elliott-notrica": "/office-hours?mentor=elliott-notrica#apply",
   "ron-lewis": "/office-hours?mentor=ron-lewis&window=ron-lewis-2026-10-01-pm#apply",
   "rishab-veldur": "/office-hours?mentor=rishab-veldur&window=rishab-veldur-2026-10-01#apply",
@@ -102,6 +120,17 @@ const RISHAB_LINE = "Thu, Oct 1 · 12:00–5:00 PM CT";
 /** Elliott's three exact windows (organizer update, Sept 25), in order. */
 const ELLIOTT_LINES = ["Wed, Sep 30 · 9:00 AM–12:00 PM CT", "Wed, Sep 30 · 2:00–5:00 PM CT", "Thu, Oct 1 · 12:00–5:00 PM CT"];
 const ELLIOTT_NOTE = "Elliott is free at these times, but they aren’t booked appointments. We’ll schedule sessions inside them.";
+/** Vik's one exact window (his email, Sept 27), its public note and the place (street address from the organizers). */
+const VIK_LINE = "Thu, Oct 1 · 11:30 AM–3:30 PM CT";
+const VIK_WINDOW_NOTE = "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
+const VIK_PLACE = "Illinois Conference Center, 111 St. Marys Rd., Champaign, IL 61820";
+/**
+ * What only organizers may know from Vik's email and his earlier note: that he's fine running over,
+ * wants to respect the 3 PM panels and the TechRise Pitch Competition at 5 PM, how many sessions the
+ * window holds, and his existing commitments Wednesday through Saturday morning.
+ */
+const VIK_ORGANIZER_ONLY =
+  /running over|run over|as many startups|panel discussions|3 PM panels|TechRise|commitments|Wednesday|through Saturday|Saturday morning|\bemail\b|Sept(ember)? 27/i;
 
 /**
  * A synthetic mentor with one date-only window (the date is set, the time isn't), so the
@@ -157,6 +186,30 @@ const roughMentor: Mentor = {
   ],
 };
 
+/**
+ * A synthetic mentor still "Scheduling in progress" (no windows or slots), shaped like Vik's entry
+ * before his window came in on Sept 27, so the pending rendering stays covered for future mentors.
+ * Public shape: the content loader strips organizer notes before any page sees a mentor.
+ */
+const PENDING_APPLY_HREF = "/office-hours?mentor=fixture-pending-mentor#apply";
+const pendingMentor: Mentor = {
+  ...tbaMentor,
+  id: "fixture-pending-mentor",
+  name: "Pat Fixture",
+  firstName: "Pat",
+  bio: { status: "approved", value: "Pat is a fictional founder used only in tests. Nothing here is real." },
+  session: {
+    format: null,
+    durationMinutes: site.officeHours.sessionMinutes,
+    location: null,
+    sessionCount: null,
+    confirmed: false,
+    note: "We’re still working out when and how Pat will hold office hours. Founders will follow up once availability is finalized.",
+  },
+  availability: [],
+  slots: [],
+};
+
 const MATCHING_SENTENCE =
   "Founders will match students by interests and availability and email selected applicants to confirm.";
 
@@ -182,6 +235,13 @@ const FORBIDDEN_FRAGMENTS = [
   "Oct 1 and 2",
   "email signature",
   "phone number",
+  // Vik's email to the organizers (organizer-only): everything beyond his window and its place.
+  "fine running over",
+  "as many startups",
+  "panel discussions starting at 3 PM",
+  "3 PM panels",
+  "TechRise Pitch Competition at 5 PM",
+  "eight 25-minute sessions",
 ];
 
 /**
@@ -396,7 +456,10 @@ beforeEach(() => {
   vi.stubEnv("SHOW_DEMO_CONTENT", "");
   vi.stubEnv("SHOW_DRAFT_CONTENT", "");
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  extraMentors.list = [];
+});
 
 describe("Office Hours page", () => {
   async function renderPage(searchParams: Record<string, string> = {}): Promise<string> {
@@ -462,10 +525,38 @@ describe("Office Hours page", () => {
     expect(t).toContain("How matching works");
     expect(t.split(MATCHING_SENTENCE).length - 1).toBe(1);
     expect(t).toContain("applying doesn’t reserve a time");
-    // Pending mentor schedules never block an application.
-    expect(t).toContain("If a mentor’s times aren’t set yet, share your general availability instead.");
+    // Every mentor has published times now (Vik's since Sept 27), so nobody is asked for general
+    // availability instead; the sentence comes back with a mentor whose times aren't set (below).
+    expect(t).toContain(`How matching works Tell us what you’re working on and when you’re free. ${MATCHING_SENTENCE}`);
+    expect(t).not.toContain("If a mentor’s times aren’t set yet");
+    expect(t).not.toContain("general availability");
     // What "Select mentor" does, said once above the grid.
     expect(t).toContain("Select anyone you’d like to meet and they’ll be added to your application below.");
+  });
+
+  it("asks for general availability only while a mentor's times aren't set (fixture mentors; nobody in production)", async () => {
+    const matching = (html: string) =>
+      text(/<section\b[^>]*aria-labelledby="matching-heading"[\s\S]*?<\/section>/.exec(html)![0]);
+    const PENDING_SENTENCE = "If a mentor’s times aren’t set yet, share your general availability instead.";
+    // Same rule as the application: no production mentor needs a student's general availability.
+    expect(buildApplicationCatalog(getMentors()).mentors.some(mentorNeedsBroadAvailability)).toBe(false);
+    expect(matching(await renderPage())).not.toContain(PENDING_SENTENCE);
+
+    // A mentor still scheduling (fixture) brings the sentence back, once, and pending mentors never
+    // block an application: the card still offers "Select mentor" with the mentor preselected.
+    extraMentors.list = [pendingMentor];
+    const html = await renderPage();
+    expect(matching(html)).toContain(
+      `How matching works Tell us what you’re working on and when you’re free. ${PENDING_SENTENCE} ${MATCHING_SENTENCE}`,
+    );
+    expect(text(html).split(PENDING_SENTENCE).length - 1).toBe(1);
+    const card = cards(html).find((c) => c.includes('id="mentor-fixture-pending-mentor"'))!;
+    expect(text(card)).toContain("Office hours: Scheduling in progress Select mentor: Pat Fixture");
+    expect(hrefs(card)[0]).toBe(PENDING_APPLY_HREF);
+
+    // So does a date-only window (fixture): the date is set, the time isn't.
+    extraMentors.list = [tbaMentor];
+    expect(matching(await renderPage())).toContain(PENDING_SENTENCE);
   });
 
   it("states the session rule once, in “How matching works”, from site.officeHours", async () => {
@@ -559,11 +650,14 @@ describe("mentor cards", () => {
     expect(patrick).toContain("Office hours: Thu, Oct 1 · 10:00–11:30 AM CT");
     expect(arnav).toContain("Office hours: Fri, Oct 2 · 10:00–11:30 AM CT");
     expect(ron).toContain("Office hours: Thu, Oct 1 · 2:30–4:30 PM CT");
-    expect(vik).toContain("Office hours: Scheduling in progress");
+    // Vik's one window (Sept 27): the whole card, the window preselected by "Select mentor".
+    expect(vik.trim()).toBe(
+      `Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse Can help with Raising a pre-seed round What early-stage investors look for Fundraising as a Midwest university founder Office hours: ${VIK_LINE} Select mentor: Vikram “Vik” Lakhwara Profile: Vikram “Vik” Lakhwara`,
+    );
     // Elliott's first window, then how many more (the profile lists all three).
     expect(elliott).toContain(`Office hours: ${ELLIOTT_LINES[0]} · +2 more Select mentor`);
-    expect(elliott).not.toContain("Scheduling in progress");
-    expect(all.join(" ").split("Scheduling in progress").length - 1).toBe(1); // Vik only
+    // Nobody is still scheduling (the pending card is covered with a fixture mentor below).
+    expect(all.join(" ")).not.toContain("Scheduling in progress");
     expect(rishab).toContain(`Office hours: ${RISHAB_LINE}`);
     // No real mentor has a date-only or part-of-day window any more.
     expect(all.join(" ")).not.toContain("Exact time to be confirmed");
@@ -644,6 +738,35 @@ describe("mentor cards", () => {
     );
     expect(text(card)).toContain("Office hours: Fri, Oct 2 · Morning, exact window pending");
     expect(hrefs(card)[0]).toBe("/office-hours?mentor=fixture-rough-mentor&window=fixture-rough-2026-10-02-am#apply");
+  });
+
+  it("a mentor still scheduling (fixture) reads 'Office hours: Scheduling in progress', and 'Select mentor' preselects no time", () => {
+    const card = renderToStaticMarkup(
+      createElement(MentorCard, { card: mentorCardView(pendingMentor, { applicationsOpen: true }) }),
+    );
+    expect(card).toContain('id="mentor-fixture-pending-mentor"');
+    expect(text(card).trim()).toBe(
+      "PF Pat Fixture Founder, Fixture Co Pat is a fictional founder used only in tests. Office hours: Scheduling in progress Select mentor: Pat Fixture Profile: Pat Fixture",
+    );
+    // No time to mark up, and no window to preselect: the mentor alone.
+    expect(card).not.toMatch(/<time\b/);
+    expect(hrefs(card)).toEqual([PENDING_APPLY_HREF, "/office-hours/fixture-pending-mentor"]);
+    expectNothingRetired(card);
+    expectNoEmDash(card);
+  });
+
+  it("Vik's card: his Thursday 11:30 AM–3:30 PM window, only the date marked up, and 'Select mentor' with his window", () => {
+    const card = cards(renderGrid())[2];
+    expect(card).toContain('id="mentor-vikram-lakhwara"');
+    expect(card).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
+    expect(card.match(/<time\b/g)).toHaveLength(1);
+    expect(hrefs(card)).toEqual([SELECT_HREFS["vikram-lakhwara"], "/office-hours/vikram-lakhwara"]);
+    // The place and the window's note are profile material; organizer-only details never render.
+    const t = text(card);
+    expect(t).not.toContain("Illinois Conference Center");
+    expect(t).not.toContain(VIK_WINDOW_NOTE);
+    expect(t).not.toMatch(VIK_ORGANIZER_ONLY);
+    expect(t).not.toMatch(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) sessions\b/i);
   });
 
   it("lays six cards out as three balanced rows of two, with no odd last card to center", () => {
@@ -855,26 +978,90 @@ describe("mentor profile page", () => {
     expect(t).not.toMatch(/anytime after 9/i);
   });
 
-  it("Vik's profile never shows his organizer-only constraints", async () => {
+  it("Vik's profile: his Thursday 11:30 AM–3:30 PM window at the Illinois Conference Center, Apply with it preselected", async () => {
     const html = await renderProfile("vikram-lakhwara");
     const t = text(html);
-    // Scheduling in progress: the rule and the follow-up promise, and Apply without a time to preselect.
-    expect(t).toContain(`Office hours Scheduling in progress ${SESSION_RULE} ${INTEREST_COPY.followUp}`);
-    expect(hrefs(html)).toContain("/office-hours?mentor=vikram-lakhwara#apply");
-    expect(hrefs(html).filter((h) => h.includes("mentor=vikram-lakhwara&"))).toEqual([]);
-    expect(t).not.toMatch(/Wednesday|commitments|through Saturday/);
+    const block = officeHoursBlock(html);
+    // The window, the session rule, the place (building, then street address), the window's note
+    // and the Apply action.
+    expect(text(block).replace(/\s+/g, " ").trim()).toBe(
+      `${VIK_LINE} ${SESSION_RULE} ${VIK_PLACE} ${VIK_WINDOW_NOTE} Apply to meet Vik`,
+    );
+    expect(t).toContain(`Office hours ${VIK_LINE} ${SESSION_RULE} ${VIK_PLACE} ${VIK_WINDOW_NOTE}`);
+    // Like Patrick's and Rishab's windows, only the date is marked up: a window isn't an appointment start time.
+    expect(block).toContain('<time dateTime="2026-10-01">Thu, Oct 1</time>');
+    expect(block.match(/<time\b/g)).toHaveLength(1);
+    expect(block.match(/<li\b/g)).toHaveLength(1);
+    // "Apply to meet Vik" preselects him and his only window, at the top and the end.
+    const href = SELECT_HREFS["vikram-lakhwara"];
+    expect(text(anchor(html, href)!).trim()).toBe("Apply to meet Vik");
+    expect(hrefs(html).filter((h) => h.includes("#apply"))).toEqual([href, href]);
+    // Scheduling is done: none of the pending wording is left.
+    expect(t).not.toContain("Scheduling in progress");
+    expect(t).not.toContain(INTEREST_COPY.followUp);
+    expect(t).not.toContain("Express interest");
+    // His Showcase panel is an appearance of its own; his office hours stay in the header.
     expect(t).toContain("Speaking Fri, Oct 2 · 2:55–3:35 PM CT Funding Start-ups in the Midwest");
+    expect(text(section(html, "at-founders-week")!)).not.toMatch(/Office hours|Thu, Oct 1|St\. Marys/);
+  });
+
+  it("Vik's profile never shows his organizer-only notes (running over, the 3 PM panels, TechRise, his commitments, a session count)", async () => {
+    const html = await renderProfile("vikram-lakhwara");
+    const t = text(html);
+    const raw = productionMentors.find((m) => m.id === "vikram-lakhwara")!;
+    expect(t).not.toContain(raw.organizerNotes!);
+    expect(t).not.toMatch(VIK_ORGANIZER_ONLY);
+    // Neither the eight sessions his window holds nor any other count, and no times from the email
+    // beyond the window itself (the 3 PM panels, TechRise at 5 PM, the last session ending at 3:25).
+    expect(t).not.toMatch(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) sessions\b/i);
+    expect(t).not.toMatch(/\beight\b/i);
+    expect(t).not.toMatch(/\b[35] PM\b|3:25/);
+    // The organizer notes' spelling of the street ("St Marys Rd") never leaks; students see the published address.
+    expect(t).not.toContain("St Marys Rd");
+    expectPublicOnly(html);
+    expectNothingRetired(html);
+    expectNoEmDash(html);
+  });
+
+  it("a mentor still scheduling (fixture): 'Scheduling in progress', the session rule and the follow-up promise, then Apply without a time", async () => {
+    extraMentors.list = [pendingMentor];
+    const html = await renderProfile(pendingMentor.id);
+    const t = text(html);
+    const block = officeHoursBlock(html);
+    expect(text(block).replace(/\s+/g, " ").trim()).toBe(
+      `Scheduling in progress ${SESSION_RULE} ${INTEREST_COPY.followUp} Apply to meet Pat`,
+    );
+    expect(t).toContain(`Office hours Scheduling in progress ${SESSION_RULE} ${INTEREST_COPY.followUp}`);
+    // No time lines, no dates to mark up and no place yet.
+    expect(block).not.toMatch(/<time\b|<li\b/);
+    expect(officeHoursPlace(pendingMentor)).toBeNull();
+    // Apply at the top and the end, with the mentor preselected and no time.
+    expect(text(anchor(html, PENDING_APPLY_HREF)!).trim()).toBe("Apply to meet Pat");
+    expect(hrefs(html).filter((h) => h.includes("#apply"))).toEqual([PENDING_APPLY_HREF, PENDING_APPLY_HREF]);
+    expect(hrefs(html).filter((h) => h.includes("mentor=fixture-pending-mentor&"))).toEqual([]);
+    expect(t).not.toMatch(/\b(one|two|three|\d+) sessions\b/i);
+    expectApplyLinksPreselect(html);
+    expectNothingRetired(html);
+    expectNoEmDash(html);
+    // Metadata says scheduling is in progress, and that applying still works.
+    const meta = await profileMetadata({ params: Promise.resolve({ id: pendingMentor.id }) });
+    expect(meta.description).toBe(
+      `Founders Office Hours with Pat Fixture (Founder, Fixture Co) during Founders Week at UIUC. Scheduling is in progress, but you can apply now. ${INTEREST_COPY.followUp}`,
+    );
   });
 
   it("states the session rule once under the office-hours lines for exact windows and scheduling, never a session count", async () => {
     const expected: Record<string, boolean> = {
       "patrick-haddox": true, // exact window
       "arnav-mishra": true, // exact window (Fri 10:00–11:30 AM since Sept 24)
-      "vikram-lakhwara": true, // scheduling in progress
+      "vikram-lakhwara": true, // exact window (Thu 11:30 AM–3:30 PM since Sept 27)
       "elliott-notrica": true, // exact windows (Wed Sep 30 and Thu Oct 1 since Sept 25)
       "ron-lewis": true, // exact window (Thu 2:30–4:30 PM since Sept 24)
       "rishab-veldur": true, // exact window
+      "fixture-pending-mentor": true, // scheduling in progress (fixture: no real mentor is pending now)
     };
+    extraMentors.list = [pendingMentor];
+    expect(getMentors().map((m) => m.id)).toEqual(Object.keys(expected));
     for (const mentor of getMentors()) {
       const html = await renderProfile(mentor.id);
       const t = text(html);
@@ -888,7 +1075,8 @@ describe("mentor profile page", () => {
         const lastLine = lines.at(-1) ?? "Scheduling in progress";
         expect(block.indexOf(lastLine), mentor.id).toBeGreaterThanOrEqual(0);
         expect(block.indexOf(lastLine), mentor.id).toBeLessThan(block.indexOf(SESSION_RULE));
-        // Every mentor has one public note (Elliott's three windows share his), after the rule.
+        // Every mentor has one public note (Elliott's three windows share his; a pending mentor gets
+        // the follow-up promise), after the rule.
         const note = availabilityNote(mentor);
         expect(note, mentor.id).not.toBeNull();
         expect(block.indexOf(SESSION_RULE), mentor.id).toBeLessThan(block.indexOf(note ?? `Apply to meet ${mentor.firstName}`));
@@ -967,6 +1155,11 @@ describe("mentor profile page", () => {
     expect(officeHoursPlace(arnav)).toEqual({
       venue: "Atrium, Siebel Center for Computer Science",
       address: "201 N. Goodwin Ave., Urbana, IL 61801",
+    });
+    // From Vik's email (Sept 27); the street address from the organizers, abbreviated like the event addresses.
+    expect(officeHoursPlace(getMentors().find((m) => m.id === "vikram-lakhwara")!)).toEqual({
+      venue: "Illinois Conference Center",
+      address: "111 St. Marys Rd., Champaign, IL 61820",
     });
     // Elliott's and Rishab's places are still being set, so no place renders for them.
     expect(officeHoursPlace(getMentors().find((m) => m.id === "elliott-notrica")!)).toBeNull();

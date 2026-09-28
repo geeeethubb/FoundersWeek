@@ -1,6 +1,6 @@
 # Content status: missing assets and unconfirmed details
 
-Last reviewed: 2026-09-25. The site renders everything below with honest copy ("Time to be announced",
+Last reviewed: 2026-09-27. The site renders everything below with honest copy ("Time to be announced",
 "Scheduling in progress", "To be confirmed"). Nothing has been guessed.
 
 ## Priorities
@@ -51,8 +51,14 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
   topics are not supplied.
 
 **Vikram "Vik" Lakhwara** (Founder & Managing Member, Stakehouse; title per stakehouse.fund)
-- Scheduling in progress. Existing commitments Wednesday through Saturday morning are **not** available
-  slots. This is an organizer-only note.
+- Window (from his email, Sept 27): Thu Oct 1, 11:30 AM–3:30 PM CT, in person at the Illinois Conference
+  Center, 111 St. Marys Rd., Champaign (street address from the organizers). Eight 25-minute sessions fit.
+- Organizer-only: he wants to fit in as many startups as possible and is fine running over, but wants to
+  respect the 3 PM panel discussions and the 5 PM TechRise Pitch Competition (the 3:00 session runs into
+  the panels). Outside the window, his existing commitments Wednesday through Saturday morning are **not**
+  available time.
+- No mentor is "Scheduling in progress" any more; that state (and the calendar block for pending
+  mentors) stays in the code for mentors added later.
 
 **Elliott Notrica** (Founder & CEO, Symbio Bioculinary). Added 2026-09-24.
 - Windows (from his email, Sept 25; set by the organizers): Wed Sept 30, 9 AM–noon and 2–5 PM, and
@@ -124,7 +130,8 @@ Those sources are listed per mentor in `content/mentors.ts`. Mentors should give
   in the supplied agenda. The listing states that tickets are not included.
 - The **Founders Week Afterparty** (Sat Oct 3, HERE Apartments) was **canceled** and removed from the site.
   The university's Friday **Founders Evening Showcase and Reception** is a separate event and remains.
-- Street addresses come from the organizers (Dan Caruso's chat, the Sept 29 panel, Founder Failure Lab)
+- Street addresses come from the organizers (Dan Caruso's chat, the Sept 29 panel, Founder Failure Lab,
+  the Illinois Conference Center for Friday's showcase events)
   or from Arnav (the Siebel talk). Other venues show building names as given. No map links.
 - Program speakers are listed by name only, as in the agenda (affiliations only where a session title
   gives one). Speaker titles elsewhere come from each event's cited sources or, for mentors, their

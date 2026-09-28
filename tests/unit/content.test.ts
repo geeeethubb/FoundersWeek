@@ -23,6 +23,7 @@ const RISHAB = "rishab-veldur";
 const RISHAB_WINDOW = "rishab-veldur-2026-10-01";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
 const RON_OH = "office-hours-ron-lewis-2026-10-01-pm";
+const VIK_OH = "office-hours-vikram-lakhwara-2026-10-01";
 const ELLIOTT_WED_AM_OH = "office-hours-elliott-notrica-2026-09-30-am";
 const ELLIOTT_WED_PM_OH = "office-hours-elliott-notrica-2026-09-30-pm";
 const ELLIOTT_THU_OH = "office-hours-elliott-notrica-2026-10-01-pm";
@@ -347,6 +348,33 @@ describe("content", () => {
     });
   });
 
+  describe("Vik's public profile data", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("publishes his Thursday window and place, and keeps his email details organizer-only", () => {
+      vi.stubEnv("SHOW_DEMO_CONTENT", "");
+      vi.stubEnv("SHOW_DRAFT_CONTENT", "");
+      const raw = mentors.find((m) => m.id === "vikram-lakhwara")!;
+      expect(raw.organizerNotes).toMatch(/fine running over/);
+
+      const pub = getMentors().find((m) => m.id === "vikram-lakhwara")!;
+      expect(pub.organizerNotes).toBeUndefined();
+      expect(pub.availability.map((w) => [w.id, w.date, w.time])).toEqual([
+        ["vikram-lakhwara-2026-10-01", "2026-10-01", { kind: "exact", start: "11:30", end: "15:30" }],
+      ]);
+      expect(pub.session).toMatchObject({
+        location: "Illinois Conference Center",
+        address: "111 St. Marys Rd., Champaign, IL 61820",
+        confirmed: true,
+      });
+      const publicJson = JSON.stringify(pub);
+      expect(publicJson).not.toMatch(
+        /running over|as many startups|panel discussions starting|Pitch Competition at 5 PM|Wednesday through Saturday|commitment|runs into/i,
+      );
+      expect(publicJson).not.toContain("—");
+    });
+  });
+
   it("validates background tags and date-only windows", () => {
     const rishab = mentors.find((m) => m.id === RISHAB)!;
     const check = (m: typeof rishab) => () => validateContent({ events: [], mentors: [m], forbidDemo: true });
@@ -476,14 +504,47 @@ describe("content", () => {
     });
     expect(vikram.sources.map((s) => s.url)).toContain("https://www.stakehouse.fund/team");
     expect(vikram.name).toBe("Vikram “Vik” Lakhwara");
-    // Commitments Wed–Sat morning are organizer-only context, not available slots.
-    expect(vikram.availability).toEqual([]);
+    // Vik: Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center (his email, Sept 27; street
+    // address from the organizers). Time and place are set, so his session is confirmed; it's still
+    // a window students apply to, not a booking.
+    expect(vikram.availability).toEqual([
+      {
+        id: "vikram-lakhwara-2026-10-01",
+        date: "2026-10-01",
+        time: { kind: "exact", start: "11:30", end: "15:30" },
+        note: "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
+      },
+    ]);
     expect(vikram.slots).toEqual([]);
+    expect(vikram.session).toEqual({
+      format: "in-person",
+      durationMinutes: site.officeHours.sessionMinutes,
+      location: "Illinois Conference Center",
+      address: "111 St. Marys Rd., Champaign, IL 61820",
+      sessionCount: null,
+      confirmed: true,
+      note: "Vik is holding office hours on Thursday, October 1, from 11:30 AM to 3:30 PM at the Illinois Conference Center.",
+    });
+    expect(vikram.sources.map((s) => [s.label, s.checked])).toContainEqual([
+      "Organizer update: Vik’s email, Thu Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center",
+      "2026-09-27",
+    ]);
+    // His other commitments (Wed through Sat morning), running over and the 3 PM panels / 5 PM
+    // TechRise competition are organizer-only context, never public copy.
     expect(vikram.organizerNotes).toMatch(/Wednesday through Saturday/);
-    expect(vikram.bio?.value).not.toMatch(/Wednesday|Saturday|commitment/i);
-    // Vik is the only mentor still scheduling.
-    expect(schedulingStatus(vikram)).toBe("in-progress");
-    expect(mentorCtaLabel(vikram)).toBe("Express interest");
+    expect(vikram.organizerNotes).toMatch(/fine running over/);
+    expect(vikram.organizerNotes).toMatch(/panel discussions starting at 3 PM and the TechRise Pitch Competition at 5 PM/);
+    const vikPublicCopy = JSON.stringify([vikram.bio, vikram.expertise, vikram.session, vikram.availability]);
+    expect(vikPublicCopy).not.toMatch(/Wednesday|Saturday|commitment|running over|TechRise|3 PM|5 PM/i);
+    expect(JSON.stringify([vikram.session, vikram.availability])).not.toMatch(
+      /still (setting|working out)|to be (announced|confirmed)|pending|follow up/i,
+    );
+    // A published window: he's "available", so the CTA applies with his window preselected.
+    expect(schedulingStatus(vikram)).toBe("available");
+    expect(mentorCtaLabel(vikram)).toBe("Apply to meet Vik");
+    expect(applyHref({ mentorId: "vikram-lakhwara", optionKind: "window", optionId: "vikram-lakhwara-2026-10-01" })).toBe(
+      "/office-hours?mentor=vikram-lakhwara&window=vikram-lakhwara-2026-10-01#apply",
+    );
     expect(mentorCtaLabel(patrick)).toBe("Apply to meet Patrick");
 
     // Elliott: three exact windows (Wed Sept 30, 9–noon and 2–5 PM; Thu Oct 1, noon–5 PM). They're
@@ -526,9 +587,13 @@ describe("content", () => {
     );
     expect(schedulingStatus(elliott)).toBe("available");
     expect(mentorCtaLabel(elliott)).toBe("Apply to meet Elliott");
-    expect(mentors.filter((m) => schedulingStatus(m) === "in-progress").map((m) => m.id)).toEqual([
-      "vikram-lakhwara",
-    ]);
+    // Every production mentor has published availability: no one is "Scheduling in progress".
+    expect(mentors.filter((m) => schedulingStatus(m) === "in-progress").map((m) => m.id)).toEqual([]);
+    expect(mentors.every((m) => m.availability.length > 0)).toBe(true);
+    // The "Scheduling in progress" path stays for future mentors (a fixture with no windows).
+    const stillScheduling: Mentor = { ...DATE_ONLY_MENTOR, id: "fixture-scheduling", availability: [], slots: [] };
+    expect(schedulingStatus(stillScheduling)).toBe("in-progress");
+    expect(mentorCtaLabel(stillScheduling)).toBe("Express interest");
 
     // The Founders Week Afterparty (Sat Oct 3, HERE Apartments) was canceled: it must not exist
     // anywhere in the data. (Arnav's Wednesday happy hour at Legends is a separate, real event.)
@@ -548,6 +613,20 @@ describe("content", () => {
       time: { kind: "exact", start: "18:00", end: "20:30" },
       involvement: "week",
     });
+    // Both Friday Illinois Conference Center events carry the street address the organizers supplied
+    // (Sept 27), cited alongside the agenda.
+    for (const id of [SHOWCASE, "founders-evening-showcase-and-reception"]) {
+      const friday = events.find((e) => e.id === id)!;
+      expect(friday.location, id).toEqual({
+        kind: "in-person",
+        venue: "Illinois Conference Center",
+        address: "111 St. Marys Rd., Champaign, IL 61820",
+      });
+      expect(friday.sources.map((s) => [s.label, s.checked ?? null]), id).toEqual([
+        ["Founders Week agenda", "2026-09-23"],
+        ["Organizer update: Illinois Conference Center, 111 St Marys Rd, Champaign, IL 61820", "2026-09-27"],
+      ]);
+    }
 
     const dan = events.find((e) => e.id === DAN)!;
     expect(dan).toMatchObject({
@@ -760,7 +839,7 @@ describe("content", () => {
     const showcase = events.find((e) => e.id === SHOWCASE)!;
     expect(showcase).toMatchObject({
       date: "2026-10-02",
-      location: { kind: "in-person", venue: "Illinois Conference Center" },
+      location: { kind: "in-person", venue: "Illinois Conference Center", address: "111 St. Marys Rd., Champaign, IL 61820" },
     });
     const session = showcase.sessions!.find((s) => s.title === HEALTH_PANEL)!;
     expect(session).toMatchObject({ start: "13:20", end: "13:55" });
@@ -796,30 +875,33 @@ describe("content", () => {
 
   it("builds office-hours entries from mentor windows", () => {
     const entries = buildScheduleEntries({ events, mentors, site });
-    // Thirteen events (Arnav's Siebel talk included) and seven office-hours windows.
-    expect(entries).toHaveLength(20);
+    // Thirteen events (Arnav's Siebel talk included) and eight office-hours windows.
+    expect(entries).toHaveLength(21);
     expect(entries.filter((e) => e.kind === "event")).toHaveLength(13);
     const oh = entries.filter((e) => e.kind === "office-hours");
-    // Only mentors with published windows get entries (Vik is still scheduling). Elliott's two
-    // Wednesday windows come first; on Oct 1, Patrick's morning window, then Elliott's and Rishab's
-    // (both noon–5 PM; ties keep content order), then Ron's (2:30–4:30 PM).
+    // Every mentor has published windows now (Vik's arrived Sept 27). Elliott's two Wednesday
+    // windows come first; on Oct 1, Patrick's morning window, Vik's (11:30 AM–3:30 PM), then
+    // Elliott's and Rishab's (both noon–5 PM; ties keep content order), then Ron's (2:30–4:30 PM).
     expect(oh.map((e) => e.id)).toEqual([
       ELLIOTT_WED_AM_OH,
       ELLIOTT_WED_PM_OH,
       "office-hours-patrick-haddox-2026-10-01-am",
+      VIK_OH,
       ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
       "office-hours-arnav-mishra-2026-10-02-am",
     ]);
+    expect(new Set(oh.map((e) => e.mentor!.id))).toEqual(new Set(mentors.map((m) => m.id)));
     expect(oh.every((e) => !e.calendar.available)).toBe(true);
-    // All seven windows are exact: Elliott's Wednesday is 9:00 AM–12:00 PM and 2:00–5:00 PM CT
-    // (14:00–17:00Z, 19:00–22:00Z), Ron's Thursday is 2:30–4:30 PM CT (19:30–21:30Z) and Arnav's
-    // Friday is 10:00–11:30 AM CT (15:00–16:30Z).
+    // All eight windows are exact: Elliott's Wednesday is 9:00 AM–12:00 PM and 2:00–5:00 PM CT
+    // (14:00–17:00Z, 19:00–22:00Z), Vik's Thursday is 11:30 AM–3:30 PM CT (16:30–20:30Z), Ron's
+    // Thursday is 2:30–4:30 PM CT (19:30–21:30Z) and Arnav's Friday is 10:00–11:30 AM CT (15:00–16:30Z).
     expect(oh.map((e) => e.startsAt)).toEqual([
       "2026-09-30T14:00:00.000Z",
       "2026-09-30T19:00:00.000Z",
       "2026-10-01T15:00:00.000Z",
+      "2026-10-01T16:30:00.000Z",
       "2026-10-01T17:00:00.000Z",
       "2026-10-01T17:00:00.000Z",
       "2026-10-01T19:30:00.000Z",
@@ -829,22 +911,57 @@ describe("content", () => {
       "2026-09-30T17:00:00.000Z",
       "2026-09-30T22:00:00.000Z",
       "2026-10-01T16:30:00.000Z",
+      "2026-10-01T20:30:00.000Z",
       "2026-10-01T22:00:00.000Z",
       "2026-10-01T22:00:00.000Z",
       "2026-10-01T21:30:00.000Z",
       "2026-10-02T16:30:00.000Z",
     ]);
+    // Vik's window has a confirmed time and place (the Illinois Conference Center, from his email on
+    // Sept 27), so his entry is confirmed, in person. It's still applied to, not booked, and none of
+    // his organizer-only context reaches it.
+    expect(oh[3]).toMatchObject({
+      id: VIK_OH,
+      title: "Office hours with Vikram “Vik” Lakhwara",
+      date: "2026-10-01",
+      time: { kind: "exact", start: "11:30", end: "15:30" },
+      timeLabel: null,
+      status: "confirmed",
+      statusNote: null,
+      involvement: "hosted",
+      location: {
+        kind: "in-person",
+        venue: "Illinois Conference Center",
+        address: "111 St. Marys Rd., Champaign, IL 61820",
+      },
+      registration: {
+        url: "/office-hours?mentor=vikram-lakhwara&window=vikram-lakhwara-2026-10-01#apply",
+        label: "Apply to meet Vik",
+        internal: true,
+      },
+      mentor: { id: "vikram-lakhwara", firstName: "Vik", windowId: "vikram-lakhwara-2026-10-01" },
+      sessionRule: "Each session is 25 minutes, with a 5-minute break between sessions.",
+      calendar: { available: false, reason: "Office hours are by application. Selected students get their confirmed time by email." },
+    });
+    expect(oh[3].description.split("\n\n")).toEqual([
+      "Vikram “Vik” Lakhwara (Founder & Managing Member, Stakehouse) is available for office hours: Thursday, October 1, 11:30 AM–3:30 PM CT.",
+      "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
+      expect.stringMatching(/^Each session is 25 minutes, with a 5-minute break between sessions\. Appointments are limited\./),
+    ]);
+    expect(JSON.stringify(oh[3])).not.toMatch(
+      /running over|as many startups|Wednesday through Saturday|commitment|Pitch Competition at 5 PM|3 PM panels|still (setting|working out)/i,
+    );
     // Elliott's windows: planned (his location is still being set), each with its own apply link.
     const elliottNote =
       "Elliott is holding office hours on Wednesday, September 30 (9 AM to noon and 2 to 5 PM) and Thursday, October 1 (noon to 5 PM). We’re still setting the location.";
-    expect([oh[0], oh[1], oh[3]].map((e) => e.registration)).toEqual(
+    expect([oh[0], oh[1], oh[4]].map((e) => e.registration)).toEqual(
       ["elliott-notrica-2026-09-30-am", "elliott-notrica-2026-09-30-pm", "elliott-notrica-2026-10-01-pm"].map((w) => ({
         url: `/office-hours?mentor=elliott-notrica&window=${w}#apply`,
         label: "Apply to meet Elliott",
         internal: true,
       })),
     );
-    for (const e of [oh[0], oh[1], oh[3]]) {
+    for (const e of [oh[0], oh[1], oh[4]]) {
       expect(e, e.id).toMatchObject({
         title: "Office hours with Elliott Notrica",
         timeLabel: null,
@@ -862,7 +979,7 @@ describe("content", () => {
     ]);
     // Arnav's window has a confirmed time and place (the Atrium of the Siebel Center, from Arnav on
     // Sept 25), so his entry is confirmed, in person. It's still applied to, not booked.
-    expect(oh[6]).toMatchObject({
+    expect(oh[7]).toMatchObject({
       id: ARNAV_OH,
       date: "2026-10-02",
       time: { kind: "exact", start: "10:00", end: "11:30" },
@@ -880,14 +997,14 @@ describe("content", () => {
         internal: true,
       },
     });
-    expect(oh[6].description.split("\n\n")).toEqual([
+    expect(oh[7].description.split("\n\n")).toEqual([
       "Arnav Mishra (Co-Founder & CTO, Doss) is available for office hours: Friday, October 2, 10:00–11:30 AM CT.",
       "Arnav is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.",
       expect.stringMatching(/^Each session is 25 minutes, with a 5-minute break between sessions\. Appointments are limited\./),
     ]);
-    expect(oh[6].description).not.toMatch(/still setting|to be announced/i);
+    expect(oh[7].description).not.toMatch(/still setting|to be announced/i);
     // Ron's window has a confirmed time and place (BIF), so his entry is confirmed, in person.
-    expect(oh[5]).toMatchObject({
+    expect(oh[6]).toMatchObject({
       date: "2026-10-01",
       time: { kind: "exact", start: "14:30", end: "16:30" },
       timeLabel: null,
@@ -904,12 +1021,12 @@ describe("content", () => {
         internal: true,
       },
     });
-    expect(oh[5].description.split("\n\n")[0]).toBe(
+    expect(oh[6].description.split("\n\n")[0]).toBe(
       "Ron Lewis (Co-Founder, Auctus Advisory) is available for office hours: Thursday, October 1, 2:30–4:30 PM CT.",
     );
-    expect(oh[5].description).not.toMatch(/Oct(ober)?\.? 4\b|Sunday/i);
+    expect(oh[6].description).not.toMatch(/Oct(ober)?\.? 4\b|Sunday/i);
     expect(oh.every((e) => e.featuredRank === 1 && e.registration?.url.startsWith("/office-hours?"))).toBe(true);
-    expect(oh[4]).toMatchObject({
+    expect(oh[5]).toMatchObject({
       date: "2026-10-01",
       time: { kind: "exact", start: "12:00", end: "17:00" },
       timeLabel: null,
@@ -921,16 +1038,17 @@ describe("content", () => {
         internal: true,
       },
     });
-    expect(oh[4].description.split("\n\n")[0]).toBe(
+    expect(oh[5].description.split("\n\n")[0]).toBe(
       "Rishab Veldur (Co-Founder & CEO, Auvi Labs) is available for office hours: Thursday, October 1, 12:00–5:00 PM CT.",
     );
 
     // A date-only window (a future mentor's) has no time yet, so it sorts after the day's timed
     // entries and nothing is invented for it.
     const withDateOnly = buildScheduleEntries({ events, mentors: [...mentors, DATE_ONLY_MENTOR], site });
-    expect(withDateOnly).toHaveLength(21);
+    expect(withDateOnly).toHaveLength(22);
     expect(withDateOnly.filter((e) => e.date === "2026-10-01").map((e) => e.id)).toEqual([
       "office-hours-patrick-haddox-2026-10-01-am",
+      VIK_OH,
       "science-and-practice-of-pitching",
       ELLIOTT_THU_OH,
       RISHAB_OH,
@@ -979,6 +1097,7 @@ describe("content", () => {
       ELLIOTT_WED_AM_OH,
       ELLIOTT_WED_PM_OH,
       "office-hours-patrick-haddox-2026-10-01-am",
+      VIK_OH,
       ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
@@ -1056,7 +1175,10 @@ describe("content", () => {
     expect(mentorAppearances(entries, "patrick-haddox").map((a) => a.sessionTitle)).toEqual([
       "Next Generation Industrial, Manufacturing and Space Tech",
     ]);
-    expect(mentorAppearances(entries, "vikram-lakhwara")).toHaveLength(1);
+    // Vik's one appearance is his Friday Showcase panel; his Thursday office hours aren't an appearance.
+    expect(mentorAppearances(entries, "vikram-lakhwara").map((a) => [a.entryId, a.date, a.sessionTitle])).toEqual([
+      [SHOWCASE, "2026-10-02", "Funding Start-ups in the Midwest"],
+    ]);
     expect(mentorAppearances(entries, "elliott-notrica")).toEqual([
       {
         entryId: TECHRISE,

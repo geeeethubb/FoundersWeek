@@ -7,10 +7,10 @@
  *   - The matching sentence appears exactly once, and so does the session rule ("Each session is 25
  *     minutes, with a 5-minute break between sessions.").
  *   - Every card's "Select mentor" action prefills that mentor in the form (and Patrick's / Arnav's /
- *     Ron's / Rishab's one window); every profile's "Apply to meet …" does the same. A preselected
- *     window is enough on its own. Elliott has three windows, so his actions preselect none and the
- *     form lists all three for the student to tick. Vik's times aren't set yet: he needs broad
- *     availability, and the form says so.
+ *     Vik's / Ron's / Rishab's one window); every profile's "Apply to meet …" does the same. A
+ *     preselected window is enough on its own. Elliott has three windows, so his actions preselect
+ *     none and the form lists all three for the student to tick. Every mentor's times are set: no
+ *     "Scheduling in progress", and the form never says a mentor's times aren't set yet.
  *   - Profiles: photo, role, LinkedIn, approved bio and "Can help with" labels, never the internal
  *     basis behind them, organizer notes or draft copy. Mentors with a window state the session
  *     rule under it. Rishab: "Background" chips and a "Good fit for" paragraph instead of "Can help
@@ -23,7 +23,10 @@
  *     preselected. Arnav: Fri, Oct 2, 10:00–11:30 AM CT in person at the Atrium, Siebel Center for
  *     Computer Science, 201 N. Goodwin Ave., and his appearances in time order: his Siebel
  *     School talk (Wed, 3:30 PM CT, no end time), his happy hour, the Launching From Illinois panel
- *     (Thu) and his Friday Showcase talk.
+ *     (Thu) and his Friday Showcase talk. Vik: Thu, Oct 1, 11:30 AM–3:30 PM CT in person at the
+ *     Illinois Conference Center, 111 St. Marys Rd., with the window's note; "Apply to meet Vik"
+ *     preselects that window; his Friday Showcase panel is a separate appearance; nothing from his
+ *     organizer-only notes.
  */
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -71,6 +74,12 @@ import {
   SESSION_COUNT,
   SESSION_LENGTH_HINT,
   SESSION_RULE,
+  VIK,
+  VIK_ADDRESS,
+  VIK_ORGANIZER_NOTES,
+  VIK_SHOWCASE_SESSION,
+  VIK_VENUE,
+  VIK_WINDOW_NOTE,
   visibleText,
   waitForHydration,
   type MentorFixture,
@@ -123,7 +132,7 @@ async function expectPrefilled(page: Page, mentor: MentorFixture) {
       `${BROAD_AVAILABILITY_ASK} Needed because ${mentor.firstName}’s times aren’t set yet. ${SESSION_LENGTH_HINT}`,
     );
   } else if (mentor.windowId) {
-    // The preselected window (Patrick's, Arnav's, Ron's or Rishab's) is enough on its own.
+    // The preselected window (Patrick's, Arnav's, Vik's, Ron's or Rishab's) is enough on its own.
     await expect(broad).not.toHaveAttribute("aria-required", "true");
     await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
   } else {
@@ -216,6 +225,9 @@ test.describe("Office Hours page", () => {
     expect(text).not.toMatch(ONE_ON_ONE);
     // How many sessions fit in a window is for organizers; the public page never counts them.
     expect(text).not.toMatch(SESSION_COUNT);
+    // Every mentor's times are set (Vik's since Sept 27): nobody is "Scheduling in progress", and
+    // nothing asks for general availability because a mentor's times aren't set yet.
+    expect(text).not.toMatch(/Scheduling in progress|times aren’t set yet/i);
     // Nothing private in the page or its serialized data either.
     const body = page.locator("body");
     for (const topic of DRAFT_TOPICS) await expect(body).not.toContainText(topic);
@@ -273,7 +285,7 @@ test.describe("Mentor profiles", () => {
         await expect(fit.getByRole("listitem")).toHaveCount(0);
         await expect(page.getByRole("region", { name: "Useful for", exact: true })).toHaveCount(0);
       }
-      // The office-hours block: every window (or "Scheduling in progress"), then the session rule once.
+      // The office-hours block: every window, then the session rule once.
       const officeHoursBlock = main.locator("header");
       for (const line of mentor.windows.length ? mentor.windows : [mentor.cardLine]) {
         await expect(officeHoursBlock).toContainText(line);
@@ -371,6 +383,43 @@ test.describe("Mentor profiles", () => {
         await expect(items.nth(2)).toContainText("Beckman Institute");
         await expect(items.nth(3)).toContainText("From Idea to Scale: Building Doss, Lessons from an Illini Founder");
         await expect(items.nth(3)).toContainText(SHOWCASE_TITLE);
+      }
+      if (mentor === VIK) {
+        // His one window (from his email, Sept 27): Thu, Oct 1, 11:30 AM–3:30 PM, in person at the
+        // Illinois Conference Center (the venue, then the street address), with the window's note.
+        await expect(officeHoursBlock.locator("time")).toHaveText("Thu, Oct 1");
+        await expect(officeHoursBlock.locator("time")).toHaveAttribute("datetime", "2026-10-01");
+        await expect(officeHoursBlock).toContainText(`${VIK_VENUE}, ${VIK_ADDRESS}`);
+        await expect(officeHoursBlock).toContainText(VIK_WINDOW_NOTE);
+        await expect(officeHoursBlock).not.toContainText(
+          /Scheduling in progress|to be confirmed|to be announced|still working out|Oct 2|Friday/i,
+        );
+        // "Apply to meet Vik" (never "Express interest"), and every one preselects his window.
+        await expect(main.getByRole("link", { name: /^Express interest\b/ })).toHaveCount(0);
+        const applyLinks = main.getByRole("link", { name: `Apply to meet ${VIK.firstName}`, exact: true });
+        expect(await applyLinks.count()).toBeGreaterThanOrEqual(1);
+        for (const link of await applyLinks.all()) {
+          await expect(link).toHaveAttribute("href", `/office-hours?mentor=${VIK.id}&window=${VIK.windowId}#apply`);
+        }
+        // His description and share card carry the same window.
+        await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+          "content",
+          /Availability: Thu, Oct 1 · 11:30 AM–3:30 PM CT\./,
+        );
+        await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
+          "content",
+          /Available Thu, Oct 1, 11:30 AM–3:30 PM CT\.$/,
+        );
+        // His Friday Showcase panel is a separate appearance, not office hours.
+        const appearances = page.getByRole("region", { name: `${VIK.firstName} at Founders Week`, exact: true });
+        const panel = appearances.getByRole("link", { name: new RegExp(escapeRegExp(VIK_SHOWCASE_SESSION)) });
+        await expect(panel).toHaveAttribute("href", SHOWCASE_PATH);
+        await expect(panel.locator("time")).toHaveText("Speaking Fri, Oct 2 · 2:55–3:35 PM CT");
+        await expect(panel).toContainText(SHOWCASE_TITLE);
+        // His organizer-only notes (running over, the 3 PM panels, how many sessions fit, his other
+        // commitments) are nowhere, not even in the page data.
+        await expect(page.locator("body")).not.toContainText(VIK_ORGANIZER_NOTES);
+        expect(await page.content()).not.toMatch(VIK_ORGANIZER_NOTES);
       }
       // Ron's Oct 4 availability is organizer-only: nowhere on any profile, not even in page data.
       await expect(page.locator("body")).not.toContainText(OCT_4);

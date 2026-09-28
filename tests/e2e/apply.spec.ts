@@ -1,12 +1,13 @@
 /**
  * Checklist 4 — the office-hours application (/office-hours#apply).
- *   - A pending mentor (Vik) can be applied to with broad availability only; the confirmation and
- *     status page say sessions are 25 minutes and nothing is booked yet.
+ *   - Mentors can be applied to with broad availability only (Vik and Elliott, no time ticked); the
+ *     confirmation and status page say sessions are 25 minutes and nothing is booked yet.
  *   - The availability rule: neither a listed window nor broad availability → an error; either one
- *     is enough, unless a chosen mentor's times aren't set yet (only Vik now): then broad
- *     availability is required, naming only him (never Elliott, Ron or Rishab, whose windows are set).
- *   - Rishab: "I can make Thu, Oct 1, 12:00–5:00 PM CT"; Ron: "I can make Thu, Oct 1, 2:30–4:30 PM
- *     CT". Like Patrick's window, ticking either is enough on its own.
+ *     is enough. Every mentor lists a time now (Vik since Sept 27), so the form never says a
+ *     mentor's times aren't set yet, even with all six chosen.
+ *   - Vik: "I can make Thu, Oct 1, 11:30 AM–3:30 PM CT"; Rishab: "I can make Thu, Oct 1, 12:00–5:00
+ *     PM CT"; Ron: "I can make Thu, Oct 1, 2:30–4:30 PM CT". Like Patrick's window, ticking any of
+ *     them is enough on its own.
  *   - Elliott: three windows (Wed, Sep 30, 9:00 AM–12:00 PM and 2:00–5:00 PM CT; Thu, Oct 1,
  *     12:00–5:00 PM CT), none preselected; ticking any one of them is enough on its own.
  *   - A retried (replayed) submission confirms "already received" without repeating the answers.
@@ -17,8 +18,9 @@
  *   - Double-clicking submit stores one application.
  *   - Mentor selections survive (a) same-page Select actions after typing answers, (b) visiting a
  *     profile and coming back, (c) validation errors.
- *   - /apply?mentor=vikram-lakhwara → the form with Vik checked; /apply?mentor=elliott-notrica → Elliott
- *     checked, his three windows listed and none ticked.
+ *   - /apply?mentor=vikram-lakhwara → the form with Vik checked and his window listed (unticked);
+ *     with &window=… it's ticked too; /apply?mentor=elliott-notrica → Elliott checked, his three
+ *     windows listed and none ticked.
  *
  * The API rejects submissions made within 3 s of the form loading (anti-spam), so these tests run
  * on a Playwright clock and fast-forward it before submitting — no real waiting.
@@ -31,7 +33,6 @@ import {
   applySection,
   ARNAV,
   AVAILABILITY_RULE_MESSAGE,
-  pendingAvailabilityMessage,
   BROAD_AVAILABILITY,
   BROAD_AVAILABILITY_ASK,
   broadAvailabilityField,
@@ -58,7 +59,6 @@ import {
   questionField,
   RISHAB,
   RON,
-  SESSION_LENGTH_HINT,
   storedApplicationsFor,
   submitButton,
   tick,
@@ -176,22 +176,31 @@ test.describe("Validation", () => {
     await expect(broadAvailabilityField(page)).not.toHaveAttribute("aria-invalid", "true");
     await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
 
-    // …but not for a mentor whose schedule is pending: adding Vik asks for broad availability,
-    // naming him, even with Patrick's window ticked.
-    const vikMessage = pendingAvailabilityMessage("Vik");
+    // …and adding Vik changes nothing: his times are set (one window, listed unticked), so the form
+    // never asks for broad availability because of him.
     await tick(mentorCheckbox(page, VIK));
-    await expect(mentorWindows(page, VIK)).toHaveCount(0);
-    await expect(applicationForm(page)).toContainText(vikMessage);
+    await expect(mentorWindows(page, VIK)).toHaveCount(1);
+    await expect(mentorWindows(page, VIK)).not.toBeChecked();
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
+    await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
+    // Without Patrick (and so his ticked window), nothing is ticked: the rule applies again.
     await untick(mentorCheckbox(page, PATRICK));
-    await expect(applicationForm(page)).toContainText(vikMessage);
-    // Broad availability is enough — the only option for a mentor whose schedule is pending.
-    await broadAvailabilityField(page).fill(BROAD_AVAILABILITY);
-    await expect(applicationForm(page)).not.toContainText(vikMessage);
+    await expect(applicationForm(page)).toContainText(AVAILABILITY_RULE_MESSAGE);
+    await expect(broadAvailabilityField(page)).toHaveAttribute("aria-invalid", "true");
+    // Vik's window is enough on its own, like Patrick's…
+    await tick(mentorWindows(page, VIK));
     await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
     await expect(broadAvailabilityField(page)).not.toHaveAttribute("aria-invalid", "true");
+    // …and so is broad availability with no time ticked.
+    await untick(mentorWindows(page, VIK));
+    await expect(applicationForm(page)).toContainText(AVAILABILITY_RULE_MESSAGE);
+    await broadAvailabilityField(page).fill(BROAD_AVAILABILITY);
+    await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
+    await expect(broadAvailabilityField(page)).not.toHaveAttribute("aria-invalid", "true");
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
   });
 
-  test("all six mentors: only Vik needs broad availability; Elliott’s, Ron’s and Rishab’s windows count like Patrick’s", async ({
+  test("all six mentors: every one lists a time; any one ticked window is enough (Vik’s too), and nobody’s times are “not set yet”", async ({
     page,
   }) => {
     await openApplication(page);
@@ -201,38 +210,47 @@ test.describe("Validation", () => {
     await fillConsents(page);
     for (const mentor of MENTORS) await tick(mentorCheckbox(page, mentor));
     await tick(firstChoiceRadio(page, RISHAB));
-    // Patrick, Arnav, Ron and Rishab each offer one window and Elliott three; Vik has none yet.
-    expect(WINDOW_MENTORS.map((m) => m.firstName)).toEqual(["Patrick", "Arnav", "Elliott", "Ron", "Rishab"]);
+    // Patrick, Arnav, Vik, Ron and Rishab each offer one window and Elliott three; nobody is pending.
+    expect(WINDOW_MENTORS.map((m) => m.firstName)).toEqual(["Patrick", "Arnav", "Vik", "Elliott", "Ron", "Rishab"]);
+    expect(PENDING_MENTORS).toEqual([]);
     for (const mentor of MENTORS) {
       await expect(mentorWindows(page, mentor), `${mentor.name}: listed times`).toHaveCount(mentor.windowIds.length);
     }
     await expect(mentorWindows(page, ELLIOTT)).toHaveCount(3);
-    await tick(mentorWindows(page, RISHAB));
+    await expect(mentorWindows(page, VIK)).toHaveAccessibleName("I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window");
 
-    // The hint names only the mentor whose times aren't set yet: Vik (never Elliott, Ron or Rishab).
-    const pendingNames = "Vik";
-    expect(PENDING_MENTORS.map((m) => m.firstName)).toEqual(["Vik"]);
+    // Nothing ticked yet: a time or broad availability is needed, and the hint says a ticked time is
+    // enough (never that anyone's times aren't set yet).
     const broad = broadAvailabilityField(page);
     await expect(broad).toHaveAttribute("aria-required", "true");
-    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Needed because ${pendingNames}’s times aren’t set yet.`);
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
 
     await passMinimumFillTime(page);
     await submitButton(page).click();
     const summary = errorSummary(page);
     await expect(summary).toBeVisible();
-    await expect(summary.getByRole("link")).toHaveText([pendingAvailabilityMessage(pendingNames)]);
+    await expect(summary.getByRole("link")).toHaveText([AVAILABILITY_RULE_MESSAGE]);
     await expect(broad).toHaveAttribute("aria-invalid", "true");
-    await expect(mentorWindows(page, RISHAB)).toBeChecked();
-    expect(posts.count, "nothing is sent while broad availability is missing").toBe(0);
+    expect(posts.count, "nothing is sent without a time or broad availability").toBe(0);
 
-    // Without Vik, Rishab's ticked window is enough on its own: the error clears.
-    for (const mentor of PENDING_MENTORS) await untick(mentorCheckbox(page, mentor));
-    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
+    // Rishab's ticked window is enough on its own: the error clears…
+    await tick(mentorWindows(page, RISHAB));
     await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
     await expect(broad).not.toHaveAttribute("aria-invalid", "true");
     await expect(broad).not.toHaveAttribute("aria-required", "true");
     await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+    // …and so is Vik's, with all six still chosen.
+    await untick(mentorWindows(page, RISHAB));
+    await expect(broad).toHaveAttribute("aria-required", "true");
+    await tick(mentorWindows(page, VIK));
+    await expect(applicationForm(page)).not.toContainText(AVAILABILITY_RULE_MESSAGE);
+    await expect(broad).not.toHaveAttribute("aria-invalid", "true");
+    await expect(broad).not.toHaveAttribute("aria-required", "true");
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
+    for (const mentor of MENTORS) await expect(mentorCheckbox(page, mentor)).toBeChecked();
     await expect(firstChoiceRadio(page, RISHAB)).toBeChecked();
+    expect(posts.count).toBe(0);
   });
 
   test("a non-Illinois email is rejected", async ({ page }) => {
@@ -263,25 +281,26 @@ test.describe("Validation", () => {
 });
 
 test.describe("Submitting", () => {
-  test("a pending mentor (Vik) and Elliott, broad availability only → confirmation, status link, “Submitted”", async ({
+  test("Vik and Elliott with no time ticked, broad availability only → confirmation, status link, “Submitted”", async ({
     page,
   }) => {
-    const email = uniqueEmail("apply-pending");
+    const email = uniqueEmail("apply-broad");
     await openApplication(page);
 
-    // Vik has no listed times: broad availability is how a student says when they're free, and the
-    // hint says how long a session is.
+    // Vik lists one window and Elliott three; ticking one is optional, and broad availability is how
+    // a student who can't make any of them says when they're free.
     await tick(mentorCheckbox(page, VIK));
-    await expect(mentorWindows(page, VIK)).toHaveCount(0);
-    await expect(broadAvailabilityField(page)).toHaveAccessibleDescription(
-      `${BROAD_AVAILABILITY_ASK} Needed because Vik’s times aren’t set yet. ${SESSION_LENGTH_HINT}`,
-    );
-    // Adding Elliott lists his three windows (ticking one is optional); Vik still needs broad availability.
+    await expect(mentorWindows(page, VIK)).toHaveCount(1);
     await tick(mentorCheckbox(page, ELLIOTT));
     await expect(mentorWindows(page, ELLIOTT)).toHaveCount(3);
+    for (const listed of await applicationForm(page).getByRole("checkbox", { name: /^I can make / }).all()) {
+      await expect(listed).not.toBeChecked();
+    }
+    await expect(broadAvailabilityField(page)).toHaveAttribute("aria-required", "true");
     await expect(broadAvailabilityField(page)).toHaveAccessibleDescription(
-      `${BROAD_AVAILABILITY_ASK} Needed because Vik’s times aren’t set yet.`,
+      `${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`,
     );
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
     await tick(firstChoiceRadio(page, ELLIOTT));
     await broadAvailabilityField(page).fill(BROAD_AVAILABILITY);
     await fillAboutYou(page, { fullName: "Riley Tester", email });
@@ -297,6 +316,7 @@ test.describe("Submitting", () => {
     await expect(received).toContainText(
       `if you’re matched, Founders will email ${email} with a specific time for a 25-minute session. Nothing is booked until you confirm.`,
     );
+    await expect(received).not.toContainText(/Scheduling in progress|times aren’t set yet/i);
     await expect(page.getByRole("textbox", { name: "Private status link" })).toHaveValue(/\/apply\/status\/[^/]+$/);
 
     await received.getByRole("link", { name: "Open your status page" }).click();
@@ -436,6 +456,47 @@ test.describe("Submitting", () => {
     expect(stored[0].availability_notes).toBe("");
   });
 
+  test("Vik: his Thu, Oct 1 window (11:30 AM–3:30 PM CT) is enough on its own → stored without broad availability", async ({
+    page,
+  }) => {
+    const email = uniqueEmail("apply-vik");
+    // "Apply to meet Vik" preselects his one window (from his email, Sept 27).
+    await openApplication(page, `/office-hours?mentor=${VIK.id}&window=${VIK.windowId}#apply`);
+    await expect(mentorCheckbox(page, VIK)).toBeChecked();
+    const vikWindow = mentorWindows(page, VIK);
+    await expect(vikWindow).toHaveCount(1);
+    await expect(vikWindow).toBeChecked();
+    await expect(vikWindow).toHaveAccessibleName("I can make Thu, Oct 1, 11:30 AM–3:30 PM CT Vik’s office-hours window");
+    await expect(applySection(page)).toContainText(
+      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” ticked. Add anyone else you’d like to meet.",
+    );
+    await expect(applicationForm(page)).toContainText(
+      "Sessions are 25 minutes. If you’re matched, Founders will email you a specific session time inside the window you picked.",
+    );
+    // His times are set: never "Scheduling in progress" or "times aren't set yet", and never a day he
+    // isn't holding office hours.
+    await expect(applicationForm(page)).not.toContainText(/Scheduling in progress|times aren’t set yet|Oct 2|Oct 3|Sep 30/);
+    const broad = broadAvailabilityField(page);
+    await expect(broad).not.toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+
+    await fillAboutYou(page, { fullName: "Morgan Preseed", email });
+    await fillProject(page);
+    await fillConsents(page);
+    await passMinimumFillTime(page);
+    const posts = countApplicationPosts(page);
+    await submitAndExpect201(page);
+    expect(posts.count, "one request").toBe(1);
+
+    // Stored once: Vik first, his Thu, Oct 1 window, no broad availability.
+    const stored = await storedApplicationsFor(organizer, email);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].first_choice).toBe(VIK.name);
+    expect(stored[0].preferred_mentors).toBe(`1. ${VIK.name}`);
+    expect(stored[0].availability).toBe(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:30 PM CT (window)`);
+    expect(stored[0].availability_notes).toBe("");
+  });
+
   test("Ron: his Thu, Oct 1 window (2:30–4:30 PM CT) is enough on its own → stored without broad availability", async ({
     page,
   }) => {
@@ -480,16 +541,14 @@ test.describe("Submitting", () => {
     await tick(mentorCheckbox(page, PATRICK));
     await tick(mentorWindows(page, PATRICK));
     await tick(mentorCheckbox(page, VIK));
+    await tick(mentorWindows(page, VIK));
     await tick(firstChoiceRadio(page, VIK));
-    // Vik's times aren't set yet, so broad availability is required even with Patrick's window
-    // ticked: the hint says why up front (the error itself waits until the student tries to submit).
+    // Two ticked windows: broad availability is optional (and kept verbatim when given).
     const broad = broadAvailabilityField(page);
-    await expect(broad).toHaveAttribute("aria-required", "true");
-    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Needed because Vik’s times aren’t set yet.`);
-    await expect(applicationForm(page)).not.toContainText(pendingAvailabilityMessage("Vik"));
+    await expect(broad).not.toHaveAttribute("aria-required", "true");
+    await expect(broad).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
     await broad.fill(BROAD_AVAILABILITY);
     await expect(broad).not.toHaveAttribute("aria-invalid", "true");
-    await expect(applicationForm(page)).not.toContainText(pendingAvailabilityMessage("Vik"));
     await fillAboutYou(page, { fullName: "Jordan Retry", email, major: "Industrial Engineering" });
     await fillProject(page);
     await fillConsents(page);
@@ -524,6 +583,7 @@ test.describe("Submitting", () => {
     await expect(mentorCheckbox(page, PATRICK)).toBeChecked();
     await expect(mentorWindows(page, PATRICK)).toBeChecked();
     await expect(mentorCheckbox(page, VIK)).toBeChecked();
+    await expect(mentorWindows(page, VIK)).toBeChecked();
     await expect(firstChoiceRadio(page, VIK)).toBeChecked();
     await expect(broadAvailabilityField(page)).toHaveValue(BROAD_AVAILABILITY);
     await expect(fullNameField(page)).toHaveValue("Jordan Retry");
@@ -554,7 +614,8 @@ test.describe("Submitting", () => {
     const stored = await storedApplicationsFor(organizer, email);
     expect(stored).toHaveLength(1);
     expect(stored[0].first_choice).toBe(VIK.name);
-    expect(stored[0].availability).toContain(PATRICK.name);
+    expect(stored[0].availability).toContain(`${PATRICK.name}: Thu, Oct 1 · 10:00–11:30 AM CT (window)`);
+    expect(stored[0].availability).toContain(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:30 PM CT (window)`);
     expect(stored[0].availability_notes).toBe(BROAD_AVAILABILITY);
   });
 
@@ -698,6 +759,7 @@ test.describe("Mentor selections survive", () => {
     await tick(mentorCheckbox(page, PATRICK));
     await tick(mentorWindows(page, PATRICK));
     await tick(mentorCheckbox(page, VIK));
+    await tick(mentorWindows(page, VIK));
     await tick(firstChoiceRadio(page, VIK));
     await passMinimumFillTime(page);
     await submitButton(page).click();
@@ -706,35 +768,55 @@ test.describe("Mentor selections survive", () => {
     await expect(mentorCheckbox(page, PATRICK)).toBeChecked();
     await expect(mentorWindows(page, PATRICK)).toBeChecked();
     await expect(mentorCheckbox(page, VIK)).toBeChecked();
+    await expect(mentorWindows(page, VIK)).toBeChecked();
     await expect(firstChoiceRadio(page, VIK)).toBeChecked();
 
-    // Vik's times aren't set yet, so the form asks for broad availability, naming him.
-    await expect(applicationForm(page)).toContainText(pendingAvailabilityMessage("Vik"));
+    // The ticked windows satisfy availability: the errors are only about the empty answers.
+    await expect(errorSummary(page).getByRole("link", { name: AVAILABILITY_RULE_MESSAGE })).toHaveCount(0);
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
     await fillAboutYou(page, { fullName: "Parker Fixit", email });
     await fillProject(page);
     await fillConsents(page);
-    await broadAvailabilityField(page).fill(BROAD_AVAILABILITY);
     await expect(mentorCheckbox(page, PATRICK)).toBeChecked();
+    await expect(mentorWindows(page, VIK)).toBeChecked();
     await submitAndExpect201(page);
 
     const stored = await storedApplicationsFor(organizer, email);
     expect(stored).toHaveLength(1);
     expect(stored[0].first_choice).toBe(VIK.name);
     expect(stored[0].availability).toContain(PATRICK.name);
+    expect(stored[0].availability).toContain(`${VIK.name}: Thu, Oct 1 · 11:30 AM–3:30 PM CT (window)`);
+    expect(stored[0].availability_notes).toBe("");
   });
 });
 
 test.describe("Links into the application", () => {
-  test("/apply?mentor=vikram-lakhwara → the form with Vik checked", async ({ page }) => {
+  test("/apply?mentor=vikram-lakhwara → the form with Vik checked and his window listed, unticked", async ({ page }) => {
     await page.goto(`/apply?mentor=${VIK.id}`);
     await expect(page).toHaveURL(new RegExp(`/office-hours\\?mentor=${VIK.id}#apply$`));
     await waitForHydration(submitButton(page));
     await expect(mentorCheckbox(page, VIK)).toBeChecked();
-    // Only Vik — nothing else is ticked, and he has no times to tick yet.
+    // Only Vik: the link named no window, so his one window is listed but not ticked.
     await expect(applicationForm(page).getByRole("checkbox", { checked: true })).toHaveCount(1);
-    await expect(mentorWindows(page, VIK)).toHaveCount(0);
+    await expect(mentorWindows(page, VIK)).toHaveCount(1);
+    await expect(mentorWindows(page, VIK)).not.toBeChecked();
     await expect(broadAvailabilityField(page)).toBeVisible();
+    await expect(broadAvailabilityField(page)).toHaveAccessibleDescription(`${BROAD_AVAILABILITY_ASK} Not needed if you tick a time above.`);
+    await expect(applicationForm(page)).not.toContainText("times aren’t set yet");
     await expect(preselectionNotice(page, VIK)).toBeVisible();
+    await expectClearOfHeader(page, applicationHeading(page), "application heading after /apply redirect");
+  });
+
+  test("/apply?mentor=vikram-lakhwara&window=… → Vik checked with his window ticked", async ({ page }) => {
+    await page.goto(`/apply?mentor=${VIK.id}&window=${VIK.windowId}`);
+    await expect(page).toHaveURL(new RegExp(`/office-hours\\?mentor=${VIK.id}&window=${VIK.windowId}#apply$`));
+    await waitForHydration(submitButton(page));
+    await expect(mentorCheckbox(page, VIK)).toBeChecked();
+    await expect(mentorWindows(page, VIK)).toBeChecked();
+    await expect(applicationForm(page).getByRole("checkbox", { checked: true })).toHaveCount(2);
+    await expect(applySection(page)).toContainText(
+      "Vikram “Vik” Lakhwara is selected below, with “I can make Thu, Oct 1, 11:30 AM–3:30 PM CT” ticked.",
+    );
     await expectClearOfHeader(page, applicationHeading(page), "application heading after /apply redirect");
   });
 

@@ -199,8 +199,37 @@ describe("generatedSessionSlots", () => {
     expect(elliott.every((s) => s.capacity === 1 && s.status === "confirmed")).toBe(true);
   });
 
-  it("generates nothing for rough windows (part of day, time TBA) or the mentor still scheduling (Vik)", () => {
-    expect(generatedSessionSlots(mentor("vikram-lakhwara"), RULE)).toEqual([]);
+  it("gives Vik eight sessions in his Thu 11:30 AM–3:30 PM window, the last ending 3:25 PM", () => {
+    const [window] = mentor("vikram-lakhwara").availability;
+    expect(window).toMatchObject({ id: "vikram-lakhwara-2026-10-01", date: "2026-10-01" });
+    expect(window.time).toEqual({ kind: "exact", start: "11:30", end: "15:30" });
+    const vik = generatedSessionSlots(mentor("vikram-lakhwara"), RULE);
+    expect(vik.map((s) => [s.id, s.date, s.start, s.end])).toEqual([
+      ["vikram-lakhwara-2026-10-01-1130", "2026-10-01", "11:30", "11:55"],
+      ["vikram-lakhwara-2026-10-01-1200", "2026-10-01", "12:00", "12:25"],
+      ["vikram-lakhwara-2026-10-01-1230", "2026-10-01", "12:30", "12:55"],
+      ["vikram-lakhwara-2026-10-01-1300", "2026-10-01", "13:00", "13:25"],
+      ["vikram-lakhwara-2026-10-01-1330", "2026-10-01", "13:30", "13:55"],
+      ["vikram-lakhwara-2026-10-01-1400", "2026-10-01", "14:00", "14:25"],
+      ["vikram-lakhwara-2026-10-01-1430", "2026-10-01", "14:30", "14:55"],
+      ["vikram-lakhwara-2026-10-01-1500", "2026-10-01", "15:00", "15:25"],
+    ]);
+    // A ninth session (3:30–3:55) would run past the window.
+    expect(vik).toHaveLength(8);
+    expect(
+      vik.every((s) => s.windowId === "vikram-lakhwara-2026-10-01" && s.capacity === 1 && s.status === "confirmed"),
+    ).toBe(true);
+    expect(new Set(vik.map((s) => s.id)).size).toBe(8);
+  });
+
+  it("gives every production mentor sessions now that no one is still scheduling", () => {
+    for (const m of mentors) expect(generatedSessionSlots(m, RULE).length, m.id).toBeGreaterThan(0);
+  });
+
+  it("generates nothing for rough windows (part of day, time TBA) or a mentor still scheduling (no windows)", () => {
+    // A future mentor with no published windows yet ("Scheduling in progress").
+    const scheduling: Pick<Mentor, "availability" | "slots"> = { slots: [], availability: [] };
+    expect(generatedSessionSlots(scheduling, RULE)).toEqual([]);
     const rough: Pick<Mentor, "availability" | "slots"> = {
       slots: [],
       availability: [

@@ -5,6 +5,7 @@ import { MentorGrid } from "@/components/mentors/mentor-card";
 import { buttonClasses } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/icons";
 import { Container, Notice } from "@/components/ui/primitives";
+import { buildApplicationCatalog, mentorNeedsBroadAvailability } from "@/lib/applications/catalog";
 import { PRIMARY_CTA_LABEL } from "@/lib/mentors";
 import { APPLY_ANCHOR } from "@/lib/schedule/entries";
 import { sessionRuleText } from "@/lib/schedule/sessions";
@@ -56,6 +57,8 @@ export default async function OfficeHoursPage({ searchParams }: PageProps) {
   const mentors = getMentors();
   const applicationsOpen = site.applications.open;
   const count = mentors.length;
+  // Same rule as the application: only a mentor whose times aren't set needs general availability.
+  const timesPending = buildApplicationCatalog(mentors).mentors.some(mentorNeedsBroadAvailability);
 
   return (
     <>
@@ -121,8 +124,8 @@ export default async function OfficeHoursPage({ searchParams }: PageProps) {
             </h2>
             <div className="max-w-2xl space-y-4 text-base leading-relaxed text-text-muted sm:text-lg lg:col-span-8">
               <p>
-                Tell us what you’re working on and when you’re free. If a mentor’s times aren’t set yet, share
-                your general availability instead.
+                Tell us what you’re working on and when you’re free.
+                {timesPending ? " If a mentor’s times aren’t set yet, share your general availability instead." : null}
               </p>
               <p className="text-text">{MATCHING_SENTENCE}</p>
               <p>

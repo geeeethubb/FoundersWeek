@@ -20,7 +20,7 @@ export interface MentorFixture {
   /** Verified role and company ("role · company" on cards). */
   role: string;
   company: string;
-  /** Every published availability window, in order. Empty while the mentor's times aren't set (Vik). */
+  /** Every published availability window, in order. Empty while a mentor's times aren't set yet. */
   windowIds: string[];
   /**
    * The window the mentor's Select/Apply action preselects: their only window, or null (none yet,
@@ -30,8 +30,9 @@ export interface MentorFixture {
   /** Each published window as the profile lists it ("Thu, Oct 1 · 10:00–11:30 AM CT"), in order. */
   windows: string[];
   /**
-   * True when the mentor's times aren't set yet (no window: Vik), so the application requires broad
-   * availability. A published window (Patrick, Arnav, Elliott, Ron, Rishab) is enough on its own.
+   * True when the mentor's times aren't set yet (no window), so the application requires broad
+   * availability. No real mentor is pending now: all six have a published window, and a window is
+   * enough on its own.
    */
   timesPending: boolean;
   /** The one availability line on the Office Hours card (the first window, "· +N more" when there are several). */
@@ -79,21 +80,41 @@ export const ARNAV: MentorFixture = {
   bioFragment: "AI-native alternative to legacy ERP software",
   helpsWith: ["Going from engineer to technical co-founder", "Building B2B and enterprise software"],
 };
+/**
+ * Vik: one window (from his email, Sept 27), Thu, Oct 1 from 11:30 AM to 3:30 PM, in person at the
+ * Illinois Conference Center. His "Apply to meet Vik" preselects it, and it's enough on its own.
+ */
 export const VIK: MentorFixture = {
   id: "vikram-lakhwara",
   name: "Vikram “Vik” Lakhwara",
   firstName: "Vik",
   role: "Founder & Managing Member",
   company: "Stakehouse",
-  windowIds: [],
-  windowId: null,
-  windows: [],
-  timesPending: true,
-  cardLine: "Scheduling in progress",
+  windowIds: ["vikram-lakhwara-2026-10-01"],
+  windowId: "vikram-lakhwara-2026-10-01",
+  windows: ["Thu, Oct 1 · 11:30 AM–3:30 PM CT"],
+  timesPending: false,
+  cardLine: "Thu, Oct 1 · 11:30 AM–3:30 PM CT",
   linkedin: "https://www.linkedin.com/in/viklakhwara/",
   bioFragment: "a St. Louis venture fund that backs early-stage founders",
   helpsWith: ["Raising a pre-seed round", "What early-stage investors look for"],
 };
+
+/** Vik's office hours are in person: the venue, then the street address (from the organizers). */
+export const VIK_VENUE = "Illinois Conference Center";
+export const VIK_ADDRESS = "111 St. Marys Rd., Champaign, IL 61820";
+/** The public note under Vik's office-hours window on his profile. */
+export const VIK_WINDOW_NOTE =
+  "Vik is free during this window, but it isn’t a booked appointment. We’ll schedule sessions inside it.";
+/** Vik's Founders Week appearance (Friday Showcase panel): on his profile, separate from office hours. */
+export const VIK_SHOWCASE_SESSION = "Funding Start-ups in the Midwest";
+/**
+ * Vik's organizer-only notes (running over, the 3 PM panels, how many sessions fit, his other
+ * commitments): never public. These phrases appear in no public copy or page data. Also part of
+ * ORGANIZER_ONLY.
+ */
+export const VIK_ORGANIZER_NOTES =
+  /fine running over|as many startups as possible|respect the panel discussions|eight 25-minute sessions|runs into the 3 PM panels|earlier note stands|Wednesday through Saturday morning/i;
 
 /**
  * Elliott's three office-hours windows, in order: Wed, Sep 30 in the morning and the afternoon, then
@@ -233,10 +254,13 @@ export const OCT_4 = /\bOct(ober)?\.?\s+4(th)?\b|\b2026-10-04\b|\bSun(day)?,?\s+
 /** The six real mentors, in the published order. */
 export const MENTORS: MentorFixture[] = [PATRICK, ARNAV, VIK, ELLIOTT, RON, RISHAB];
 
-/** Mentors whose schedule is still pending (no window yet): only Vik. */
+/**
+ * Mentors whose schedule is still pending (no window yet): none now. Vik, the last one, published
+ * his window on Sept 27, so "Scheduling in progress" appears nowhere in the real lineup.
+ */
 export const PENDING_MENTORS: MentorFixture[] = MENTORS.filter((m) => m.timesPending);
 
-/** Mentors with published office-hours windows: Patrick, Arnav, Elliott (three), Ron and Rishab. */
+/** Mentors with published office-hours windows: all six (Elliott has three). */
 export const WINDOW_MENTORS: MentorFixture[] = MENTORS.filter((m) => m.windowIds.length > 0);
 
 /**
@@ -307,6 +331,21 @@ export const RON_SESSIONS: SessionFixture[] = sessionsIn(RON.windowId!, "Thu, Oc
   ["1500", "3:00–3:25 PM CT"],
   ["1530", "3:30–3:55 PM CT"],
   ["1600", "4:00–4:25 PM CT"],
+]);
+
+/**
+ * Vik's window (Thu, Oct 1, 11:30 AM–3:30 PM at the Illinois Conference Center): eight sessions,
+ * 11:30 to 3:00 (the last one ends at 3:25).
+ */
+export const VIK_SESSIONS: SessionFixture[] = sessionsIn(VIK.windowId!, "Thu, Oct 1", [
+  ["1130", "11:30–11:55 AM CT"],
+  ["1200", "12:00–12:25 PM CT"],
+  ["1230", "12:30–12:55 PM CT"],
+  ["1300", "1:00–1:25 PM CT"],
+  ["1330", "1:30–1:55 PM CT"],
+  ["1400", "2:00–2:25 PM CT"],
+  ["1430", "2:30–2:55 PM CT"],
+  ["1500", "3:00–3:25 PM CT"],
 ]);
 
 /** Arnav's window (Fri, Oct 2, 10:00–11:30 AM): three sessions. */
@@ -386,9 +425,18 @@ export const EXPERTISE_BASIS: RegExp[] = [
 /** Ron's suggested "Ask me about" topics are a DRAFT and must never be public. */
 export const DRAFT_TOPICS: RegExp[] = [/Startup financial planning/, /Communicating business progress to stakeholders/];
 
-/** Organizer-only notes (content/mentors.ts `organizerNotes`) — stripped before anything renders. */
-export const ORGANIZER_ONLY =
-  /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number|Open to hosting all three|as long as they fit in the window|also open to Oct|send details later|From his email|available anytime after 9 AM|Organizers set his windows|22 sessions in all|Location not set yet|Location from Arnav|Added to the calendar at his suggestion|now listed on it/i;
+/**
+ * Organizer-only notes (content/mentors.ts `organizerNotes`) — stripped before anything renders.
+ * Vik's (VIK_ORGANIZER_NOTES) are included.
+ */
+export const ORGANIZER_ONLY = new RegExp(
+  [
+    /Wednesday through Saturday morning|not available slots|Willing to help|Willing to host|Much more available|candidate for extra sessions|Confirm suggested discussion topics|Appointment lengths and location not finalized|invited the Founders community\)|only has time for office hours|meet student teams|not an eligibility rule|Window locked|email signature|phone number|Open to hosting all three|as long as they fit in the window|also open to Oct|send details later|From his email|available anytime after 9 AM|Organizers set his windows|22 sessions in all|Location not set yet|Location from Arnav|Added to the calendar at his suggestion|now listed on it/
+      .source,
+    VIK_ORGANIZER_NOTES.source,
+  ].join("|"),
+  "i",
+);
 
 /** Content-maintenance notes on approved fields (`note`) — never public. */
 export const CONTENT_NOTES =
@@ -817,8 +865,8 @@ export const AVAILABILITY_RULE_MESSAGE =
  */
 export const BROAD_AVAILABILITY_ASK = "When are you generally free during Founders Week? e.g. Thursday morning, anytime Friday.";
 /**
- * Shown when a chosen mentor's times aren't set yet (Vik; never a mentor with a listed window, like
- * Elliott, Ron or Rishab): only broad availability helps.
+ * Shown only when a chosen mentor's times aren't set yet (never a mentor with a listed window). No
+ * real or demo mentor is pending now, so the suite checks it never appears.
  */
 export const pendingAvailabilityMessage = (names: string) =>
   `Tell us when you’re generally free during Founders Week. ${names}’s times aren’t set yet.`;

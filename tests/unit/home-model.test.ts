@@ -160,14 +160,43 @@ describe("home model (public data)", () => {
       { known: true, date: "Thu, Oct 1", time: "10:00–11:30 AM CT", exact: true, dateTime: "2026-10-01", more: 0 },
       // Arnav's Friday window has been exact since Sept 24.
       { known: true, date: "Fri, Oct 2", time: "10:00–11:30 AM CT", exact: true, dateTime: "2026-10-02", more: 0 },
-      // Only Vik is still scheduling.
-      { known: false, label: "Scheduling in progress" },
+      // Vik's Thursday window at the Illinois Conference Center (his email, Sept 27) is exact.
+      { known: true, date: "Thu, Oct 1", time: "11:30 AM–3:30 PM CT", exact: true, dateTime: "2026-10-01", more: 0 },
       // Elliott's first window (Wed Sept 30, 9 AM to noon), plus his two others.
       { known: true, date: "Wed, Sept 30", time: "9:00 AM–12:00 PM CT", exact: true, dateTime: "2026-09-30", more: 2 },
       // Ron's Thursday window at BIF is exact.
       { known: true, date: "Thu, Oct 1", time: "2:30–4:30 PM CT", exact: true, dateTime: "2026-10-01", more: 0 },
       RISHAB_AVAILABILITY,
     ]);
+    // No production mentor is still scheduling.
+    expect(previews.every((p) => p.availability.known)).toBe(true);
+    expect(JSON.stringify(previews)).not.toContain("Scheduling in progress");
+  });
+
+  it("previews Vik: Thu, Oct 1 · 11:30 AM–3:30 PM CT, and nothing from his organizer notes", () => {
+    const vik = mentorPreviews(getMentors()).find((p) => p.id === "vikram-lakhwara")!;
+    expect(vik).toEqual({
+      id: "vikram-lakhwara",
+      name: "Vikram “Vik” Lakhwara",
+      role: "Founder & Managing Member",
+      company: "Stakehouse",
+      headshot: { src: "/mentors/vikram-lakhwara.jpg", alt: "Vikram “Vik” Lakhwara", width: 251, height: 251 },
+      href: "/office-hours/vikram-lakhwara",
+      availability: { known: true, date: "Thu, Oct 1", time: "11:30 AM–3:30 PM CT", exact: true, dateTime: "2026-10-01", more: 0 },
+    });
+    const a = vik.availability;
+    expect(a.known && `${a.date} · ${a.time}`).toBe("Thu, Oct 1 · 11:30 AM–3:30 PM CT");
+    expect(JSON.stringify(vik)).not.toMatch(
+      /Scheduling in progress|running over|as many startups|TechRise|Wednesday through Saturday|commitment/i,
+    );
+  });
+
+  it("previews a mentor still scheduling (fixture) as 'Scheduling in progress'", () => {
+    const scheduling: Mentor = { ...DATE_ONLY_MENTOR, id: "fixture-scheduling", availability: [], slots: [] };
+    const previews = mentorPreviews([...getMentors(), scheduling]);
+    expect(previews.map((p) => p.id)).toEqual([...MENTOR_IDS, "fixture-scheduling"]);
+    expect(previews.at(-1)!.availability).toEqual({ known: false, label: "Scheduling in progress" });
+    expect(previews.filter((p) => !p.availability.known).map((p) => p.id)).toEqual(["fixture-scheduling"]);
   });
 
   it("previews Ron: Thu, Oct 1 · 2:30–4:30 PM CT, and nothing about Oct 4", () => {

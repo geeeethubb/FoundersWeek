@@ -40,11 +40,14 @@ const PATRICK_OH = "office-hours-patrick-haddox-2026-10-01-am";
 const ARNAV_OH = "office-hours-arnav-mishra-2026-10-02-am";
 const RISHAB_OH = "office-hours-rishab-veldur-2026-10-01";
 const RON_OH = "office-hours-ron-lewis-2026-10-01-pm";
+const VIK_OH = "office-hours-vikram-lakhwara-2026-10-01";
 const ELLIOTT_WED_AM_OH = "office-hours-elliott-notrica-2026-09-30-am";
 const ELLIOTT_WED_PM_OH = "office-hours-elliott-notrica-2026-09-30-pm";
 const ELLIOTT_THU_OH = "office-hours-elliott-notrica-2026-10-01-pm";
 const rishabOfficeHours = byId(RISHAB_OH);
 const OFFICE_HOURS_REASON = "Office hours are by application. Selected students get their confirmed time by email.";
+/** The Friday Showcase venue with the street address the organizers supplied (Sept 27), escaped. */
+const ICC_LOCATION = "LOCATION:Illinois Conference Center\\, 111 St. Marys Rd.\\, Champaign\\, IL 61820";
 
 /**
  * A synthetic mentor whose only window is date-only (time still to be confirmed). No real mentor
@@ -141,14 +144,15 @@ describe("calendar eligibility", () => {
     expect(byId("demo-canceled-session", withDemo).calendar.available).toBe(false);
   });
 
-  it("never exports office hours: Rishab's exact noon–5 PM window, Ron's and Arnav's confirmed windows, Elliott's three windows, and a date-only window", () => {
-    // Thirteen events (Arnav's Siebel talk included) and seven office-hours windows.
-    expect(production).toHaveLength(20);
+  it("never exports office hours: Rishab's exact noon–5 PM window, Ron's, Vik's and Arnav's confirmed windows, Elliott's three windows, and a date-only window", () => {
+    // Thirteen events (Arnav's Siebel talk included) and eight office-hours windows.
+    expect(production).toHaveLength(21);
     const officeHours = production.filter((e) => e.kind === "office-hours");
     expect(officeHours.map((e) => e.id)).toEqual([
       ELLIOTT_WED_AM_OH,
       ELLIOTT_WED_PM_OH,
       PATRICK_OH,
+      VIK_OH,
       ELLIOTT_THU_OH,
       RISHAB_OH,
       RON_OH,
@@ -188,6 +192,27 @@ describe("calendar eligibility", () => {
     expect(ronIcs).not.toContain(RON_OH);
     expect(ronIcs).not.toContain("20261001T143000");
     expect(ronIcs).not.toContain("Business Instructional Facility");
+
+    // Vik's window (from his email, Sept 27) is confirmed too, with exact times and a venue (the
+    // Illinois Conference Center), and likewise stays out of calendar files.
+    const vikOfficeHours = byId(VIK_OH);
+    expect(vikOfficeHours).toMatchObject({
+      date: "2026-10-01",
+      time: { kind: "exact", start: "11:30", end: "15:30" },
+      status: "confirmed",
+      location: {
+        kind: "in-person",
+        venue: "Illinois Conference Center",
+        address: "111 St. Marys Rd., Champaign, IL 61820",
+      },
+      startsAt: "2026-10-01T16:30:00.000Z",
+      endsAt: "2026-10-01T20:30:00.000Z",
+    });
+    const vikIcs = buildIcsCalendar([vikOfficeHours], { siteUrl: SITE, now: NOW });
+    expect(vikIcs).not.toContain("BEGIN:VEVENT");
+    expect(vikIcs).not.toContain(VIK_OH);
+    expect(vikIcs).not.toContain("20261001T113000");
+    expect(vikIcs).not.toContain("Illinois Conference Center");
 
     // Arnav's window is confirmed too (Atrium, Siebel Center for Computer Science) and likewise
     // stays out of calendar files.
@@ -368,12 +393,29 @@ describe("calendar.ics routes (public data)", () => {
     expect(body).toContain(`URL:https://founders.example.edu/schedule/${HAPPY_HOUR}`);
   });
 
+  it("serves both Friday Illinois Conference Center events with the street address in LOCATION", async () => {
+    for (const [id, start, end] of [
+      ["founders-showcase-day-sessions", "20261002T080000", "20261002T173000"],
+      ["founders-evening-showcase-and-reception", "20261002T180000", "20261002T203000"],
+    ]) {
+      const res = await get(id);
+      expect(res.status, id).toBe(200);
+      const body = unfold(await res.text());
+      expect(vevents(body), id).toHaveLength(1);
+      expect(body, id).toContain(`UID:${id}@founders-week`);
+      expect(body, id).toContain(`DTSTART;TZID=America/Chicago:${start}`);
+      expect(body, id).toContain(`DTEND;TZID=America/Chicago:${end}`);
+      expect(body.split("\r\n"), id).toContain(ICC_LOCATION);
+    }
+  });
+
   it("has no .ics for the canceled afterparty, start-only or forthcoming events, or office hours", async () => {
     for (const id of [
       "founders-week-afterparty",
       "dan-caruso-fireside-chat",
       SIEBEL_TALK,
       PATRICK_OH,
+      VIK_OH,
       RISHAB_OH,
       RON_OH,
       ARNAV_OH,
@@ -390,9 +432,13 @@ describe("calendar.ics routes (public data)", () => {
     expect(body).toContain(`UID:${HAPPY_HOUR}@founders-week`);
     expectNoCanceledAfterparty(body);
     expect(body).toContain("SUMMARY:Founders Evening Showcase and Reception");
-    // Office hours (Rishab's noon–5 PM window included) never reach the feed.
+    // Both Friday Illinois Conference Center events carry the street address.
+    expect(body.split("\r\n").filter((l) => l === ICC_LOCATION)).toHaveLength(2);
+    // Office hours (Rishab's noon–5 PM window and Vik's 11:30 AM–3:30 PM window included) never
+    // reach the feed.
     expect(body).not.toContain("office-hours-");
     expect(body).not.toContain("SUMMARY:Office hours");
+    expect(body).not.toContain("20261001T113000");
     // Nor does Arnav's start-only Siebel talk.
     expect(body).not.toContain(`UID:${SIEBEL_TALK}@founders-week`);
   });
@@ -431,7 +477,7 @@ describe("buildIcsCalendar — program blocks", () => {
     const vevent = vevents(ics)[0] ?? "";
     expect(vevent).toContain("DTSTART;TZID=America/Chicago:20261002T080000");
     expect(vevent).toContain("DTEND;TZID=America/Chicago:20261002T173000");
-    expect(vevent).toContain("LOCATION:Illinois Conference Center");
+    expect(vevent.split("\r\n")).toContain(ICC_LOCATION);
     const description = vevent.split("\r\n").find((l) => l.startsWith("DESCRIPTION:"))!;
     expect(description).toBe(`DESCRIPTION:${escapeIcsText(icsDescription(showcase, SITE))}`);
     expect(description).toContain("(Charles Isbell (Chancellor)\\; moderated by Scott Rose and Susan Martinis)");
@@ -456,6 +502,10 @@ describe("all-events feed", () => {
     // Rishab's window is the only Oct 1 listing that starts at noon, and it stays out.
     expect(unfold(feed)).not.toContain("DTSTART;TZID=America/Chicago:20261001T120000");
     expect(unfold(feed)).not.toContain("SUMMARY:Office hours with Rishab Veldur");
+    // Vik's Thursday window (11:30 AM–3:30 PM at the Illinois Conference Center) stays out too.
+    expect(feed).not.toContain(`${VIK_OH}@`);
+    expect(unfold(feed)).not.toContain("DTSTART;TZID=America/Chicago:20261001T113000");
+    expect(unfold(feed)).not.toContain("SUMMARY:Office hours with Vikram");
     expect(feed).not.toContain("dan-caruso-fireside-chat@");
     expect(feed).not.toContain(`${SIEBEL_TALK}@`);
     // 3:30 PM on Sept 30 is the kickoff reception's start; the talk adds no second event at that time.
@@ -535,6 +585,7 @@ describe("googleCalendarUrl", () => {
 
   it("carries the program for blocks", () => {
     const params = new URL(googleCalendarUrl(showcase, SITE)!).searchParams;
+    expect(params.get("location")).toBe("Illinois Conference Center, 111 St. Marys Rd., Champaign, IL 61820");
     expect(params.get("details")).toContain("2:40–2:55 PM: Next Generation Industrial, Manufacturing and Space Tech");
     expect(params.get("details")).toContain(
       "1:20–1:55 PM: Health Innovation: From Therapeutics to Devices (Marty Burke, Carol Curtis, Steve Boppart, Rishab Veldur and Rohit Bhargava)",
@@ -546,6 +597,7 @@ describe("googleCalendarUrl", () => {
     expect(googleCalendarUrl(siebelTalk, SITE)).toBeNull();
     expect(googleCalendarUrl(byId(PATRICK_OH), SITE)).toBeNull();
     expect(googleCalendarUrl(byId(ARNAV_OH), SITE)).toBeNull();
+    expect(googleCalendarUrl(byId(VIK_OH), SITE)).toBeNull();
     expect(googleCalendarUrl(rishabOfficeHours, SITE)).toBeNull();
   });
 });

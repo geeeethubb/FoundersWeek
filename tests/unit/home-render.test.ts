@@ -4,7 +4,8 @@
  * (headshot, name, role and company, one availability line, a link to the profile) in a grid sized
  * from the mentor count, the four featured events (Dan Caruso — information only — the Sept 29
  * panel, Arnav’s happy hour, Founder Failure Lab), and the calendar link with the official dates.
- * Also: how a date-only window renders (on a synthetic fixture mentor); that the six-across cards
+ * Also: how a date-only window and "Scheduling in progress" render (on synthetic fixture mentors;
+ * every real mentor has a timed window now); that the six-across cards
  * share rows (so every availability rule lines up) and exact time ranges and rooms never break;
  * 44px footer links; nothing private, removed or canceled; the metadata; the 404 and error pages.
  */
@@ -195,15 +196,15 @@ describe("home page (public data)", () => {
     expect(t).toMatch(/Ron Lewis Co-Founder\s?, Auctus Advisory/);
     expect(t).toMatch(/Rishab Veldur Co-Founder & CEO\s?, Auvi Labs/);
 
-    // One availability line each: a window for Patrick, Arnav, Elliott (his first of three), Ron and
-    // Rishab; "Scheduling in progress" for Vik only.
+    // One availability line each: a window for every mentor (Elliott's first of three). No one is
+    // "Scheduling in progress" any more: Vik's Thursday window arrived Sept 27.
     expect(t).toMatch(/Samara Aerospace Thu, Oct 1\W+10:00–11:30 AM CT/);
     expect(t).toMatch(/Doss Fri, Oct 2\W+10:00–11:30 AM CT/);
-    expect(t).toMatch(/Stakehouse Scheduling in progress/);
+    expect(t).toMatch(/Stakehouse Thu, Oct 1\W+11:30 AM–3:30 PM CT/);
     expect(t).toMatch(/Symbio Bioculinary Wed, Sept 30\W+9:00 AM–12:00 PM CT \+ 2 more/);
     expect(t).toMatch(/Auctus Advisory Thu, Oct 1\W+2:30–4:30 PM CT/);
     expect(t).toMatch(/Auvi Labs Thu, Oct 1\W+12:00–5:00 PM CT/);
-    expect(t.match(/Scheduling in progress/g)).toHaveLength(1);
+    expect(t).not.toContain("Scheduling in progress");
     expect(t.match(/\bmore\b/g)).toHaveLength(1);
     expect(t).not.toContain("Time to be announced");
     // Every window shown has a time now: nothing reads "to be confirmed".
@@ -211,12 +212,48 @@ describe("home page (public data)", () => {
     expect([...mentors.matchAll(/<time dateTime="([^"]+)"/g)].map((m) => m[1])).toEqual([
       "2026-10-01",
       "2026-10-02",
+      "2026-10-01",
       "2026-09-30",
       "2026-10-01",
       "2026-10-01",
     ]);
+    // Every card has the orange dot of a known window.
+    expect(mentors.match(/rounded-full bg-accent"/g)).toHaveLength(6);
+    expect(mentors).not.toContain("rounded-full bg-line-strong");
     // Ron's openness to Oct 4 is organizer-only.
     expect(t).not.toMatch(/Oct 4|October 4/);
+  });
+
+  it("shows Vik third: 'Thu, Oct 1 · 11:30 AM–3:30 PM CT', with the orange dot and nothing organizer-only", () => {
+    const items = [...section(page(), "mentors-heading").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    expect(items).toHaveLength(6);
+    const vik = items[2];
+    expect(images(vik)).toEqual([{ alt: "Vikram “Vik” Lakhwara", src: "/mentors/vikram-lakhwara.jpg" }]);
+    expect(hrefs(vik)).toEqual(["/office-hours/vikram-lakhwara"]);
+    expect(text(vik).trim()).toBe(
+      "Vikram “Vik” Lakhwara Founder & Managing Member, Stakehouse Thu, Oct 1 ·, 11:30 AM–3:30 PM CT",
+    );
+    // An exact range: kept on one line.
+    expect(vik).toMatch(
+      /<time dateTime="2026-10-01"[^>]*>Thu, Oct 1<\/time><span aria-hidden="true"[^>]*> · <\/span><span class="sr-only">, <\/span><span class="[^"]*whitespace-nowrap[^"]*">11:30 AM–3:30 PM CT<\/span>/,
+    );
+    expect(vik).toMatch(/rounded-full bg-accent"/);
+    expect(text(vik)).not.toMatch(
+      /Scheduling in progress|Time to be announced|running over|TechRise|Wednesday through Saturday|commitment/i,
+    );
+  });
+
+  it("renders a mentor still scheduling (fixture) as 'Scheduling in progress', with the grey dot", () => {
+    const scheduling: Mentor = { ...DATE_ONLY_MENTOR, id: "fixture-scheduling", availability: [], slots: [] };
+    const html = renderToStaticMarkup(createElement(MentorPreviews, { mentors: mentorPreviews([scheduling]) }));
+    const items = [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+    expect(items).toHaveLength(1);
+    const [fixture] = items;
+    expect(hrefs(fixture)).toEqual(["/office-hours/fixture-scheduling"]);
+    expect(text(fixture).trim()).toBe("FM Fixture Mentor Founder, Fixture Co Scheduling in progress");
+    expect(fixture).not.toMatch(/<time\b/);
+    expect(fixture).toMatch(/rounded-full bg-line-strong"/);
+    expect(fixture).not.toMatch(/rounded-full bg-accent"/);
   });
 
   it("shows Elliott fourth: his first window, 'Wed, Sept 30 · 9:00 AM–12:00 PM CT + 2 more', with the orange dot", () => {
@@ -368,9 +405,11 @@ describe("home page (public data)", () => {
       expect(all.length, label).toBeGreaterThan(0);
       return all.map((m) => m[1].split(" "));
     };
-    // Patrick and Arnav (both 10:00–11:30 AM), Ron and Rishab.
+    // Patrick and Arnav (both 10:00–11:30 AM), Vik, Ron and Rishab.
     expect(timeClasses("10:00–11:30 AM CT")).toHaveLength(2);
     for (const c of timeClasses("10:00–11:30 AM CT")) expect(c).toContain("whitespace-nowrap");
+    expect(timeClasses("11:30 AM–3:30 PM CT")).toHaveLength(1);
+    for (const c of timeClasses("11:30 AM–3:30 PM CT")) expect(c).toContain("whitespace-nowrap");
     expect(timeClasses("2:30–4:30 PM CT")).toHaveLength(1);
     for (const c of timeClasses("2:30–4:30 PM CT")) expect(c).toContain("whitespace-nowrap");
     for (const c of timeClasses("12:00–5:00 PM CT")) expect(c).toContain("whitespace-nowrap");
@@ -428,6 +467,8 @@ describe("home page (public data)", () => {
     // Rishab's organizer notes (team preference, phone, Oct 2 presence) and no device claims.
     expect(t).not.toMatch(/student teams|phone number|email signature|Oct 1 and 2/i);
     expect(t).not.toMatch(/FDA|clinically|commercially available/i);
+    // Vik's organizer notes (running over, the 3 PM panels and 5 PM TechRise competition).
+    expect(t).not.toMatch(/running over|as many startups|panel discussions starting|runs into the 3 PM/i);
   });
 
   it("features Dan Caruso as information only — no application, interest, waitlist or booking", () => {
